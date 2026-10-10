@@ -103,6 +103,81 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
         </div>
       </div>
 
+      {/* Visual System Architecture & Flowchart Card */}
+      <div className="card" style={{ marginTop: '1.5rem', background: '#ffffff' }}>
+        <div className="card-header">
+          <div>
+            <div className="card-title" style={{ fontSize: '1rem' }}>
+              <Activity size={18} color="#6366f1" /> End-to-End Clinical & Quantum Pipeline Flowchart
+            </div>
+            <div className="card-subtitle">
+              Leakage-safe data orchestration from baseline clinical covariates to quantum-kernel statevector simulation
+            </div>
+          </div>
+          <span className="badge badge-health">
+            Live Automated Pipeline
+          </span>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginTop: '0.5rem' }}>
+          {/* Stage 1 */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#e0e7ff', color: '#4338ca', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>1</div>
+              <strong style={{ fontSize: '0.85rem' }}>Pre-Tx Covariates</strong>
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#475569', lineHeight: '1.5' }}>
+              Recipient age, KPS, CMV, comorbidity, donor match, graft source (PBSC/BM/Cord), and CD34+ cell dose at Day 0.
+            </div>
+            <div style={{ marginTop: '0.75rem' }}>
+              <span className="badge badge-prototype" style={{ fontSize: '0.68rem' }}>18 Features</span>
+            </div>
+          </div>
+
+          {/* Stage 2 */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#dcfce7', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>2</div>
+              <strong style={{ fontSize: '0.85rem' }}>Leakage Sentry & Split</strong>
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#475569', lineHeight: '1.5' }}>
+              Excludes post-tx complications (aGVHD, infection dates). Stratified 75/25 split. Imputers & scalers fit solely on train.
+            </div>
+            <div style={{ marginTop: '0.75rem' }}>
+              <span className="badge badge-research" style={{ fontSize: '0.68rem' }}>Zero Leakage</span>
+            </div>
+          </div>
+
+          {/* Stage 3 */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#f5f3ff', color: '#6d28d9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>3</div>
+              <strong style={{ fontSize: '0.85rem' }}>Model Comparator Suite</strong>
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#475569', lineHeight: '1.5' }}>
+              Fits Dummy, Logistic Reg (L2), Random Forest, and RBF SVM. Compresses subspace to 2-qubit ZZ Fidelity Quantum Kernel.
+            </div>
+            <div style={{ marginTop: '0.75rem' }}>
+              <span className="badge" style={{ background: '#ede9fe', color: '#5b21b6', fontSize: '0.68rem' }}>5 Models</span>
+            </div>
+          </div>
+
+          {/* Stage 4 */}
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#ffedd5', color: '#9a3412', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>4</div>
+              <strong style={{ fontSize: '0.85rem' }}>Evaluation & Report</strong>
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#475569', lineHeight: '1.5' }}>
+              Computes held-out accuracy, ROC-AUC, confusion matrices, quadratic runtime overhead, and exportable research reports.
+            </div>
+            <div style={{ marginTop: '0.75rem' }}>
+              <span className="badge badge-synthetic" style={{ fontSize: '0.68rem' }}>Empirical Verification</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Dataset Readiness & Latest Experiment Comparison */}
       <div className="grid-2" style={{ marginTop: '1.5rem' }}>
         <div className="card">
