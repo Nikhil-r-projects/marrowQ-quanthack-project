@@ -14,7 +14,7 @@
 **Research-Grounded Clinical Machine Learning & Quantum Computing Platform**  
 *Evaluating Quantum-Kernel Support Vector Machines against Classical Baselines for Hematopoietic Stem Cell Transplant Recovery*
 
-[![Live Deployment](https://img.shields.io/badge/Vercel-Live%20Demo-black?style=for-the-badge&logo=vercel&logoColor=white)](https://frontend-lime-two-40.vercel.app)
+[![Live Deployment](https://img.shields.io/badge/Vercel-Live%20Demo-black?style=for-the-badge&logo=vercel&logoColor=white)](https://marrowq.vercel.app)
 [![Pytest Suite](https://img.shields.io/badge/pytest-10%2F10%20passed-10b981?style=for-the-badge&logo=pytest&logoColor=white)]()
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.143-059669?style=for-the-badge&logo=fastapi&logoColor=white)]()
 [![React 19](https://img.shields.io/badge/React-19.0-6366f1?style=for-the-badge&logo=react&logoColor=white)]()
@@ -22,7 +22,7 @@
 [![Qiskit ML](https://img.shields.io/badge/Qiskit_ML-0.9.1-8b5cf6?style=for-the-badge&logo=ibm&logoColor=white)]()
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)]()
 
-**🌐 Live Web Application:** [https://frontend-lime-two-40.vercel.app](https://frontend-lime-two-40.vercel.app)
+**🌐 Live Web Application:** [https://marrowq.vercel.app](https://marrowq.vercel.app)
 
 </div>
 

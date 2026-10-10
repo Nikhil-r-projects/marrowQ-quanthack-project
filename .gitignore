@@ -17,3 +17,5 @@ artifacts/
 .pytest_cache/
 **/.pytest_cache/
 
+
+.vercel
