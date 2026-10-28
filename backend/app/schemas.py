@@ -94,3 +94,19 @@ class PredictionResponse(BaseModel):
 class SyntheticGenerateRequest(BaseModel):
     n_samples: int = Field(default=500, ge=50, le=5000)
     random_state: int = 42
+
+class QuantumSimulationRequest(BaseModel):
+    x0: float = Field(default=1.57, description="Feature 1 value (radians [0, 2pi])")
+    x1: float = Field(default=3.14, description="Feature 2 value (radians [0, 2pi])")
+    x0_b: Optional[float] = Field(default=0.78, description="Feature 1 value for Sample B")
+    x1_b: Optional[float] = Field(default=2.35, description="Feature 2 value for Sample B")
+    reps: int = Field(default=1, ge=1, le=3, description="ZZFeatureMap repetitions")
+
+class QuantumSimulationResponse(BaseModel):
+    circuit_text: str
+    qubits: int
+    reps: int
+    feature_dimension: int
+    state_a: Dict[str, Any]
+    state_b: Optional[Dict[str, Any]] = None
+    comparison: Optional[Dict[str, Any]] = None

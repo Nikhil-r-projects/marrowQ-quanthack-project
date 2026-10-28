@@ -11,7 +11,8 @@ from typing import Dict, Any, List
 
 from app.schemas import (
     DatasetProfileResponse, ExperimentCreateRequest, ExperimentResponse,
-    PredictionRequest, PredictionResponse, SyntheticGenerateRequest, ModelMetric
+    PredictionRequest, PredictionResponse, SyntheticGenerateRequest, ModelMetric,
+    QuantumSimulationRequest, QuantumSimulationResponse
 )
 from app.core.synthetic import generate_hsct_synthetic_dataset
 from app.core.profiler import profile_dataset
@@ -19,7 +20,10 @@ from app.core.pipeline import prepare_train_test_split
 from app.core.classical import (
     train_dummy_model, train_logistic_regression, train_random_forest, train_rbf_svm
 )
-from app.core.quantum import train_quantum_kernel_svm, QISKIT_AVAILABLE, QISKIT_VERSION
+from app.core.quantum import (
+    train_quantum_kernel_svm, simulate_quantum_circuit_and_state,
+    QISKIT_AVAILABLE, QISKIT_VERSION
+)
 from app.core.database import (
     save_dataset_meta, get_dataset_meta, list_datasets,
     save_experiment_record, get_experiment_record, list_experiments
@@ -483,3 +487,19 @@ def get_report(experiment_id: str):
         raise HTTPException(status_code=404, detail="Experiment not found.")
     md_content = generate_markdown_report(record)
     return {"experiment_id": experiment_id, "markdown_report": md_content}
+
+@router.post("/quantum/simulate", response_model=QuantumSimulationResponse)
+def simulate_quantum(req: QuantumSimulationRequest):
+    """
+    Simulates the 2-qubit ZZFeatureMap quantum circuit and calculates exact
+    statevector amplitudes, basis probabilities, Bloch vectors, and quantum kernel fidelity.
+    """
+    res = simulate_quantum_circuit_and_state(
+        x0=req.x0,
+        x1=req.x1,
+        x0_b=req.x0_b,
+        x1_b=req.x1_b,
+        reps=req.reps
+    )
+    return QuantumSimulationResponse(**res)
+

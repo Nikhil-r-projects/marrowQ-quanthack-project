@@ -178,3 +178,137 @@ def train_quantum_kernel_svm(
             error_message=str(exc)
         )
         return None, err_metric, matched_rbf_metric
+
+def simulate_quantum_circuit_and_state(
+    x0: float, x1: float,
+    x0_b: Optional[float] = None, x1_b: Optional[float] = None,
+    reps: int = 1
+) -> Dict[str, Any]:
+    """
+    Simulates a 2-qubit ZZFeatureMap quantum statevector and calculates
+    amplitudes, basis probabilities, Bloch vectors, and quantum kernel fidelity.
+    """
+    if not QISKIT_AVAILABLE:
+        return {
+            "error": "Qiskit ML is not available in environment",
+            "circuit_text": "N/A",
+            "qubits": 2,
+            "reps": reps,
+            "feature_dimension": 2,
+            "state_a": {"probabilities": {}, "amplitudes": []}
+        }
+
+    from qiskit.circuit.library import zz_feature_map
+    from qiskit.quantum_info import Statevector, partial_trace, Pauli
+
+    fmap = zz_feature_map(feature_dimension=2, reps=reps)
+    bound_a = fmap.assign_parameters([float(x0), float(x1)])
+    circuit_text = str(bound_a.draw(output='text'))
+
+    sv_a = Statevector.from_instruction(bound_a)
+    probs_a = {k: round(float(v), 5) for k, v in sv_a.probabilities_dict().items()}
+    for b in ["00", "01", "10", "11"]:
+        probs_a.setdefault(b, 0.0)
+
+    # Bloch vector expectations
+    rho_0 = partial_trace(sv_a, [1])
+    rho_1 = partial_trace(sv_a, [0])
+
+    bloch_0 = {
+        "x": round(float(np.real(np.trace(rho_0.data @ Pauli("X").to_matrix()))), 4),
+        "y": round(float(np.real(np.trace(rho_0.data @ Pauli("Y").to_matrix()))), 4),
+        "z": round(float(np.real(np.trace(rho_0.data @ Pauli("Z").to_matrix()))), 4)
+    }
+    bloch_1 = {
+        "x": round(float(np.real(np.trace(rho_1.data @ Pauli("X").to_matrix()))), 4),
+        "y": round(float(np.real(np.trace(rho_1.data @ Pauli("Y").to_matrix()))), 4),
+        "z": round(float(np.real(np.trace(rho_1.data @ Pauli("Z").to_matrix()))), 4)
+    }
+
+    basis_labels = ["00", "01", "10", "11"]
+    amplitudes_a = []
+    for idx, label in enumerate(basis_labels):
+        amp = sv_a.data[idx]
+        amplitudes_a.append({
+            "basis": label,
+            "real": round(float(np.real(amp)), 4),
+            "imag": round(float(np.imag(amp)), 4),
+            "magnitude": round(float(abs(amp)), 4),
+            "phase_rad": round(float(np.angle(amp)), 4)
+        })
+
+    state_a_payload = {
+        "params": [round(float(x0), 4), round(float(x1), 4)],
+        "probabilities": probs_a,
+        "amplitudes": amplitudes_a,
+        "bloch_q0": bloch_0,
+        "bloch_q1": bloch_1
+    }
+
+    state_b_payload = None
+    comparison_payload = None
+
+    if x0_b is not None and x1_b is not None:
+        bound_b = fmap.assign_parameters([float(x0_b), float(x1_b)])
+        sv_b = Statevector.from_instruction(bound_b)
+        probs_b = {k: round(float(v), 5) for k, v in sv_b.probabilities_dict().items()}
+        for b in ["00", "01", "10", "11"]:
+            probs_b.setdefault(b, 0.0)
+
+        rho_0_b = partial_trace(sv_b, [1])
+        rho_1_b = partial_trace(sv_b, [0])
+        bloch_0_b = {
+            "x": round(float(np.real(np.trace(rho_0_b.data @ Pauli("X").to_matrix()))), 4),
+            "y": round(float(np.real(np.trace(rho_0_b.data @ Pauli("Y").to_matrix()))), 4),
+            "z": round(float(np.real(np.trace(rho_0_b.data @ Pauli("Z").to_matrix()))), 4)
+        }
+        bloch_1_b = {
+            "x": round(float(np.real(np.trace(rho_1_b.data @ Pauli("X").to_matrix()))), 4),
+            "y": round(float(np.real(np.trace(rho_1_b.data @ Pauli("Y").to_matrix()))), 4),
+            "z": round(float(np.real(np.trace(rho_1_b.data @ Pauli("Z").to_matrix()))), 4)
+        }
+
+        amplitudes_b = []
+        for idx, label in enumerate(basis_labels):
+            amp = sv_b.data[idx]
+            amplitudes_b.append({
+                "basis": label,
+                "real": round(float(np.real(amp)), 4),
+                "imag": round(float(np.imag(amp)), 4),
+                "magnitude": round(float(abs(amp)), 4),
+                "phase_rad": round(float(np.angle(amp)), 4)
+            })
+
+        state_b_payload = {
+            "params": [round(float(x0_b), 4), round(float(x1_b), 4)],
+            "probabilities": probs_b,
+            "amplitudes": amplitudes_b,
+            "bloch_q0": bloch_0_b,
+            "bloch_q1": bloch_1_b
+        }
+
+        inner_prod = complex(sv_a.inner(sv_b))
+        quantum_fidelity = float(abs(inner_prod) ** 2)
+
+        diff = np.array([x0 - x0_b, x1 - x1_b])
+        euclidean = float(np.linalg.norm(diff))
+        classical_rbf = float(np.exp(-0.5 * (euclidean ** 2)))
+
+        comparison_payload = {
+            "quantum_fidelity": round(quantum_fidelity, 5),
+            "classical_rbf_similarity": round(classical_rbf, 5),
+            "euclidean_distance": round(euclidean, 4),
+            "inner_product_real": round(float(inner_prod.real), 5),
+            "inner_product_imag": round(float(inner_prod.imag), 5)
+        }
+
+    return {
+        "circuit_text": circuit_text,
+        "qubits": 2,
+        "reps": reps,
+        "feature_dimension": 2,
+        "state_a": state_a_payload,
+        "state_b": state_b_payload,
+        "comparison": comparison_payload
+    }
+

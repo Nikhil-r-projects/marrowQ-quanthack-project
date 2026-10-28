@@ -15,14 +15,17 @@
 *Evaluating Quantum-Kernel Support Vector Machines against Classical Baselines for Hematopoietic Stem Cell Transplant Recovery*
 
 [![Live Deployment](https://img.shields.io/badge/Vercel-Live%20Demo-black?style=for-the-badge&logo=vercel&logoColor=white)](https://marrowq.vercel.app)
-[![Pytest Suite](https://img.shields.io/badge/pytest-10%2F10%20passed-10b981?style=for-the-badge&logo=pytest&logoColor=white)]()
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nikhil-r-projects/marrowQ-quanthack-project/blob/main/notebooks/MarrowQ_Quantum_Benchmark.ipynb)
+[![Prototype Type](https://img.shields.io/badge/Prototype_Type-Hybrid_Quantum--Classical_Application-7c3aed?style=for-the-badge)]()
+[![Pytest Suite](https://img.shields.io/badge/pytest-11%2F11%20passed-10b981?style=for-the-badge&logo=pytest&logoColor=white)]()
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.143-059669?style=for-the-badge&logo=fastapi&logoColor=white)]()
 [![React 19](https://img.shields.io/badge/React-19.0-6366f1?style=for-the-badge&logo=react&logoColor=white)]()
 [![Qiskit](https://img.shields.io/badge/Qiskit-2.5.2-7c3aed?style=for-the-badge&logo=qiskit&logoColor=white)]()
-[![Qiskit ML](https://img.shields.io/badge/Qiskit_ML-0.9.1-8b5cf6?style=for-the-badge&logo=ibm&logoColor=white)]()
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)]()
 
-**🌐 Live Web Application:** [https://marrowq.vercel.app](https://marrowq.vercel.app)
+**🌐 Live Web Application:** [https://marrowq.vercel.app](https://marrowq.vercel.app)  
+**📓 1-Click Google Colab Notebook:** [MarrowQ_Quantum_Benchmark.ipynb](https://colab.research.google.com/github/Nikhil-r-projects/marrowQ-quanthack-project/blob/main/notebooks/MarrowQ_Quantum_Benchmark.ipynb)  
+**🎬 Synchronized Demo Video:** [marrowq_synced_demo.mp4](file:///c:/Users/nidhi/varsha/artifacts/marrowq_synced_demo.mp4)
 
 </div>
 

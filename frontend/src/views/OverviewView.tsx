@@ -51,7 +51,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
             MarrowQ investigates whether quantum-kernel support vector methods (Qiskit ML FidelityQuantumKernel with ZZFeatureMap) offer representational utility over established classical baselines (Logistic Regression, Random Forest, Classical RBF SVM) in predicting timely neutrophil engraftment (Absolute Neutrophil Count &ge; 500/&mu;L on or before Day 28) following allogeneic hematopoietic cell transplantation.
           </p>
 
-          <div style={{ display: 'flex', gap: '0.85rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.85rem', marginTop: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
             {!dataset && (
               <button className="btn btn-primary" onClick={onLoadDemo} disabled={isLoadingDemo}>
                 <Zap size={16} />
@@ -66,6 +66,27 @@ export const OverviewView: React.FC<OverviewViewProps> = ({
                 Configure Experiment <ArrowRight size={16} />
               </button>
             )}
+            <a
+              href="https://colab.research.google.com/github/Nikhil-r-projects/marrowQ-quanthack-project/blob/main/notebooks/MarrowQ_Quantum_Benchmark.ipynb"
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-secondary"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderColor: '#f59e0b', color: '#b45309' }}
+            >
+              <Cpu size={16} /> Open in Google Colab
+            </a>
+          </div>
+
+          <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '0.72rem', background: '#ede9fe', color: '#5b21b6', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 600 }}>
+              Prototype Type: Hybrid Quantum-Classical Application
+            </span>
+            <span style={{ fontSize: '0.72rem', background: '#e0f2fe', color: '#0369a1', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 600 }}>
+              Quantum Circuit: 2-Qubit ZZFeatureMap (Linear Entanglement)
+            </span>
+            <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#15803d', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 600 }}>
+              Simulation: Qiskit Statevector Fidelity Kernel
+            </span>
           </div>
         </div>
       </div>

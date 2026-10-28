@@ -207,3 +207,23 @@ def test_frontend_static_serving():
     assert res.status_code == 200
     assert "MarrowQ" in res.text
 
+def test_quantum_simulation_api():
+    payload = {
+        "x0": 1.57,
+        "x1": 3.14,
+        "x0_b": 0.78,
+        "x1_b": 2.35,
+        "reps": 1
+    }
+    res = client.post("/api/quantum/simulate", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["qubits"] == 2
+    assert "state_a" in data
+    assert "probabilities" in data["state_a"]
+    assert "00" in data["state_a"]["probabilities"]
+    assert "bloch_q0" in data["state_a"]
+    assert "comparison" in data
+    assert 0.0 <= data["comparison"]["quantum_fidelity"] <= 1.0
+
+
