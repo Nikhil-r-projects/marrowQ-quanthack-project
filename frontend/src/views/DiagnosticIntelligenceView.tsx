@@ -1,294 +1,255 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  BrainCircuit, ShieldCheck, CheckCircle2, ChevronRight,
-  TrendingUp, Sparkles, FileText, UserCheck, RefreshCw, Cpu, Activity, AlertTriangle
+  AlertTriangle, BookOpen, BrainCircuit, CheckCircle2, CircleAlert, Cpu, FileText,
+  ListChecks, RefreshCw, Sparkles, UserRound, XCircle
 } from 'lucide-react';
-import { Patient, OrchestrationResult } from '../types';
+import { OrchestrationResult, Patient, UserRole } from '../types';
 import { runAgentOrchestration } from '../api';
 
 interface DiagnosticIntelligenceViewProps {
   patient: Patient;
+  role: UserRole;
 }
 
-export const DiagnosticIntelligenceView: React.FC<DiagnosticIntelligenceViewProps> = ({ patient }) => {
-  const [orchestrating, setOrchestrating] = useState<boolean>(false);
-  const [result, setResult] = useState<OrchestrationResult | null>(null);
-  const [activeReportTab, setActiveReportTab] = useState<'doctor' | 'patient'>('patient');
+type Result = OrchestrationResult & { source: 'backend' | 'browser' };
 
-  const executeOrchestration = async () => {
-    setOrchestrating(true);
+const AGENT_NAMES: Record<string, { name: string; role: string }> = {
+  clinical_data_quality_agent: { name: 'Data quality', role: 'Validates ranges and flags out-of-distribution inputs' },
+  clinical_feature_engineering_agent: { name: 'Feature engineering', role: 'Builds classical and quantum feature vectors' },
+  classical_ml_prediction_service: { name: 'Classical models', role: 'Logistic regression, random forest, RBF SVM' },
+  quantum_ml_prediction_service: { name: 'Quantum kernel model', role: 'ZZFeatureMap fidelity kernel classifier' },
+  independent_prediction_validation_agent: { name: 'Independent validation', role: 'Checks agreement and variance across models' },
+  evidence_clinical_context_agent: { name: 'Evidence & context', role: 'Links findings to registry evidence' },
+  recovery_trajectory_agent: { name: 'Recovery trajectory', role: 'Projects ANC and platelet recovery' },
+  clinical_report_agent: { name: 'Report writer', role: 'Drafts clinician and patient summaries' }
+};
+
+const MODEL_ROWS: { key: keyof OrchestrationResult['models_comparison']; label: string; quantum?: boolean }[] = [
+  { key: 'logistic_regression', label: 'Logistic regression' },
+  { key: 'random_forest', label: 'Random forest' },
+  { key: 'classical_rbf_svm', label: 'Classical RBF SVM' },
+  { key: 'quantum_kernel_svm', label: 'Quantum-kernel SVM', quantum: true }
+];
+
+const VALIDATION_COPY: Record<string, { label: string; chip: string; text: string }> = {
+  VALIDATED_CONSENSUS: { label: 'Consensus', chip: 'chip-green', text: 'All models agree and variance is low.' },
+  VALIDATED_WITH_DISAGREEMENT: { label: 'Models disagree', chip: 'chip-amber', text: 'Models fall on both sides of 50%. Hematologist review required.' },
+  VALIDATED_HIGH_VARIANCE: { label: 'High variance', chip: 'chip-amber', text: 'Models agree on direction but spread is wide.' }
+};
+
+const pct = (p: number) => `${(p * 100).toFixed(1)}%`;
+
+export const DiagnosticIntelligenceView: React.FC<DiagnosticIntelligenceViewProps> = ({ patient, role }) => {
+  const isPatient = role === 'patient';
+  const [result, setResult] = useState<Result | null>(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reportTab, setReportTab] = useState<'doctor' | 'patient'>(isPatient ? 'patient' : 'doctor');
+
+  const run = useCallback(async () => {
+    setRunning(true);
+    setError(null);
     try {
-      const res = await runAgentOrchestration({
-        patient_id: patient.patient_id,
-        current_labs: { anc: 420.0, platelets: 18500.0 },
-        quantum_backend: 'aer_simulator_statevector',
-        execution_mode: 'auto_fallback'
-      });
-      setResult(res);
-    } catch (err: any) {
-      console.error(err);
+      setResult(await runAgentOrchestration({ patient, quantum_backend: 'aer_simulator_statevector', execution_mode: 'auto_fallback' }));
+    } catch (e: any) {
+      setError(e?.message ?? 'Clinical review failed');
     } finally {
-      setOrchestrating(false);
+      setRunning(false);
     }
-  };
+  }, [patient]);
 
-  React.useEffect(() => {
-    if (!result) {
-      executeOrchestration();
-    }
-  }, [patient.patient_id]);
+  useEffect(() => { run(); }, [run]);
 
-  const models = result?.models_comparison;
-  const reports = result?.reports;
+  const validation = result ? VALIDATION_COPY[result.validation_status] ?? { label: result.validation_status, chip: 'chip-neutral', text: '' } : null;
+  const probs = result ? MODEL_ROWS.map(r => Number(result.models_comparison[r.key]?.probability ?? 0)) : [];
+  const mean = probs.length ? probs.reduce((a, b) => a + b, 0) / probs.length : 0;
+  const votesYes = probs.filter(p => p >= 0.5).length;
+  const quantum = result?.models_comparison.quantum_kernel_svm;
+  const warnings = result?.agent_trail.flatMap(a => a.warnings) ?? [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem', maxWidth: '1280px', margin: '0 auto' }}>
-      
-      {/* 1. Header Banner - Monochromatic Spatial Glass */}
-      <div className="spatial-card" style={{ padding: '1.75rem 2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.35rem' }}>
-              <div style={{
-                width: 36,
-                height: 36,
-                borderRadius: '10px',
-                background: 'rgba(37, 99, 235, 0.15)',
-                border: '1px solid rgba(37, 99, 235, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#60a5fa'
-              }}>
-                <BrainCircuit size={20} />
-              </div>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#ffffff', margin: 0 }}>
-                Diagnostic Intelligence
-              </h2>
-              <span style={{
-                fontSize: '0.72rem',
-                padding: '0.2rem 0.65rem',
-                borderRadius: '9999px',
-                background: 'rgba(37, 99, 235, 0.15)',
-                color: '#93c5fd',
-                border: '1px solid rgba(37, 99, 235, 0.3)',
-                fontWeight: 600
-              }}>
-                8 Agents Active
-              </span>
-            </div>
-            <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-              Evaluating clinical trajectory for <strong style={{ color: '#ffffff' }}>{patient.name}</strong> ({patient.patient_id}) • Target Organ: <strong style={{ color: '#38bdf8' }}>{patient.organ_label || 'Cardiovascular / Marrow'}</strong>
-            </div>
-          </div>
-
-          {/* Single Action Button */}
-          <button
-            onClick={executeOrchestration}
-            disabled={orchestrating}
-            className="spatial-cta-btn"
-            style={{ padding: '0.65rem 1.4rem' }}
-          >
-            <RefreshCw size={15} className={orchestrating ? "spinning" : ""} />
-            <span>{orchestrating ? 'Orchestrating 8 Agents...' : 'Re-Run Multi-Agent Inference'}</span>
+    <div className="stack">
+      <div className="page-header">
+        <div>
+          <div className="eyebrow"><BrainCircuit size={13} /> {isPatient ? 'Care summary' : 'Multi-agent clinical review'}</div>
+          <h2>{isPatient ? 'How your recovery is going' : `Engraftment review for ${patient.name}`}</h2>
+          <p>
+            {isPatient
+              ? 'A plain-language summary prepared for you and your family. Your transplant team reviews every result.'
+              : 'Eight bounded agents validate the record, run four models, check their agreement and draft reports. Every output stays a draft until a hematologist reviews it.'}
+          </p>
+        </div>
+        <div className="actions">
+          {result && (
+            <span className={`chip ${result.source === 'backend' ? 'chip-green' : 'chip-neutral'}`} title={result.source === 'backend' ? 'Computed by the MarrowQ API' : 'Backend offline, computed in your browser'}>
+              {result.source === 'backend' ? 'Live backend' : 'Computed in browser'}
+            </span>
+          )}
+          <button className="btn btn-primary" onClick={run} disabled={running}>
+            <RefreshCw size={15} className={running ? 'spin' : ''} />
+            {running ? 'Running agents…' : 'Re-run review'}
           </button>
         </div>
       </div>
 
-      {/* 2. Top Summary Indicators: Consensus, Risk, Models */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.25rem' }}>
-        
-        {/* Card 1: Agent Consensus */}
-        <div className="spatial-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '140px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Agentic Consensus</span>
-            <ShieldCheck size={16} color="#10b981" />
-          </div>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
-              8 / 8 Confirmed
-            </div>
-            <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.25rem' }}>
-              ● Zero clinical hallucination detected
-            </div>
-          </div>
-          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-            Cross-verified with Bayesian trajectory bounds
-          </div>
+      {error && (
+        <div className="alert-banner alert-error"><XCircle size={16} /><div>{error}</div></div>
+      )}
+
+      {!result ? (
+        <div className="grid-4">
+          {[0, 1, 2, 3].map(i => <div key={i} className="card"><div className="skeleton" style={{ height: 14, width: '60%' }} /><div className="skeleton" style={{ height: 34, width: '45%', marginTop: 14 }} /><div className="skeleton" style={{ height: 12, width: '80%', marginTop: 14 }} /></div>)}
         </div>
-
-        {/* Card 2: Engraftment Probability */}
-        <div className="spatial-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '140px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Day +28 Engraftment Chance</span>
-            <TrendingUp size={16} color="#3b82f6" />
+      ) : isPatient ? (
+        <div className="card">
+          <div className="card-header"><div className="card-title"><UserRound size={16} /> Your update</div></div>
+          <div className="markdown-view" style={{ whiteSpace: 'pre-wrap', fontFamily: 'var(--font-body)', fontSize: '0.95rem' }}>
+            {result.reports.patient_friendly_summary}
           </div>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
-              92.4%
-            </div>
-            <div style={{ fontSize: '0.75rem', color: '#93c5fd', marginTop: '0.25rem' }}>
-              Classical ML: 91.8% • Quantum SVM: 93.0%
-            </div>
-          </div>
-          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-            Both paradigms project successful recovery
-          </div>
+          <p className="small muted" style={{ marginTop: '0.9rem' }}>
+            Questions about this update? Use the phone button at the top of the page to contact your care team.
+          </p>
         </div>
-
-        {/* Card 3: Toxicity & Organ Risk */}
-        <div className="spatial-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '140px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Primary Organ Safety</span>
-            <Activity size={16} color="#60a5fa" />
-          </div>
-          <div>
-            <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ffffff' }}>
-              Low Risk (Grade 0)
+      ) : (
+        <>
+          <div className="grid-4">
+            <div className="card kpi">
+              <span className="kpi-label">Ensemble engraftment likelihood</span>
+              <span className="kpi-value">{pct(mean)}</span>
+              <span className="kpi-foot">Mean of 4 models · Day +28 neutrophil recovery</span>
             </div>
-            <div style={{ fontSize: '0.75rem', color: '#10b981', marginTop: '0.25rem' }}>
-              ● Stable organ perfusion & vital biomarkers
+            <div className="card kpi">
+              <span className="kpi-label">Validation</span>
+              <span className="kpi-value" style={{ fontSize: '1.25rem' }}><span className={`chip ${validation!.chip}`} style={{ fontSize: '0.85rem' }}>{validation!.label}</span></span>
+              <span className="kpi-foot">{validation!.text}</span>
+            </div>
+            <div className="card kpi">
+              <span className="kpi-label">Model agreement</span>
+              <span className="kpi-value">{votesYes}/4<small>predict engraftment</small></span>
+              <span className="kpi-foot">Inter-model variance σ² = {(probs.reduce((a, p) => a + (p - mean) ** 2, 0) / 4).toFixed(4)}</span>
+            </div>
+            <div className="card kpi">
+              <span className="kpi-label">Quantum execution</span>
+              <span className="kpi-value" style={{ fontSize: '1.05rem', lineHeight: 1.35 }}>{quantum?.backend_used ?? '—'}</span>
+              <span className="kpi-foot">{quantum?.circuit_width ?? 2} qubits · depth {quantum?.circuit_depth ?? '—'} · {result.duration_ms} ms total</span>
             </div>
           </div>
-          <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
-            Next protocol checkup in 4 days
-          </div>
-        </div>
 
-      </div>
-
-      {/* 3. Progressive Disclosure Tabs: Patient-Friendly vs Clinician In-Depth */}
-      <div className="spatial-card" style={{ padding: '1.5rem' }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-          paddingBottom: '1rem',
-          marginBottom: '1.5rem'
-        }}>
-          <div className="spatial-pills-group">
-            <button
-              onClick={() => setActiveReportTab('patient')}
-              className={`spatial-pill ${activeReportTab === 'patient' ? 'active' : ''}`}
-            >
-              <UserCheck size={14} />
-              <span>Friendly Patient Summary</span>
-            </button>
-            <button
-              onClick={() => setActiveReportTab('doctor')}
-              className={`spatial-pill ${activeReportTab === 'doctor' ? 'active' : ''}`}
-            >
-              <FileText size={14} />
-              <span>Full Clinical Synthesis</span>
-            </button>
-          </div>
-
-          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-            Tailored specifically for: {activeReportTab === 'patient' ? 'Patient & Family' : 'Hematology Specialists'}
-          </span>
-        </div>
-
-        {activeReportTab === 'patient' ? (
-          /* Plain English, Warm & Assuring for Patient */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div style={{
-              background: 'rgba(37, 99, 235, 0.08)',
-              border: '1px solid rgba(37, 99, 235, 0.2)',
-              borderRadius: '16px',
-              padding: '1.25rem 1.5rem',
-              color: '#f8fafc',
-              lineHeight: 1.6
-            }}>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: '#93c5fd', margin: '0 0 0.5rem 0' }}>
-                Good news on your recovery, {patient.name}!
-              </h3>
-              <p style={{ margin: 0, fontSize: '0.9rem', color: '#cbd5e1' }}>
-                Your body is responding positively following your transplant. Our clinical intelligence system analyzed your recent lab results and confirms that your new donor cells are finding their way into your bone marrow right on schedule. Your organ vitals are steady and within safe limits.
-              </p>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.06)',
-                borderRadius: '12px',
-                padding: '1rem'
-              }}>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>What to expect next</div>
-                <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>Blood counts will begin rising over the next 3–5 days.</div>
-              </div>
-
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.06)',
-                borderRadius: '12px',
-                padding: '1rem'
-              }}>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Care instructions</div>
-                <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>Continue taking prophylactic medications and report any fever over 38°C.</div>
-              </div>
-
-              <div style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.06)',
-                borderRadius: '12px',
-                padding: '1rem'
-              }}>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.25rem' }}>Next Doctor Visit</div>
-                <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>Fri, 24 Mar with Dr. Hanzer Jon (Hematology Team).</div>
+          {warnings.length > 0 && (
+            <div className="alert-banner alert-warn">
+              <AlertTriangle size={16} />
+              <div>
+                <strong>{warnings.length} flag{warnings.length > 1 ? 's' : ''} raised by the agents</strong>
+                <ul style={{ margin: '0.35rem 0 0 1.1rem' }}>{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
               </div>
             </div>
-          </div>
-        ) : (
-          /* In-depth Hematology & Quantum Model Comparison */
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-            <div style={{
-              background: 'rgba(255, 255, 255, 0.02)',
-              border: '1px solid rgba(255, 255, 255, 0.06)',
-              borderRadius: '14px',
-              padding: '1.25rem',
-              fontSize: '0.88rem',
-              color: '#e2e8f0',
-              lineHeight: 1.6
-            }}>
-              <strong style={{ color: '#38bdf8' }}>Clinical Impression:</strong> Post-allogeneic HSCT Day +14 with ongoing myeloid recovery. ANC is currently 420 cells/μL, closely matching the projected Bayesian trajectory. Platelet kinetics (18,500/μL) are within expected recovery bounds with zero secondary cardiotoxicity or acute hepatic GvHD markers observed.
-            </div>
+          )}
 
-            {/* Model Comparison Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.6)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '12px',
-                padding: '1.15rem'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <Cpu size={16} color="#3b82f6" />
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff' }}>Classical ML (GBM / Logistic)</span>
+          <div className="grid-2" style={{ alignItems: 'start' }}>
+            <section className="card">
+              <div className="card-header">
+                <div>
+                  <div className="card-title"><Cpu size={16} /> Model comparison</div>
+                  <div className="card-subtitle">Probability of neutrophil engraftment by Day +28</div>
                 </div>
-                <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#ffffff', marginBottom: '0.25rem' }}>91.8%</div>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Calibration Brier score: 0.071 • Feature influence: Cell Dose CD34+ (34%), Age (22%).</div>
               </div>
+              <div className="stack" style={{ gap: '0.9rem' }}>
+                {MODEL_ROWS.map((r, i) => {
+                  const p = probs[i];
+                  return (
+                    <div key={r.key}>
+                      <div className="row between small" style={{ marginBottom: '0.35rem' }}>
+                        <span className="row" style={{ gap: '0.45rem' }}>
+                          {r.label}
+                          {r.quantum && <span className="chip chip-violet">Experimental</span>}
+                        </span>
+                        <strong className="tnum">{pct(p)}</strong>
+                      </div>
+                      <div className="prob-track">
+                        <div className={`prob-fill ${r.quantum ? 'quantum' : ''}`} style={{ width: `${p * 100}%` }} />
+                        <span className="prob-threshold" title="Decision threshold 50%" />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="inset small muted" style={{ marginTop: '1.1rem', lineHeight: 1.55 }}>
+                <strong style={{ color: 'var(--violet-text)' }}>About the quantum model.</strong>{' '}
+                In MarrowQ’s held-out benchmark the 2-qubit quantum kernel reached ROC-AUC 0.48, against 0.77 for logistic regression.
+                It is shown for research comparison and should not drive decisions.
+                {quantum?.fidelity_to_engraftment_state != null && <> Kernel fidelity to the engrafted reference state: <span className="tnum">{quantum.fidelity_to_engraftment_state}</span>.</>}
+              </div>
+              {quantum?.transparency_notice && <p className="tiny faint" style={{ marginTop: '0.6rem' }}>{quantum.transparency_notice}</p>}
+            </section>
 
-              <div style={{
-                background: 'rgba(15, 23, 42, 0.6)',
-                border: '1px solid rgba(37, 99, 235, 0.3)',
-                borderRadius: '12px',
-                padding: '1.15rem'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <Sparkles size={16} color="#60a5fa" />
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff' }}>Quantum-Kernel SVM (ZZFeatureMap)</span>
-                </div>
-                <div style={{ fontSize: '1.3rem', fontWeight: 700, color: '#60a5fa', marginBottom: '0.25rem' }}>93.0%</div>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Statevector kernel matrix fidelity: 0.964 • Non-linear feature entanglement depth: 2.</div>
+            <section className="card">
+              <div className="card-header">
+                <div className="card-title"><BookOpen size={16} /> Evidence</div>
+              </div>
+              <div className="stack" style={{ gap: '0.7rem' }}>
+                {result.evidence.map((e, i) => (
+                  <div key={i} className="inset" style={{ padding: '0.8rem 0.9rem' }}>
+                    <div className="row between" style={{ alignItems: 'flex-start' }}>
+                      <strong style={{ fontSize: '0.86rem' }}>{e.factor}</strong>
+                      <span className="tiny faint" style={{ textAlign: 'right' }}>{e.reference_registry}</span>
+                    </div>
+                    <div className="small muted" style={{ marginTop: '0.2rem' }}>{e.observation}</div>
+                    <div className="small" style={{ marginTop: '0.35rem' }}>{e.clinical_impact}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <section className="card">
+            <div className="card-header divided">
+              <div className="card-title"><FileText size={16} /> Draft reports</div>
+              <div className="seg" role="tablist">
+                <button role="tab" aria-selected={reportTab === 'doctor'} className={`seg-btn ${reportTab === 'doctor' ? 'active' : ''}`} onClick={() => setReportTab('doctor')}>For clinicians</button>
+                <button role="tab" aria-selected={reportTab === 'patient'} className={`seg-btn ${reportTab === 'patient' ? 'active' : ''}`} onClick={() => setReportTab('patient')}>For the patient</button>
               </div>
             </div>
-          </div>
-        )}
-      </div>
+            <div className="markdown-view" style={{ whiteSpace: 'pre-wrap', fontFamily: reportTab === 'doctor' ? 'var(--font-mono)' : 'var(--font-body)', fontSize: reportTab === 'doctor' ? '0.8rem' : '0.9rem' }}>
+              {reportTab === 'doctor' ? result.reports.physician_technical_report : result.reports.patient_friendly_summary}
+            </div>
+            <div className="row between tiny faint" style={{ marginTop: '0.7rem' }}>
+              <span>Generated {new Date(result.reports.generated_at).toLocaleString('en-GB')}</span>
+              <span className="mono">{result.prediction_id}</span>
+            </div>
+          </section>
 
+          <section className="card">
+            <div className="card-header">
+              <div>
+                <div className="card-title"><ListChecks size={16} /> Agent audit trail</div>
+                <div className="card-subtitle">Bounded, sequential execution. Task <span className="mono">{result.task_id}</span></div>
+              </div>
+            </div>
+            <ol className="agent-trail">
+              {result.agent_trail.map((a, i) => {
+                const meta = AGENT_NAMES[a.agent_id] ?? { name: a.agent_id, role: '' };
+                const Icon = a.status === 'SUCCESS' ? CheckCircle2 : a.status === 'WARNING' ? CircleAlert : XCircle;
+                return (
+                  <li key={i} className={`agent-step ${a.status.toLowerCase()}`}>
+                    <span className="agent-icon"><Icon size={16} /></span>
+                    <div style={{ minWidth: 0 }}>
+                      <div className="row between wrap">
+                        <strong style={{ fontSize: '0.86rem' }}>{i + 1}. {meta.name}</strong>
+                        {a.confidence != null && <span className="tiny faint tnum">confidence {(a.confidence * 100).toFixed(0)}%</span>}
+                      </div>
+                      <div className="small muted">{meta.role}</div>
+                      {a.warnings.length > 0 && <div className="small" style={{ color: 'var(--amber-text)', marginTop: '0.25rem' }}>{a.warnings.join(' ')}</div>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+            <div className="row tiny faint" style={{ marginTop: '0.75rem' }}>
+              <Sparkles size={12} /> Review status: pending clinician sign-off
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 };

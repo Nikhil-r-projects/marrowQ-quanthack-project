@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { Activity, CheckCircle2, AlertCircle, Clock, ArrowRight, Loader2, RefreshCw } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { ArrowRight, CheckCircle2, CircleAlert, Clock, Gauge, Info, LoaderCircle } from 'lucide-react';
 import { Experiment } from '../types';
 import { fetchExperiment } from '../api';
-import { TabId } from '../components/Navigation';
+import { TabId } from '../navigation';
 
 interface MonitorViewProps {
   currentExperiment: Experiment | null;
@@ -10,187 +10,118 @@ interface MonitorViewProps {
   onNavigate: (tab: TabId) => void;
 }
 
-export const MonitorView: React.FC<MonitorViewProps> = ({
-  currentExperiment,
-  onExperimentUpdated,
-  onNavigate,
-}) => {
-  const [pollCount, setPollCount] = useState(0);
+const STAGES = [
+  { id: 'validating_and_splitting', label: 'Validate & split', detail: 'Leakage screen, stratified train/test split' },
+  { id: 'training_classical_models', label: 'Classical baselines', detail: 'Baseline, logistic regression, random forest, RBF SVM' },
+  { id: 'computing_quantum_kernel', label: 'Quantum kernel', detail: 'Fidelity Gram matrix and precomputed-kernel SVM' },
+  { id: 'completed', label: 'Evaluate & save', detail: 'Held-out metrics, artifacts, report' }
+];
+
+const stageIndex = (stage: string) => {
+  const i = STAGES.findIndex(s => s.id === stage);
+  return i === -1 ? 0 : i;
+};
+
+export const MonitorView: React.FC<MonitorViewProps> = ({ currentExperiment, onExperimentUpdated, onNavigate }) => {
+  const id = currentExperiment?.experiment_id;
+  const status = currentExperiment?.status;
 
   useEffect(() => {
-    if (!currentExperiment || currentExperiment.status === 'completed' || currentExperiment.status === 'failed') {
-      return;
-    }
-
-    const timer = setInterval(async () => {
+    if (!id || status === 'completed' || status === 'failed') return;
+    const timer = window.setInterval(async () => {
       try {
-        const updated = await fetchExperiment(currentExperiment.experiment_id);
-        onExperimentUpdated(updated);
-        setPollCount((prev) => prev + 1);
+        onExperimentUpdated(await fetchExperiment(id));
       } catch (e) {
         console.error('Failed to poll experiment status', e);
       }
     }, 1500);
-
-    return () => clearInterval(timer);
-  }, [currentExperiment, onExperimentUpdated]);
+    return () => window.clearInterval(timer);
+  }, [id, status, onExperimentUpdated]);
 
   if (!currentExperiment) {
     return (
-      <div className="card" style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-        <Clock size={36} style={{ margin: '0 auto 0.75rem', color: '#94a3b8' }} />
-        <h3>No Experiment in Progress</h3>
-        <p style={{ color: '#64748b', marginTop: '0.25rem' }}>
-          Configure and execute a new benchmark in Experiment Setup to monitor its execution lifecycle here.
-        </p>
-        <button
-          className="btn btn-primary"
-          style={{ marginTop: '1rem' }}
-          onClick={() => onNavigate('setup')}
-        >
-          Go to Setup
-        </button>
+      <div className="card empty-state">
+        <Clock size={34} />
+        <h3>No run in progress</h3>
+        <p>Configure and start a benchmark to follow its stages here.</p>
+        <button className="btn btn-primary" onClick={() => onNavigate('setup')}>Configure benchmark</button>
       </div>
     );
   }
 
-  const isRunning = currentExperiment.status === 'running' || currentExperiment.status === 'created';
-  const isDone = currentExperiment.status === 'completed';
-  const isFailed = currentExperiment.status === 'failed';
-
-  const stages = [
-    { id: 'validating_and_splitting', label: '1. Validation & Leakage-Safe Splitting' },
-    { id: 'training_classical_models', label: '2. Fitting Classical Baselines (4 Models)' },
-    { id: 'computing_quantum_kernel', label: '3. Qiskit Statevector Fidelity Kernel' },
-    { id: 'completed', label: '4. Evaluation & Artifact Persistence' },
-  ];
-
-  const getStageIndex = (stage: string) => {
-    if (stage === 'validating_and_splitting') return 0;
-    if (stage === 'training_classical_models') return 1;
-    if (stage === 'computing_quantum_kernel') return 2;
-    if (stage === 'completed') return 4;
-    return 0;
-  };
-
-  const currentIdx = getStageIndex(currentExperiment.current_stage);
+  const exp = currentExperiment;
+  const isDone = exp.status === 'completed';
+  const isFailed = exp.status === 'failed';
+  const isRunning = !isDone && !isFailed;
+  const current = isDone ? STAGES.length : stageIndex(exp.current_stage);
+  const pct = isDone ? 100 : Math.max(8, (current / STAGES.length) * 100 + 8);
+  const offlineReplay = exp.config?.offline_replay_of;
 
   return (
-    <div>
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <div className="card-title">
-              <Activity size={18} /> Experiment Execution Lifecycle
-            </div>
-            <div className="card-subtitle">
-              ID: <code>{currentExperiment.experiment_id}</code> | Cohort: {currentExperiment.dataset_name} ({currentExperiment.data_mode.toUpperCase()})
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            {isRunning && (
-              <span className="badge" style={{ background: '#e0e7ff', color: '#3730a3' }}>
-                <Loader2 size={12} className="spin" /> Running
-              </span>
-            )}
-            {isDone && (
-              <span className="badge" style={{ background: '#dcfce7', color: '#166534' }}>
-                <CheckCircle2 size={12} /> Completed ({currentExperiment.total_runtime_seconds}s)
-              </span>
-            )}
-            {isFailed && (
-              <span className="badge" style={{ background: '#fee2e2', color: '#991b1b' }}>
-                <AlertCircle size={12} /> Failed
-              </span>
-            )}
-          </div>
+    <div className="stack">
+      <div className="page-header">
+        <div>
+          <div className="eyebrow"><Gauge size={13} /> Research · step 3 of 4</div>
+          <h2>Run monitor</h2>
+          <p>Experiment <code>{exp.experiment_id}</code> on {exp.dataset_name}</p>
         </div>
-
-        {/* Progress Bar & Stage Stepper */}
-        <div style={{ margin: '1.5rem 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-            {stages.map((st, idx) => {
-              const isPast = isDone || currentIdx > idx;
-              const isCurrent = isRunning && currentIdx === idx;
-              return (
-                <div
-                  key={st.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.4rem',
-                    fontSize: '0.8rem',
-                    fontWeight: 600,
-                    color: isPast ? '#059669' : isCurrent ? '#4f46e5' : '#94a3b8',
-                  }}
-                >
-                  {isPast ? (
-                    <CheckCircle2 size={16} />
-                  ) : isCurrent ? (
-                    <Loader2 size={16} className="spin" />
-                  ) : (
-                    <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid #cbd5e1' }} />
-                  )}
-                  <span>{st.label}</span>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="progress-bar-bg">
-            <div
-              className="progress-bar-fill"
-              style={{
-                width: isDone ? '100%' : isRunning ? `${Math.max(25, (currentIdx + 1) * 25)}%` : '5%',
-              }}
-            ></div>
-          </div>
+        <div className="actions">
+          {isRunning && <span className="chip chip-blue"><LoaderCircle size={12} className="spin" /> Running</span>}
+          {isDone && <span className="chip chip-green"><CheckCircle2 size={12} /> Completed{exp.total_runtime_seconds != null ? ` in ${exp.total_runtime_seconds}s` : ''}</span>}
+          {isFailed && <span className="chip chip-red"><CircleAlert size={12} /> Failed</span>}
+          {isDone && <button className="btn btn-primary" onClick={() => onNavigate('results')}>View results <ArrowRight size={14} /></button>}
         </div>
-
-        {/* Error Alert */}
-        {isFailed && (
-          <div className="alert-banner alert-error">
-            <AlertCircle size={18} />
-            <div>
-              <strong>Execution Error:</strong> {currentExperiment.error_message}
-            </div>
-          </div>
-        )}
-
-        {/* Live Execution Logs Window */}
-        <div style={{ marginTop: '1.5rem' }}>
-          <div style={{ fontSize: '0.825rem', fontWeight: 700, color: '#334155', marginBottom: '0.4rem' }}>
-            Non-Sensitive Telemetry & Execution Log
-          </div>
-          <div className="logs-box">
-            <div>[INFO] Initialized experiment {currentExperiment.experiment_id}</div>
-            <div>[INFO] Dataset: {currentExperiment.dataset_id} | Test size: {currentExperiment.test_size}</div>
-            <div>[INFO] Permitted pre-transplant features: {currentExperiment.selected_features.join(', ')}</div>
-            <div>[INFO] Imputer & Scaler fitted strictly on training partition (Zero test leakage).</div>
-            {currentExperiment.train_sample_count && (
-              <div>[INFO] Partition sizes: N_train={currentExperiment.train_sample_count}, N_test={currentExperiment.test_sample_count}</div>
-            )}
-            {Object.keys(currentExperiment.metrics).map((mKey) => (
-              <div key={mKey}>
-                [DONE] {currentExperiment.metrics[mKey].display_name}: Acc = {(currentExperiment.metrics[mKey].accuracy * 100).toFixed(1)}%, Duration = {currentExperiment.metrics[mKey].training_time_seconds.toFixed(3)}s
-              </div>
-            ))}
-            {isDone && (
-              <div style={{ color: '#4ade80' }}>
-                [SUCCESS] Benchmark completed in {currentExperiment.total_runtime_seconds}s. Model artifacts persisted to SQLite and disk.
-              </div>
-            )}
-          </div>
-        </div>
-
-        {isDone && (
-          <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
-            <button className="btn btn-primary" onClick={() => onNavigate('results')}>
-              View Detailed Validation Results <ArrowRight size={16} />
-            </button>
-          </div>
-        )}
       </div>
+
+      {offlineReplay && (
+        <div className="alert-banner alert-info">
+          <Info size={16} />
+          <div>The backend is offline, so no models were trained in this run. It replays the stored reference benchmark (<code>{offlineReplay}</code>) to demonstrate the workflow.</div>
+        </div>
+      )}
+
+      <section className="card">
+        <ol className="stepper">
+          {STAGES.map((s, i) => {
+            const state = isDone || i < current ? 'done' : isRunning && i === current ? 'active' : isFailed && i === current ? 'failed' : 'todo';
+            return (
+              <li key={s.id} className={`step ${state}`}>
+                <span className="step-icon">
+                  {state === 'done' ? <CheckCircle2 size={16} /> : state === 'active' ? <LoaderCircle size={16} className="spin" /> : state === 'failed' ? <CircleAlert size={16} /> : i + 1}
+                </span>
+                <div>
+                  <div className="step-label">{s.label}</div>
+                  <div className="tiny muted">{s.detail}</div>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+        <div className="progress-bar-bg" style={{ marginTop: '1.25rem' }} role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label="Run progress">
+          <div className="progress-bar-fill" style={{ width: `${pct}%`, background: isFailed ? 'var(--red)' : isDone ? 'var(--green)' : undefined }} />
+        </div>
+      </section>
+
+      {isFailed && (
+        <div className="alert-banner alert-error"><CircleAlert size={16} /><div><strong>Run failed.</strong> {exp.error_message}</div></div>
+      )}
+
+      <section className="card">
+        <div className="card-header"><div className="card-title">Execution log</div><span className="tiny faint">No patient-level data is logged</span></div>
+        <div className="logs-box" aria-live="polite">
+          <div><span className="log-info">[info]</span> Experiment {exp.experiment_id} initialised</div>
+          <div><span className="log-info">[info]</span> Dataset {exp.dataset_id} · test size {exp.test_size} · seed {exp.random_state}</div>
+          <div><span className="log-info">[info]</span> Features ({exp.selected_features.length}): {exp.selected_features.join(', ')}</div>
+          <div><span className="log-info">[info]</span> Imputer, scaler and encoder fitted on the training partition only</div>
+          {exp.train_sample_count != null && <div><span className="log-info">[info]</span> N_train = {exp.train_sample_count}, N_test = {exp.test_sample_count}</div>}
+          {isRunning && <div><span className="log-info">[info]</span> Stage: {STAGES[current]?.label ?? exp.current_stage}…</div>}
+          {Object.entries(exp.metrics).map(([k, m]) => (
+            <div key={k}><span className="log-done">[done]</span> {m.display_name}: accuracy {(m.accuracy * 100).toFixed(1)}%, AUC {m.roc_auc != null ? m.roc_auc.toFixed(3) : '—'}, {m.training_time_seconds.toFixed(3)}s</div>
+          ))}
+          {isDone && <div><span className="log-done">[done]</span> Benchmark complete. Artifacts saved.</div>}
+          {isFailed && <div><span className="log-err">[error]</span> {exp.error_message}</div>}
+        </div>
+      </section>
     </div>
   );
 };

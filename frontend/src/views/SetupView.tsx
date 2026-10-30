@@ -1,69 +1,55 @@
 import React, { useState } from 'react';
-import { Sliders, Cpu, Play, CheckSquare, Square, ShieldCheck, AlertCircle } from 'lucide-react';
+import { Atom, CircleAlert, Database, Play, ShieldCheck, SlidersHorizontal } from 'lucide-react';
 import { DatasetProfile, Experiment } from '../types';
 import { createExperiment, startExperimentRun } from '../api';
+import { TabId } from '../navigation';
 
 interface SetupViewProps {
   dataset: DatasetProfile | null;
   onExperimentStarted: (exp: Experiment) => void;
+  onNavigate: (tab: TabId) => void;
 }
 
-export const SetupView: React.FC<SetupViewProps> = ({ dataset, onExperimentStarted }) => {
+const CLASSICAL = [
+  { key: 'runDummy', label: 'Majority-class baseline', hint: 'Floor every model must beat' },
+  { key: 'runLogistic', label: 'Logistic regression (L2)', hint: 'Interpretable clinical reference' },
+  { key: 'runRandomForest', label: 'Random forest', hint: '100 trees, depth 6' },
+  { key: 'runRbfSvm', label: 'RBF SVM', hint: 'Full features, plus a matched 2-D comparator' }
+] as const;
+
+export const SetupView: React.FC<SetupViewProps> = ({ dataset, onExperimentStarted, onNavigate }) => {
+  const candidateColumns = (dataset?.columns ?? []).filter(c => !c.toLowerCase().endsWith('_id'));
+  const [targetColumn, setTargetColumn] = useState<string>(dataset?.suggested_target || 'neutrophil_recovery_day28');
+  const [selectedFeatures, setSelectedFeatures] = useState<string[]>(dataset?.suggested_features || []);
+  const [testSize, setTestSize] = useState(0.25);
+  const [randomSeed, setRandomSeed] = useState(42);
+  const [models, setModels] = useState({ runDummy: true, runLogistic: true, runRandomForest: true, runRbfSvm: true, runQuantumSvm: true });
+  const [quantumQubits, setQuantumQubits] = useState(2);
+  const [quantumReps, setQuantumReps] = useState(1);
+  const [quantumMaxSamples, setQuantumMaxSamples] = useState(80);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   if (!dataset) {
     return (
-      <div className="card" style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-        <AlertCircle size={36} style={{ margin: '0 auto 0.75rem', color: '#6366f1' }} />
-        <h3>No Dataset Available</h3>
-        <p style={{ color: '#64748b', marginTop: '0.25rem' }}>Please load or upload a dataset before configuring an experiment.</p>
+      <div className="card empty-state">
+        <Database size={34} />
+        <h3>No dataset loaded</h3>
+        <p>Load the synthetic cohort or upload a research extract before configuring a benchmark.</p>
+        <button className="btn btn-primary" onClick={() => onNavigate('dataset')}>Go to datasets</button>
       </div>
     );
   }
 
-  const [targetColumn, setTargetColumn] = useState<string>(dataset.suggested_target || 'neutrophil_recovery_day28');
-  const [selectedFeatures, setSelectedFeatures] = useState<string[]>(dataset.suggested_features || []);
-  const [testSize, setTestSize] = useState<number>(0.25);
-  const [randomSeed, setRandomSeed] = useState<number>(42);
+  const featureOptions = candidateColumns.filter(c => c !== targetColumn);
+  const toggleFeature = (f: string) => setSelectedFeatures(s => (s.includes(f) ? s.filter(x => x !== f) : [...s, f]));
+  const leakageCols = new Set(dataset.potential_leakage_warnings.flatMap(w => dataset.columns.filter(c => w.includes(c))));
 
-  // Model toggles
-  const [runDummy, setRunDummy] = useState<boolean>(true);
-  const [runLogistic, setRunLogistic] = useState<boolean>(true);
-  const [runRandomForest, setRunRandomForest] = useState<boolean>(true);
-  const [runRbfSvm, setRunRbfSvm] = useState<boolean>(true);
-  const [runQuantumSvm, setRunQuantumSvm] = useState<boolean>(true);
-
-  // Quantum settings
-  const [quantumQubits, setQuantumQubits] = useState<number>(2);
-  const [quantumReps, setQuantumReps] = useState<number>(1);
-  const [quantumMaxSamples, setQuantumMaxSamples] = useState<number>(80);
-
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const toggleFeature = (feat: string) => {
-    if (selectedFeatures.includes(feat)) {
-      setSelectedFeatures(selectedFeatures.filter((f) => f !== feat));
-    } else {
-      setSelectedFeatures([...selectedFeatures, feat]);
-    }
-  };
-
-  const selectAllFeatures = () => {
-    setSelectedFeatures(dataset.columns.filter((c) => c !== targetColumn && !c.toLowerCase().endsWith('_id')));
-  };
-
-  const clearAllFeatures = () => {
-    setSelectedFeatures([]);
-  };
-
-  const handleRunExperiment = async () => {
-    if (selectedFeatures.length === 0) {
-      setErrorMessage('Please select at least one feature for model training.');
-      return;
-    }
-
+  const handleRun = async () => {
+    if (selectedFeatures.length === 0) { setErrorMessage('Select at least one feature.'); return; }
+    if (!Object.values(models).some(Boolean)) { setErrorMessage('Select at least one model.'); return; }
     setIsSubmitting(true);
     setErrorMessage(null);
-
     try {
       const exp = await createExperiment({
         dataset_id: dataset.dataset_id,
@@ -71,252 +57,131 @@ export const SetupView: React.FC<SetupViewProps> = ({ dataset, onExperimentStart
         selected_features: selectedFeatures,
         test_size: testSize,
         random_state: randomSeed,
-        run_dummy: runDummy,
-        run_logistic: runLogistic,
-        run_random_forest: runRandomForest,
-        run_rbf_svm: runRbfSvm,
-        run_quantum_svm: runQuantumSvm,
+        run_dummy: models.runDummy,
+        run_logistic: models.runLogistic,
+        run_random_forest: models.runRandomForest,
+        run_rbf_svm: models.runRbfSvm,
+        run_quantum_svm: models.runQuantumSvm,
         quantum_qubits: quantumQubits,
         quantum_reps: quantumReps,
-        quantum_max_samples: quantumMaxSamples,
+        quantum_max_samples: quantumMaxSamples
       });
-
-      // Start run in background
       await startExperimentRun(exp.experiment_id);
-      onExperimentStarted(exp);
+      onExperimentStarted({ ...exp, status: 'running' });
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to start experiment');
+      setErrorMessage(err?.message || 'Failed to start the experiment');
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div>
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <div className="card-title">
-              <Sliders size={18} /> Configure Scientific Benchmark
-            </div>
-            <div className="card-subtitle">
-              Strictly enforce training-only transformations and evaluate quantum kernel SVM alongside classical baselines.
-            </div>
-          </div>
-          <button
-            className="btn btn-primary"
-            onClick={handleRunExperiment}
-            disabled={isSubmitting || selectedFeatures.length === 0}
-          >
-            <Play size={16} />
-            {isSubmitting ? 'Starting...' : 'Execute Benchmark'}
+    <div className="stack">
+      <div className="page-header">
+        <div>
+          <div className="eyebrow"><SlidersHorizontal size={13} /> Research · step 2 of 4</div>
+          <h2>Configure benchmark</h2>
+          <p>Classical baselines and the quantum-kernel SVM are trained on the same leakage-safe split. Preprocessing is fitted on the training partition only.</p>
+        </div>
+        <div className="actions">
+          <button className="btn btn-primary btn-lg" onClick={handleRun} disabled={isSubmitting || selectedFeatures.length === 0}>
+            <Play size={15} /> {isSubmitting ? 'Starting…' : 'Run benchmark'}
           </button>
         </div>
+      </div>
 
-        {errorMessage && (
-          <div className="alert-banner alert-error" style={{ marginBottom: '1rem' }}>
-            <AlertCircle size={16} />
-            <div>{errorMessage}</div>
-          </div>
-        )}
+      {errorMessage && <div className="alert-banner alert-error"><CircleAlert size={16} /><div>{errorMessage}</div></div>}
 
-        <div className="grid-2">
-          {/* Target & Feature Space */}
-          <div>
-            <div className="form-group">
-              <label className="form-label">Prediction Target (Binary Clinical Outcome)</label>
-              <select
-                className="form-select"
-                value={targetColumn}
-                onChange={(e) => setTargetColumn(e.target.value)}
-              >
-                {dataset.columns.map((c) => (
-                  <option key={c} value={c}>
-                    {c} {c === dataset.suggested_target ? '(Recommended Endpoint)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                <label className="form-label" style={{ margin: 0 }}>
-                  Permitted Covariates ({selectedFeatures.length} selected)
-                </label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    className="btn btn-secondary"
-                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem' }}
-                    onClick={selectAllFeatures}
-                  >
-                    Select All
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem' }}
-                    onClick={clearAllFeatures}
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '6px',
-                  maxHeight: '260px',
-                  overflowY: 'auto',
-                  padding: '0.5rem',
-                  background: '#f8fafc',
-                }}
-              >
-                {dataset.columns
-                  .filter((col) => col !== targetColumn && !col.toLowerCase().endsWith('_id'))
-                  .map((col) => {
-                    const isChecked = selectedFeatures.includes(col);
-                    return (
-                      <div
-                        key={col}
-                        className="checkbox-item"
-                        onClick={() => toggleFeature(col)}
-                      >
-                        {isChecked ? (
-                          <CheckSquare size={16} color="#4f46e5" />
-                        ) : (
-                          <Square size={16} color="#94a3b8" />
-                        )}
-                        <span style={{ fontSize: '0.825rem' }}>
-                          <code>{col}</code> ({dataset.column_types[col]})
-                        </span>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-
-            {/* Split & Seed */}
-            <div className="grid-2">
-              <div className="form-group">
-                <label className="form-label">Held-Out Test Ratio: {(testSize * 100).toFixed(0)}%</label>
-                <div className="slider-container">
-                  <input
-                    type="range"
-                    min="0.10"
-                    max="0.40"
-                    step="0.05"
-                    className="form-slider"
-                    value={testSize}
-                    onChange={(e) => setTestSize(parseFloat(e.target.value))}
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Random Seed</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={randomSeed}
-                  onChange={(e) => setRandomSeed(parseInt(e.target.value) || 42)}
-                />
-              </div>
-            </div>
+      <div className="grid-2" style={{ alignItems: 'start' }}>
+        <section className="card">
+          <div className="card-header"><div className="card-title">Target & features</div></div>
+          <div className="form-group">
+            <label className="form-label" htmlFor="target">Outcome (binary)</label>
+            <select id="target" className="form-select" value={targetColumn} onChange={e => { setTargetColumn(e.target.value); setSelectedFeatures(s => s.filter(f => f !== e.target.value)); }}>
+              {candidateColumns.map(c => <option key={c} value={c}>{c}{c === dataset.suggested_target ? ' (recommended)' : ''}</option>)}
+            </select>
           </div>
 
-          {/* Model Suite Selection & Quantum Parameters */}
-          <div>
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem', marginBottom: '1.25rem' }}>
-              <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', marginBottom: '0.5rem' }}>
-                Classical Baseline Suite
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                <label className="checkbox-item">
-                  <input type="checkbox" checked={runDummy} onChange={(e) => setRunDummy(e.target.checked)} />
-                  <span>Dummy Classifier</span>
-                </label>
-                <label className="checkbox-item">
-                  <input type="checkbox" checked={runLogistic} onChange={(e) => setRunLogistic(e.target.checked)} />
-                  <span>Logistic Regression</span>
-                </label>
-                <label className="checkbox-item">
-                  <input type="checkbox" checked={runRandomForest} onChange={(e) => setRunRandomForest(e.target.checked)} />
-                  <span>Random Forest</span>
-                </label>
-                <label className="checkbox-item">
-                  <input type="checkbox" checked={runRbfSvm} onChange={(e) => setRunRbfSvm(e.target.checked)} />
-                  <span>Classical RBF SVM</span>
-                </label>
-              </div>
+          <div className="row between" style={{ marginBottom: '0.4rem' }}>
+            <span className="form-label" style={{ margin: 0 }}>Pre-transplant features · {selectedFeatures.length} selected</span>
+            <div className="row" style={{ gap: '0.35rem' }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedFeatures(featureOptions.filter(f => !leakageCols.has(f)))}>All</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedFeatures([])}>None</button>
             </div>
+          </div>
+          <div className="inset feature-list">
+            {featureOptions.map(col => (
+              <label key={col} className="checkbox-item">
+                <input type="checkbox" checked={selectedFeatures.includes(col)} onChange={() => toggleFeature(col)} />
+                <code>{col}</code>
+                <span className="tiny faint">{dataset.column_types[col]}</span>
+                {leakageCols.has(col) && <span className="chip chip-red" style={{ marginLeft: 'auto' }}>Leakage risk</span>}
+              </label>
+            ))}
+          </div>
 
-            {/* Quantum Experiment Box */}
-            <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '8px', padding: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '0.9rem', color: '#4338ca' }}>
-                  <Cpu size={18} /> Quantum-Kernel SVM (Qiskit ML)
-                </div>
-                <input
-                  type="checkbox"
-                  style={{ width: '18px', height: '18px', accentColor: '#6366f1' }}
-                  checked={runQuantumSvm}
-                  onChange={(e) => setRunQuantumSvm(e.target.checked)}
-                />
+          <div className="grid-2" style={{ marginTop: '1rem', gap: '1rem' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" htmlFor="test-size">Held-out test set · {(testSize * 100).toFixed(0)}%</label>
+              <input id="test-size" type="range" className="form-slider" min={0.1} max={0.4} step={0.05} value={testSize} onChange={e => setTestSize(parseFloat(e.target.value))} />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label" htmlFor="seed">Random seed</label>
+              <input id="seed" type="number" className="form-input" value={randomSeed} onChange={e => setRandomSeed(parseInt(e.target.value, 10) || 0)} />
+            </div>
+          </div>
+        </section>
+
+        <div className="stack">
+          <section className="card">
+            <div className="card-header"><div className="card-title">Classical baselines</div></div>
+            {CLASSICAL.map(m => (
+              <label key={m.key} className="checkbox-item">
+                <input type="checkbox" checked={models[m.key]} onChange={e => setModels(s => ({ ...s, [m.key]: e.target.checked }))} />
+                <span style={{ flex: 1 }}>{m.label}</span>
+                <span className="tiny faint">{m.hint}</span>
+              </label>
+            ))}
+          </section>
+
+          <section className="card" style={{ borderColor: models.runQuantumSvm ? 'color-mix(in srgb, var(--violet) 40%, transparent)' : undefined }}>
+            <div className="card-header" style={{ marginBottom: models.runQuantumSvm ? '1rem' : 0, flexWrap: 'nowrap' }}>
+              <div>
+                <div className="card-title"><Atom size={16} style={{ color: 'var(--violet-text)' }} /> Quantum-kernel SVM</div>
+                <div className="card-subtitle">Qiskit FidelityQuantumKernel with a ZZ feature map. Features are compressed with training-fitted PCA to one per qubit.</div>
               </div>
-
-              {runQuantumSvm && (
+              <label className="checkbox-item" style={{ padding: 0 }}>
+                <input type="checkbox" checked={models.runQuantumSvm} onChange={e => setModels(s => ({ ...s, runQuantumSvm: e.target.checked }))} aria-label="Include quantum-kernel SVM" />
+              </label>
+            </div>
+            {models.runQuantumSvm && (
+              <div className="grid-3" style={{ gap: '0.75rem' }}>
                 <div>
-                  <p style={{ fontSize: '0.78rem', color: '#6d28d9', marginBottom: '0.85rem' }}>
-                    Constructs a <code>FidelityQuantumKernel</code> with <code>ZZFeatureMap</code>. Features are compressed via training-fitted PCA to match qubit dimension.
-                  </p>
-
-                  <div className="grid-3">
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontSize: '0.75rem' }}>Qubits</label>
-                      <select
-                        className="form-select"
-                        value={quantumQubits}
-                        onChange={(e) => setQuantumQubits(parseInt(e.target.value))}
-                      >
-                        <option value={2}>2 Qubits</option>
-                        <option value={3}>3 Qubits</option>
-                        <option value={4}>4 Qubits</option>
-                      </select>
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontSize: '0.75rem' }}>Circuit Reps</label>
-                      <select
-                        className="form-select"
-                        value={quantumReps}
-                        onChange={(e) => setQuantumReps(parseInt(e.target.value))}
-                      >
-                        <option value={1}>1 Rep</option>
-                        <option value={2}>2 Reps</option>
-                      </select>
-                    </div>
-
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ fontSize: '0.75rem' }}>Sample Cap</label>
-                      <select
-                        className="form-select"
-                        value={quantumMaxSamples}
-                        onChange={(e) => setQuantumMaxSamples(parseInt(e.target.value))}
-                      >
-                        <option value={40}>N = 40 (Fast)</option>
-                        <option value={80}>N = 80 (Standard)</option>
-                        <option value={120}>N = 120 (Deep)</option>
-                      </select>
-                    </div>
-                  </div>
+                  <label className="form-label" htmlFor="qubits">Qubits</label>
+                  <select id="qubits" className="form-select" value={quantumQubits} onChange={e => setQuantumQubits(parseInt(e.target.value, 10))}>
+                    {[2, 3, 4].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
                 </div>
-              )}
-            </div>
+                <div>
+                  <label className="form-label" htmlFor="reps">Circuit reps</label>
+                  <select id="reps" className="form-select" value={quantumReps} onChange={e => setQuantumReps(parseInt(e.target.value, 10))}>
+                    {[1, 2].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label" htmlFor="cap">Sample cap</label>
+                  <select id="cap" className="form-select" value={quantumMaxSamples} onChange={e => setQuantumMaxSamples(parseInt(e.target.value, 10))}>
+                    <option value={40}>40 · fast</option>
+                    <option value={80}>80 · standard</option>
+                    <option value={120}>120 · slow</option>
+                  </select>
+                </div>
+              </div>
+            )}
+            {models.runQuantumSvm && <p className="tiny faint" style={{ marginTop: '0.75rem' }}>Kernel cost grows with the square of the sample cap, so 120 samples takes roughly 2.3× as long as 80.</p>}
+          </section>
 
-            {/* Leakage Protection Guarantee */}
-            <div style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.78rem', color: '#059669' }}>
-              <ShieldCheck size={16} />
-              <span>Strict Scikit-Learn Leakage Protection Protocol Active</span>
-            </div>
+          <div className="row small" style={{ color: 'var(--green-text)' }}>
+            <ShieldCheck size={15} /> Imputation, scaling, encoding and PCA are fitted on training data only.
           </div>
         </div>
       </div>

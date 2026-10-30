@@ -4,10 +4,22 @@ import os
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone, timedelta
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "marrowq.db")
+from app.core.settings import get_settings
+
+DB_PATH = str(get_settings().db_path)
+
+
+def _connect(db_path: str) -> sqlite3.Connection:
+    # The API and the worker are separate processes: WAL lets reads proceed during writes,
+    # and the timeout waits out a concurrent writer instead of failing with "database is locked".
+    conn = sqlite3.connect(db_path, timeout=30)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    return conn
+
 
 def init_db(db_path: str = DB_PATH):
-    conn = sqlite3.connect(db_path)
+    conn = _connect(db_path)
     cursor = conn.cursor()
     
     # Datasets table
@@ -186,15 +198,45 @@ def init_db(db_path: str = DB_PATH):
     )
     """)
 
+    # Long-running work (GPU simulation, quantum jobs) is queued here and executed by app/worker.py.
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS jobs (
+        job_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        result_json TEXT,
+        error TEXT,
+        progress REAL NOT NULL DEFAULT 0,
+        progress_message TEXT,
+        worker_id TEXT,
+        created_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT
+    )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status_created ON jobs(status, created_at)")
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS worker_heartbeats (
+        worker_id TEXT PRIMARY KEY,
+        hostname TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        heartbeat_at TEXT NOT NULL,
+        capabilities_json TEXT NOT NULL
+    )
+    """)
+
     conn.commit()
     conn.close()
 
-# Auto-initialize DB on import
-init_db()
+_initialized: set = set()
 
 def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
-    init_db(db_path)
-    return sqlite3.connect(db_path)
+    if db_path not in _initialized:
+        init_db(db_path)
+        _initialized.add(db_path)
+    return _connect(db_path)
 
 # --- Dataset & Experiment Functions (Preserved) ---
 

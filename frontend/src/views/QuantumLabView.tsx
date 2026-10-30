@@ -1,446 +1,310 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Cpu, Server, Activity, ShieldCheck, Play, RefreshCw, AlertCircle,
-  Clock, Zap, CheckCircle2, Key, ExternalLink, HelpCircle, ArrowRight
-} from 'lucide-react';
-import { QuantumBackend, QuantumStatus, QuantumJob } from '../types';
-import { fetchQuantumBackends, fetchQuantumStatus, submitQuantumJob, fetchQuantumJobs } from '../api';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Atom, CircleCheck, Cpu, ExternalLink, History, KeyRound, Play, Server, TriangleAlert } from 'lucide-react';
+import { QuantumBackend, QuantumJob, QuantumStatus } from '../types';
+import { QuantumJobResult, fetchQuantumBackends, fetchQuantumJobs, fetchQuantumStatus, submitQuantumJob } from '../api';
+import { zzCircuitDepth } from '../lib/quantumKernel';
+
+const TWO_PI = 2 * Math.PI;
+
+/** Reference benchmark (held-out N=125, matched 2-D PCA subspace for the two kernel models). */
+const BENCHMARK = [
+  { model: 'Logistic regression (full features)', auc: 0.769, time: 0.006 },
+  { model: 'Classical RBF SVM (matched 2-D)', auc: 0.593, time: 0.003 },
+  { model: 'Quantum-kernel SVM (2 qubits)', auc: 0.481, time: 8.08, quantum: true }
+];
+
+/** Gate-level drawing of ZZFeatureMap(reps=1) on two qubits. */
+const CircuitDiagram: React.FC<{ x0: number; x1: number }> = ({ x0, x1 }) => {
+  const phi = 2 * (Math.PI - x0) * (Math.PI - x1);
+  const W = 640, rowY = [44, 116];
+  const gate = (cx: number, y: number, label: string, sub?: string, tone: 'h' | 'p' = 'p') => (
+    <g key={`${cx}-${y}-${label}`}>
+      <rect x={cx - 34} y={y - 18} width={68} height={36} rx={8} className={`qc-gate ${tone}`} />
+      <text x={cx} y={sub ? y - 2 : y + 4} textAnchor="middle" className="qc-gate-label">{label}</text>
+      {sub && <text x={cx} y={y + 11} textAnchor="middle" className="qc-gate-sub">{sub}</text>}
+    </g>
+  );
+  const cx = (x: number) => (
+    <g key={`cx-${x}`}>
+      <line x1={x} x2={x} y1={rowY[0]} y2={rowY[1] - 12} className="qc-wire-v" />
+      <circle cx={x} cy={rowY[0]} r={5} className="qc-ctrl" />
+      <circle cx={x} cy={rowY[1]} r={12} className="qc-target" />
+      <line x1={x - 12} x2={x + 12} y1={rowY[1]} y2={rowY[1]} className="qc-target-x" />
+      <line x1={x} x2={x} y1={rowY[1] - 12} y2={rowY[1] + 12} className="qc-target-x" />
+    </g>
+  );
+  return (
+    <svg viewBox={`0 0 ${W} 160`} width="100%" role="img" aria-label="ZZ feature map circuit on two qubits: Hadamard, phase rotations, then a controlled-NOT, phase, controlled-NOT entangler" className="qc-svg">
+      {rowY.map((y, i) => (
+        <g key={i}>
+          <text x={8} y={y + 4} className="qc-qubit">q{i}</text>
+          <line x1={36} x2={W - 10} y1={y} y2={y} className="qc-wire" />
+        </g>
+      ))}
+      {gate(90, rowY[0], 'H', undefined, 'h')}
+      {gate(90, rowY[1], 'H', undefined, 'h')}
+      {gate(190, rowY[0], 'P', `2·x₀=${(2 * x0).toFixed(2)}`)}
+      {gate(190, rowY[1], 'P', `2·x₁=${(2 * x1).toFixed(2)}`)}
+      {cx(300)}
+      {gate(400, rowY[1], 'P', `φ=${(((phi % TWO_PI) + TWO_PI) % TWO_PI).toFixed(2)}`)}
+      {cx(500)}
+      <text x={W - 10} y={150} textAnchor="end" className="qc-gate-sub">φ = 2(π−x₀)(π−x₁) mod 2π</text>
+    </svg>
+  );
+};
 
 export const QuantumLabView: React.FC = () => {
   const [backends, setBackends] = useState<QuantumBackend[]>([]);
-  const [qStatus, setQStatus] = useState<QuantumStatus | null>(null);
+  const [status, setStatus] = useState<(QuantumStatus & { backend_online: boolean }) | null>(null);
   const [jobs, setJobs] = useState<QuantumJob[]>([]);
-  const [selectedBackend, setSelectedBackend] = useState<string>('aer_simulator_statevector');
-  const [shots, setShots] = useState<number>(8192);
-  const [runningJob, setRunningJob] = useState<boolean>(false);
-  const [lastJobResult, setLastJobResult] = useState<any>(null);
+  const [selected, setSelected] = useState<string>('');
+  const [shots, setShots] = useState(8192);
+  const [x0, setX0] = useState(3.14);
+  const [x1, setX1] = useState(1.57);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<QuantumJobResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // IBM Quantum API Token connection modal state
-  const [showTokenModal, setShowTokenModal] = useState<boolean>(false);
-  const [ibmTokenInput, setIbmTokenInput] = useState<string>('');
-  const [isSavingToken, setIsSavingToken] = useState<boolean>(false);
-  const [tokenSaveSuccess, setTokenSaveSuccess] = useState<string | null>(null);
-
-  const loadData = async () => {
-    try {
-      const [bList, statusData, jobList] = await Promise.all([
-        fetchQuantumBackends(),
-        fetchQuantumStatus(),
-        fetchQuantumJobs()
-      ]);
-      setBackends(bList);
-      setQStatus(statusData);
-      setJobs(jobList);
-    } catch (e) {
-      console.error(e);
-    }
+  const load = async () => {
+    const [b, s, j] = await Promise.all([fetchQuantumBackends(), fetchQuantumStatus(), fetchQuantumJobs()]);
+    setBackends(b);
+    setStatus(s);
+    setJobs(j);
+    setSelected(prev => prev || b.find(x => !x.is_hardware)?.backend_name || b[0]?.backend_name || '');
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { load(); }, []);
 
-  const handleRunJob = async () => {
-    setRunningJob(true);
-    setLastJobResult(null);
+  const backend = useMemo(() => backends.find(b => b.backend_name === selected), [backends, selected]);
+  const usesShots = !!backend && (backend.is_hardware || backend.backend_name.includes('shot'));
+
+  const run = async () => {
+    setRunning(true);
+    setError(null);
+    setResult(null);
     try {
-      const res = await submitQuantumJob({
-        backend_name: selectedBackend,
-        execution_mode: 'auto_fallback',
-        shots: Number(shots),
-        sample_values: [3.14159, 1.57079]
-      });
-      setLastJobResult(res);
-      await loadData();
-    } catch (err: any) {
-      alert("Job execution notice: " + err.message);
+      const res = await submitQuantumJob({ backend_name: selected, execution_mode: 'auto_fallback', shots, sample_values: [x0, x1] });
+      if (res.status === 'FAILED') setError(res.error ?? 'The quantum job failed.');
+      else setResult(res);
+      setJobs(await fetchQuantumJobs());
+    } catch (e: any) {
+      setError(e?.message ?? 'The quantum job failed.');
     } finally {
-      setRunningJob(false);
+      setRunning(false);
     }
   };
 
-  const handleSaveToken = () => {
-    if (!ibmTokenInput.trim()) return;
-    setIsSavingToken(true);
-    setTimeout(() => {
-      setIsSavingToken(false);
-      setTokenSaveSuccess("IBM Quantum Platform credentials verified and saved to backend environment.");
-      setTimeout(() => {
-        setShowTokenModal(false);
-        setTokenSaveSuccess(null);
-      }, 1800);
-    }, 1000);
-  };
-
-  const selectedBackendMeta = backends.find(b => b.backend_name === selectedBackend) || {
-    backend_name: 'ibm_brisbane',
-    backend_type: 'Real Superconducting QPU',
-    qubits: 127,
-    status: 'ONLINE',
-    is_hardware: true,
-    avg_queue_depth: 14,
-    description: 'IBM Eagle r3 127-qubit quantum processor with heavy-hex lattice topology.',
-    basis_gates: ['ECR', 'ID', 'RZ', 'SX', 'X'],
-    avg_t1_us: 284.5,
-    avg_t2_us: 142.0,
-    two_qubit_error_rate: 0.0078
-  };
+  const kRow = result?.kernel_matrix?.[0];
+  const statusChip = !status ? null
+    : status.is_connected_to_hardware ? <span className="chip chip-green"><span className="chip-dot" />IBM hardware connected</span>
+    : status.backend_online ? <span className="chip chip-blue"><span className="chip-dot" />Simulators online · hardware not configured</span>
+    : <span className="chip chip-neutral"><span className="chip-dot" />Backend offline · browser simulation</span>;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem', maxWidth: '1280px', margin: '0 auto' }}>
-      
-      {/* 1. Header Card with Direct IBM Quantum Hardware Connect */}
-      <div className="spatial-card" style={{ padding: '1.75rem 2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.35rem' }}>
-              <div style={{
-                width: 36,
-                height: 36,
-                borderRadius: '10px',
-                background: 'rgba(37, 99, 235, 0.15)',
-                border: '1px solid rgba(37, 99, 235, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#60a5fa'
-              }}>
-                <Cpu size={20} />
-              </div>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#ffffff', margin: 0 }}>
-                Quantum Computing Lab & Hardware Bridge
-              </h2>
-              <span style={{
-                fontSize: '0.72rem',
-                padding: '0.2rem 0.65rem',
-                borderRadius: '9999px',
-                background: qStatus?.is_connected_to_hardware ? 'rgba(16, 185, 129, 0.15)' : 'rgba(37, 99, 235, 0.15)',
-                color: qStatus?.is_connected_to_hardware ? '#10b981' : '#93c5fd',
-                border: '1px solid rgba(37, 99, 235, 0.3)',
-                fontWeight: 600
-              }}>
-                {qStatus?.is_connected_to_hardware ? 'Connected to IBM Hardware' : 'Simulator & QPU Ready'}
-              </span>
-            </div>
-            <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-              Qiskit ZZFeatureMap quantum kernel evaluation for high-dimensional patient engraftment classification.
-            </div>
-          </div>
+    <div className="stack">
+      <div className="page-header">
+        <div>
+          <div className="eyebrow"><Atom size={13} /> Quantum lab</div>
+          <h2>Quantum kernel lab</h2>
+          <p>
+            Encode two patient features into a ZZ feature map, measure how similar the resulting quantum state is to engrafted and delayed reference patients,
+            and compare simulators with IBM hardware. Every result states where it was computed.
+          </p>
+        </div>
+        <div className="actions">{statusChip}</div>
+      </div>
 
-          {/* Connect IBM Quantum API Token CTA */}
-          <button
-            onClick={() => setShowTokenModal(true)}
-            className="spatial-cta-btn"
-            style={{ padding: '0.65rem 1.35rem' }}
-          >
-            <Key size={15} />
-            <span>Connect Real IBM Quantum Hardware</span>
-          </button>
+      <div className="grid-4">
+        <div className="card kpi">
+          <span className="kpi-label">Execution target</span>
+          <span className="kpi-value" style={{ fontSize: '1.1rem', lineHeight: 1.35 }}>{backend?.backend_name ?? '—'}</span>
+          <span className="kpi-foot">{backend ? `${backend.backend_type} · ${backend.qubits} qubits` : 'Loading backends…'}</span>
+        </div>
+        <div className="card kpi">
+          <span className="kpi-label">Feature map</span>
+          <span className="kpi-value" style={{ fontSize: '1.1rem', lineHeight: 1.35 }}>ZZFeatureMap</span>
+          <span className="kpi-foot">2 qubits · reps 1 · linear · depth {zzCircuitDepth(2)}</span>
+        </div>
+        <div className="card kpi">
+          <span className="kpi-label">IBM Quantum access</span>
+          <span className="kpi-value" style={{ fontSize: '1.1rem', lineHeight: 1.35 }}>{status?.has_token_configured ? 'Token configured' : 'Not configured'}</span>
+          <span className="kpi-foot">{status?.has_ibm_runtime_installed ? 'qiskit-ibm-runtime installed' : 'Runtime unavailable here'}</span>
+        </div>
+        <div className="card kpi">
+          <span className="kpi-label">Jobs this session</span>
+          <span className="kpi-value">{jobs.length}</span>
+          <span className="kpi-foot">{jobs.filter(j => j.status.includes('FALLBACK')).length} ran on a fallback simulator</span>
         </div>
       </div>
 
-      {/* 2. Top Status Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
-        
-        <div className="spatial-card" style={{ height: '125px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Target QPU Backend</span>
-          <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#ffffff' }}>{selectedBackendMeta.backend_name}</div>
-          <span style={{ fontSize: '0.72rem', color: '#60a5fa' }}>{selectedBackendMeta.qubits} Qubits • {selectedBackendMeta.is_hardware ? 'Superconducting' : 'Simulated'}</span>
-        </div>
-
-        <div className="spatial-card" style={{ height: '125px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Quantum Feature Map</span>
-          <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#ffffff' }}>ZZFeatureMap (N=4)</div>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Depth 2 • Entanglement: Linear</span>
-        </div>
-
-        <div className="spatial-card" style={{ height: '125px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Statevector Fidelity</span>
-          <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#10b981' }}>0.964</div>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Zero-noise extrapolation active</span>
-        </div>
-
-        <div className="spatial-card" style={{ height: '125px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Hardware Queue Depth</span>
-          <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#ffffff' }}>{selectedBackendMeta.avg_queue_depth} jobs</div>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Est. turnaround: ~45 seconds</span>
-        </div>
-
-      </div>
-
-      {/* 3. Interactive Quantum Circuit & Hardware Selection Workspace */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
-        
-        {/* Left: Circuit Schematic */}
-        <div className="spatial-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div className="spatial-section-title" style={{ margin: 0 }}>
-              <span className="blue-dot" />
-              <span>Quantum Kernel Circuit Architecture</span>
+      <div className="quantum-grid">
+        <section className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title"><Cpu size={16} /> Circuit</div>
+              <div className="card-subtitle">Fidelity kernel K(x, x′) = |⟨ψ(x)|ψ(x′)⟩|²</div>
             </div>
-            <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>4-Qubit Heavy-Hex Mapping</span>
+          </div>
+          <div className="inset" style={{ padding: '0.75rem 0.5rem' }}>
+            <CircuitDiagram x0={x0} x1={x1} />
           </div>
 
-          {/* Sleek Monochromatic Circuit Render */}
-          <div style={{
-            background: 'rgba(10, 13, 20, 0.75)',
-            border: '1px solid rgba(255, 255, 255, 0.06)',
-            borderRadius: '16px',
-            padding: '1.5rem',
-            fontFamily: 'monospace',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '1.1rem'
-          }}>
-            {[
-              { q: 'q[0]', label: 'CD34+ Cell Dose', theta: 'θ₁ = 1.34' },
-              { q: 'q[1]', label: 'Recipient Age', theta: 'θ₂ = 0.84' },
-              { q: 'q[2]', label: 'Conditioning Bu/Cy', theta: 'θ₃ = 2.10' },
-              { q: 'q[3]', label: 'Donor Chimerism', theta: 'θ₄ = 3.09' }
-            ].map((wire, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
-                <span style={{ width: '40px', color: '#94a3b8', fontSize: '0.82rem' }}>{wire.q}</span>
-                <div style={{
-                  flex: 1,
-                  height: '2px',
-                  background: 'rgba(255, 255, 255, 0.15)',
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-around'
-                }}>
-                  {/* Gate 1: Hadamard H */}
-                  <div style={{
-                    background: 'rgba(37, 99, 235, 0.25)',
-                    border: '1px solid #2563eb',
-                    color: '#ffffff',
-                    borderRadius: '6px',
-                    padding: '0.15rem 0.5rem',
-                    fontSize: '0.72rem',
-                    fontWeight: 700
-                  }}>
-                    H
-                  </div>
-
-                  {/* Gate 2: Phase RZ(θ) */}
-                  <div style={{
-                    background: 'rgba(255, 255, 255, 0.06)',
-                    border: '1px solid rgba(255, 255, 255, 0.2)',
-                    color: '#cbd5e1',
-                    borderRadius: '6px',
-                    padding: '0.15rem 0.55rem',
-                    fontSize: '0.72rem'
-                  }}>
-                    Rz({wire.theta})
-                  </div>
-
-                  {/* Gate 3: CNOT Entanglement node */}
-                  <div style={{
-                    width: '12px',
-                    height: '12px',
-                    borderRadius: '50%',
-                    background: '#2563eb',
-                    border: '2px solid #ffffff'
-                  }} />
+          <div className="grid-2" style={{ marginTop: '1rem', gap: '1rem' }}>
+            {[{ label: 'x₀ · neutrophil and CD34+ signal', v: x0, set: setX0 }, { label: 'x₁ · chimerism and age signal', v: x1, set: setX1 }].map((f, i) => (
+              <div key={i}>
+                <div className="row between small" style={{ marginBottom: '0.3rem' }}>
+                  <label htmlFor={`qx${i}`} className="muted">{f.label}</label>
+                  <span className="tnum">{f.v.toFixed(2)} rad</span>
                 </div>
-                <span style={{ width: '150px', color: '#64748b', fontSize: '0.72rem', textAlign: 'right' }}>
-                  {wire.label}
-                </span>
+                <input id={`qx${i}`} type="range" className="form-slider" min={0} max={TWO_PI} step={0.01} value={f.v} onChange={e => f.set(Number(e.target.value))} />
               </div>
             ))}
           </div>
 
-          {/* Action Trigger */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.5rem' }}>
-            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-              Evaluates fidelity inner product: <code style={{ color: '#60a5fa' }}>K(x, x') = |⟨ψ(x)|ψ(x')⟩|²</code>
+          <div className="row between wrap" style={{ marginTop: '1.1rem', gap: '0.75rem' }}>
+            <div className="row" style={{ gap: '0.5rem' }}>
+              <label className="form-label" htmlFor="q-shots" style={{ margin: 0 }}>Shots</label>
+              <select id="q-shots" className="form-select" style={{ width: 120 }} value={shots} onChange={e => setShots(Number(e.target.value))} disabled={!usesShots} title={usesShots ? '' : 'Exact statevector simulation does not sample'}>
+                {[1024, 4096, 8192].map(s => <option key={s} value={s}>{s.toLocaleString()}</option>)}
+              </select>
             </div>
-
-            <button
-              onClick={handleRunJob}
-              disabled={runningJob}
-              className="spatial-cta-btn"
-              style={{ padding: '0.65rem 1.5rem' }}
-            >
-              <Play size={14} fill="#ffffff" />
-              <span>{runningJob ? 'Computing Kernel on Backend...' : 'Execute Quantum Kernel'}</span>
+            <button className="btn btn-primary" onClick={run} disabled={running || !selected}>
+              <Play size={14} /> {running ? 'Evaluating kernel…' : 'Run kernel job'}
             </button>
           </div>
-        </div>
 
-        {/* Right: Available Backends & QPU Telemetry */}
-        <div className="spatial-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div className="spatial-section-title" style={{ margin: 0 }}>
-            <span className="blue-dot" />
-            <span>Select Quantum Processor</span>
-          </div>
+          {error && <div className="alert-banner alert-error" style={{ marginTop: '1rem' }}><TriangleAlert size={15} /><div>{error}</div></div>}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-            {[
-              { id: 'ibm_brisbane', name: 'ibm_brisbane', type: 'Hardware', q: 127, queue: 14, status: 'ONLINE' },
-              { id: 'ibm_kyiv', name: 'ibm_kyiv', type: 'Hardware', q: 127, queue: 8, status: 'ONLINE' },
-              { id: 'ibm_sherbrooke', name: 'ibm_sherbrooke', type: 'Hardware', q: 127, queue: 22, status: 'ONLINE' },
-              { id: 'aer_simulator_statevector', name: 'Qiskit Aer Simulator', type: 'Local Statevector', q: 32, queue: 0, status: 'ONLINE' }
-            ].map(b => {
-              const isSelected = selectedBackend === b.id;
-              return (
-                <div
-                  key={b.id}
-                  onClick={() => setSelectedBackend(b.id)}
-                  style={{
-                    background: isSelected ? 'rgba(37, 99, 235, 0.15)' : 'rgba(255, 255, 255, 0.02)',
-                    border: isSelected ? '1px solid #2563eb' : '1px solid rgba(255, 255, 255, 0.06)',
-                    borderRadius: '12px',
-                    padding: '0.75rem 1rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    transition: 'all 0.15s ease'
-                  }}
+          {result && kRow && (
+            <div className="inset" style={{ marginTop: '1rem' }}>
+              <div className="row between wrap" style={{ marginBottom: '0.75rem' }}>
+                <strong style={{ fontSize: '0.9rem' }}>Kernel similarity</strong>
+                <span className={`chip ${result.status.includes('FALLBACK') ? 'chip-amber' : 'chip-green'}`}>{result.status.replace(/_/g, ' ').toLowerCase()}</span>
+              </div>
+              {[{ label: 'Engrafted reference patient', v: kRow[0] }, { label: 'Delayed-engraftment reference patient', v: kRow[1] }].map(r => (
+                <div key={r.label} style={{ marginBottom: '0.7rem' }}>
+                  <div className="row between small" style={{ marginBottom: '0.3rem' }}><span className="muted">{r.label}</span><strong className="tnum">{r.v.toFixed(4)}</strong></div>
+                  <div className="prob-track"><div className="prob-fill quantum" style={{ width: `${r.v * 100}%` }} /></div>
+                </div>
+              ))}
+              <div className="small" style={{ marginTop: '0.4rem' }}>
+                This state is closer to the <strong>{kRow[0] >= kRow[1] ? 'engrafted' : 'delayed-engraftment'}</strong> reference.
+              </div>
+              <dl className="kv tiny" style={{ marginTop: '0.8rem' }}>
+                <dt>Ran on</dt><dd>{result.backend_used}</dd>
+                <dt>Provenance</dt><dd className="mono">{result.provenance}</dd>
+                <dt>Circuit</dt><dd>{result.circuit_width} qubits · depth {result.circuit_depth}{result.shots ? ` · ${result.shots.toLocaleString()} shots` : ' · exact'}</dd>
+                <dt>Duration</dt><dd>{result.duration_ms} ms</dd>
+              </dl>
+              {result.transparency_notice && <p className="tiny faint" style={{ marginTop: '0.6rem' }}>{result.transparency_notice}</p>}
+            </div>
+          )}
+        </section>
+
+        <div className="stack">
+          <section className="card">
+            <div className="card-header"><div className="card-title"><Server size={16} /> Backends</div></div>
+            <div className="stack" style={{ gap: '0.5rem' }} role="radiogroup" aria-label="Quantum backend">
+              {backends.map(b => (
+                <button
+                  key={b.backend_name}
+                  role="radio"
+                  aria-checked={selected === b.backend_name}
+                  className={`menu-item ${selected === b.backend_name ? 'selected' : ''}`}
+                  style={{ border: '1px solid var(--border)' }}
+                  onClick={() => setSelected(b.backend_name)}
                 >
-                  <div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#ffffff' }}>{b.name}</div>
-                    <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{b.type} • {b.q} Qubits</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '0.68rem', color: '#10b981', fontWeight: 600 }}>● {b.status}</span>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Queue: {b.queue}</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-      </div>
-
-      {/* 4. Token Connection Modal */}
-      {showTokenModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.8)',
-          backdropFilter: 'blur(12px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999,
-          padding: '1.5rem'
-        }}>
-          <div className="spatial-card" style={{ maxWidth: '540px', width: '100%', padding: '2rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
-              <div style={{
-                width: 40,
-                height: 40,
-                borderRadius: '12px',
-                background: 'rgba(37, 99, 235, 0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#60a5fa'
-              }}>
-                <Key size={20} />
-              </div>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#ffffff', fontWeight: 700 }}>
-                  Connect Real IBM Quantum Hardware
-                </h3>
-                <div style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-                  Run live bone marrow recovery kernels on IBM superconducting QPUs.
-                </div>
-              </div>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span className="row between">
+                      <span className="mi-title mono">{b.backend_name}</span>
+                      <span className={`chip ${b.is_hardware ? 'chip-violet' : 'chip-blue'}`}>{b.is_hardware ? 'QPU' : 'Simulator'}</span>
+                    </span>
+                    <span className="mi-sub" style={{ display: 'block' }}>
+                      {b.qubits} qubits{b.is_hardware ? ` · queue ${b.avg_queue_depth} · 2q error ${(b.two_qubit_error_rate * 100).toFixed(2)}%` : ''}
+                    </span>
+                  </span>
+                </button>
+              ))}
             </div>
+            {backend?.is_hardware && !status?.has_token_configured && (
+              <p className="tiny" style={{ color: 'var(--amber-text)', marginTop: '0.75rem' }}>
+                No IBM token is configured, so this job will run on a local simulator and be labelled as a fallback.
+              </p>
+            )}
+          </section>
 
-            <div style={{
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: '12px',
-              padding: '1rem',
-              marginBottom: '1.25rem',
-              fontSize: '0.82rem',
-              color: '#cbd5e1',
-              lineHeight: 1.5
-            }}>
-              <strong>How to get your free IBM Quantum Token:</strong>
-              <ol style={{ margin: '0.5rem 0 0 1.25rem', padding: 0 }}>
-                <li>Visit <a href="https://quantum.ibm.com/" target="_blank" rel="noreferrer" style={{ color: '#38bdf8', textDecoration: 'underline' }}>quantum.ibm.com <ExternalLink size={11} style={{ display: 'inline' }} /></a> and create or sign in with your IBMid.</li>
-                <li>Go to your <strong>Account Settings</strong> or <strong>Dashboard</strong>.</li>
-                <li>Copy your <strong>API Token</strong> and paste it below.</li>
-              </ol>
-            </div>
-
-            <div style={{ marginBottom: '1.25rem' }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.4rem' }}>
-                IBM Quantum API Token
-              </label>
-              <input
-                type="password"
-                placeholder="Paste IBM Quantum API Token (e.g., 4a8f9c2e...)"
-                value={ibmTokenInput}
-                onChange={(e) => setIbmTokenInput(e.target.value)}
-                style={{
-                  width: '100%',
-                  background: 'rgba(10, 14, 23, 0.8)',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  borderRadius: '10px',
-                  padding: '0.7rem 1rem',
-                  color: '#ffffff',
-                  fontSize: '0.85rem',
-                  outline: 'none'
-                }}
-              />
-            </div>
-
-            {tokenSaveSuccess && (
-              <div style={{
-                background: 'rgba(16, 185, 129, 0.15)',
-                border: '1px solid rgba(16, 185, 129, 0.4)',
-                borderRadius: '8px',
-                padding: '0.65rem 1rem',
-                fontSize: '0.78rem',
-                color: '#34d399',
-                marginBottom: '1rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}>
-                <CheckCircle2 size={16} />
-                <span>{tokenSaveSuccess}</span>
+          <section className="card">
+            <div className="card-header"><div className="card-title"><KeyRound size={16} /> Connect IBM Quantum hardware</div></div>
+            <ol className="small muted" style={{ paddingLeft: '1.1rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <li>Create a free account at <a href="https://quantum.cloud.ibm.com/" target="_blank" rel="noreferrer">IBM Quantum Platform <ExternalLink size={11} style={{ display: 'inline' }} /></a> and copy your API key.</li>
+              <li>Add <code>QISKIT_IBM_TOKEN=…</code> to the backend’s <code>.env</code> file (see <code>.env.example</code>).</li>
+              <li>Restart the API. This panel will show “IBM hardware connected”.</li>
+            </ol>
+            <p className="tiny faint" style={{ marginTop: '0.75rem' }}>
+              The token stays on the server. It is never entered in, or sent from, the browser.
+            </p>
+            {status && (
+              <div className="row tiny" style={{ marginTop: '0.6rem', gap: '0.4rem' }}>
+                {status.has_token_configured ? <CircleCheck size={13} color="var(--green)" /> : <TriangleAlert size={13} color="var(--amber)" />}
+                <span className="muted">Token: <span className="mono">{status.token_masked}</span></span>
               </div>
             )}
+          </section>
+        </div>
+      </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.75rem' }}>
-              <button
-                onClick={() => setShowTokenModal(false)}
-                style={{
-                  background: 'transparent',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  borderRadius: '9999px',
-                  padding: '0.55rem 1.25rem',
-                  color: '#94a3b8',
-                  fontSize: '0.82rem',
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveToken}
-                disabled={isSavingToken}
-                className="spatial-cta-btn"
-                style={{ padding: '0.55rem 1.5rem' }}
-              >
-                {isSavingToken ? 'Verifying Token...' : 'Verify & Connect Hardware'}
-              </button>
+      <div className="grid-2" style={{ alignItems: 'start' }}>
+        <section className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">Benchmark so far</div>
+              <div className="card-subtitle">Held-out test set, N = 125 synthetic patients</div>
             </div>
           </div>
-        </div>
-      )}
+          <table className="data-table">
+            <thead><tr><th>Model</th><th className="num">ROC-AUC</th><th className="num">Train time</th></tr></thead>
+            <tbody>
+              {BENCHMARK.map(b => (
+                <tr key={b.model}>
+                  <td>{b.model} {b.quantum && <span className="chip chip-violet" style={{ marginLeft: 6 }}>Quantum</span>}</td>
+                  <td className="num">{b.auc.toFixed(3)}</td>
+                  <td className="num">{b.time < 1 ? `${(b.time * 1000).toFixed(0)} ms` : `${b.time.toFixed(2)} s`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="small muted" style={{ marginTop: '0.9rem' }}>
+            At two qubits the quantum kernel does not beat a classical kernel on the same features and costs far more to compute.
+            Next we test larger feature maps, check whether quantum kernels can separate this data at all (geometric difference), and measure how hardware noise changes predictions.
+          </p>
+        </section>
 
+        <section className="card">
+          <div className="card-header"><div className="card-title"><History size={16} /> Job history</div></div>
+          {jobs.length === 0 ? (
+            <div className="empty-state" style={{ padding: '2rem 1rem' }}>
+              <History size={28} />
+              <p>No kernel jobs yet. Run one above.</p>
+            </div>
+          ) : (
+            <div className="table-responsive" style={{ maxHeight: 300 }}>
+              <table className="data-table">
+                <thead><tr><th>Job</th><th>Backend</th><th>Status</th><th className="num">Time</th></tr></thead>
+                <tbody>
+                  {jobs.slice(0, 20).map(j => (
+                    <tr key={j.job_id}>
+                      <td className="mono tiny">{j.job_id}</td>
+                      <td className="small">{j.backend_name}</td>
+                      <td><span className={`chip ${j.status.startsWith('COMPLETED') ? (j.status.includes('FALLBACK') ? 'chip-amber' : 'chip-green') : 'chip-red'}`}>{j.status.replace(/_/g, ' ').toLowerCase()}</span></td>
+                      <td className="num small">{j.execution_duration_ms != null ? `${j.execution_duration_ms} ms` : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 };

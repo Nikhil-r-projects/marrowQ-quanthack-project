@@ -110,6 +110,8 @@ export interface SystemHealth {
 
 export type UserRole = 'doctor' | 'researcher' | 'patient' | 'hospital_admin';
 
+export type OrganType = 'heart' | 'marrow' | 'liver' | 'stem';
+
 export interface Patient {
   patient_id: string;
   name: string;
@@ -126,7 +128,7 @@ export interface Patient {
   hla_match?: string;
   status: string;
   created_at: string;
-  primary_organ_type?: 'heart' | 'marrow' | 'liver' | 'stem';
+  primary_organ_type?: OrganType;
   organ_label?: string;
   organ_diagnosis?: string;
 }

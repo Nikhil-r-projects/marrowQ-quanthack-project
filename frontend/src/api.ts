@@ -1,8 +1,10 @@
 import {
   DatasetProfile, Experiment, PredictionResult, SystemHealth, AvailableModel,
   Patient, ClinicalObservation, PatientProgress, QuantumBackend, QuantumStatus,
-  QuantumJob, OrchestrationResult, HospitalOverview
+  QuantumJob, OrchestrationResult, HospitalOverview, AgentTrailItem, Milestone, TrajectoryPoint
 } from './types';
+import { COHORT_PATIENTS, ENGRAFTMENT_PROFILE, daysPostTransplant, withCohortMetadata } from './data/cohort';
+import { zzCircuitDepth, zzKernelMatrix } from './lib/quantumKernel';
 
 const API_BASE = '/api';
 
@@ -194,7 +196,7 @@ export async function fetchHealth(): Promise<SystemHealth> {
   try {
     const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) return await res.json();
-  } catch (e) {
+  } catch {
     // Cloud fallback
   }
   return {
@@ -215,7 +217,7 @@ export async function fetchDemoDataset(): Promise<DatasetProfile> {
   try {
     const res = await fetch(`${API_BASE}/datasets/demo`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) return await res.json();
-  } catch (e) {
+  } catch {
     // Cloud fallback
   }
   return FALLBACK_DATASET;
@@ -230,7 +232,7 @@ export async function uploadDatasetFile(file: File): Promise<DatasetProfile> {
       body: formData,
     });
     if (res.ok) return await res.json();
-  } catch (e) {
+  } catch {
     // Cloud fallback
   }
   // Return parsed profile simulation
@@ -247,7 +249,7 @@ export async function fetchDatasetsList(): Promise<any[]> {
   try {
     const res = await fetch(`${API_BASE}/datasets`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) return await res.json();
-  } catch (e) {
+  } catch {
     // Cloud fallback
   }
   return [{
@@ -265,7 +267,7 @@ export async function fetchDatasetProfile(datasetId: string): Promise<DatasetPro
   try {
     const res = await fetch(`${API_BASE}/datasets/${datasetId}/profile`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) return await res.json();
-  } catch (e) {
+  } catch {
     // Cloud fallback
   }
   return FALLBACK_DATASET;
@@ -279,7 +281,7 @@ export async function createExperiment(payload: any): Promise<Experiment> {
       body: JSON.stringify(payload),
     });
     if (res.ok) return await res.json();
-  } catch (e) {
+  } catch {
     // Cloud fallback
   }
   const newExp: Experiment = {
@@ -292,9 +294,14 @@ export async function createExperiment(payload: any): Promise<Experiment> {
     status: "created",
     current_stage: "initialized",
     created_at: new Date().toISOString(),
+    completed_at: undefined,
+    total_runtime_seconds: undefined,
+    metrics: {},
+    // Without the backend nothing is trained; the run replays the reference benchmark and says so.
+    config: { ...payload, offline_replay_of: FALLBACK_EXPERIMENT.experiment_id },
   };
   localExperiments.unshift(newExp);
-  return newExp;
+  return { ...newExp };
 }
 
 export async function startExperimentRun(experimentId: string): Promise<any> {
@@ -303,7 +310,7 @@ export async function startExperimentRun(experimentId: string): Promise<any> {
       method: 'POST',
     });
     if (res.ok) return await res.json();
-  } catch (e) {
+  } catch {
     // Cloud fallback
   }
   // Simulate execution progression
@@ -326,7 +333,8 @@ export async function startExperimentRun(experimentId: string): Promise<any> {
         target.status = "completed";
         target.current_stage = "completed";
         target.completed_at = new Date().toISOString();
-        target.total_runtime_seconds = 16.48;
+        target.total_runtime_seconds = FALLBACK_EXPERIMENT.total_runtime_seconds;
+        target.metrics = FALLBACK_EXPERIMENT.metrics;
       }
     }, 6000);
   }
@@ -337,18 +345,19 @@ export async function fetchExperiment(experimentId: string): Promise<Experiment>
   try {
     const res = await fetch(`${API_BASE}/experiments/${experimentId}`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) return await res.json();
-  } catch (e) {
+  } catch {
     // Cloud fallback
   }
+  // Return a copy so React sees each poll as new state.
   const found = localExperiments.find(e => e.experiment_id === experimentId);
-  return found || FALLBACK_EXPERIMENT;
+  return { ...(found || FALLBACK_EXPERIMENT) };
 }
 
 export async function fetchExperimentsList(): Promise<any[]> {
   try {
     const res = await fetch(`${API_BASE}/experiments`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) return await res.json();
-  } catch (e) {
+  } catch {
     // Cloud fallback
   }
   return localExperiments;
@@ -358,7 +367,7 @@ export async function fetchAvailableModels(): Promise<AvailableModel[]> {
   try {
     const res = await fetch(`${API_BASE}/models`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) return await res.json();
-  } catch (e) {
+  } catch {
     // Cloud fallback
   }
   const models: AvailableModel[] = [];
@@ -393,7 +402,7 @@ export async function predictOutcome(payload: {
       body: JSON.stringify(payload),
     });
     if (res.ok) return await res.json();
-  } catch (e) {
+  } catch {
     // Cloud fallback
   }
   
@@ -428,12 +437,12 @@ export async function fetchReport(experimentId: string): Promise<{ experiment_id
   try {
     const res = await fetch(`${API_BASE}/reports/${experimentId}`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) return await res.json();
-  } catch (e) {
+  } catch {
     // Cloud fallback
   }
 
   const exp = localExperiments.find(e => e.experiment_id === experimentId) || FALLBACK_EXPERIMENT;
-  const tableRows = Object.entries(exp.metrics).map(([_, m]) => 
+  const tableRows = Object.values(exp.metrics).map((m) => 
     `| ${m.display_name} | ${m.status} | ${(m.accuracy * 100).toFixed(1)}% | ${(m.balanced_accuracy * 100).toFixed(1)}% | ${(m.precision * 100).toFixed(1)}% | ${(m.recall * 100).toFixed(1)}% | ${m.f1_score.toFixed(3)} | ${m.roc_auc != null ? m.roc_auc.toFixed(3) : 'N/A'} | ${m.training_time_seconds.toFixed(3)}s |`
   ).join('\n');
 
@@ -493,68 +502,35 @@ ${tableRows}
 
 // ==========================================
 // MARROWQ 2.0 CLIENT API FUNCTIONS
+// Each call tries the FastAPI backend first. When it is unreachable (e.g. the
+// static Vercel deployment) the fallbacks below compute results locally from
+// the synthetic cohort and label their provenance as browser-side.
 // ==========================================
+
+export async function isBackendOnline(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/health`, { signal: AbortSignal.timeout(3000) });
+    return res.ok && (res.headers.get('content-type') ?? '').includes('json');
+  } catch {
+    return false;
+  }
+}
+
+async function getJson<T>(path: string, timeoutMs = 4000): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { signal: AbortSignal.timeout(timeoutMs) });
+  if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) throw new Error(`Backend unavailable: ${path}`);
+  return res.json();
+}
 
 export async function fetchPatients(): Promise<Patient[]> {
   try {
-    const res = await fetch(`${API_BASE}/patients`);
-    if (!res.ok) throw new Error("Backend unavailable");
-    return await res.json();
-  } catch (e) {
-    // Fallback patient cohort
-    return [
-      {
-        patient_id: "PT-9042-BMT",
-        name: "Eleanora Vance",
-        age: 42,
-        gender: "Female",
-        disease: "Acute Myeloid Leukemia (AML)",
-        transplant_type: "Allogeneic HSCT",
-        donor_type: "10/10 MUD",
-        transplant_date: "2026-10-14",
-        conditioning: "Bu/Cy Myeloablative",
-        cell_dose_cd34: 6.4,
-        chimerism_donor_pct: 98.4,
-        cmv_status: "D+/R- (High Risk)",
-        hla_match: "10/10",
-        status: "Active Surveillance - Engraftment Impending",
-        created_at: "2026-10-14T08:00:00Z"
-      },
-      {
-        patient_id: "PT-8104-BMT",
-        name: "Marcus Chen",
-        age: 58,
-        gender: "Male",
-        disease: "Myelodysplastic Syndrome (MDS-EB2)",
-        transplant_type: "Allogeneic HSCT",
-        donor_type: "Haploidentical Related Donor",
-        transplant_date: "2026-09-26",
-        conditioning: "Flu/Mel Reduced Intensity",
-        cell_dose_cd34: 5.2,
-        chimerism_donor_pct: 99.8,
-        cmv_status: "D+/R+ (Resolved)",
-        hla_match: "5/10 Haplo",
-        status: "Engrafted - Stable Outpatient",
-        created_at: "2026-09-26T08:00:00Z"
-      },
-      {
-        patient_id: "PT-4421-BMT",
-        name: "Sarah Jenkins",
-        age: 29,
-        gender: "Female",
-        disease: "Acute Lymphoblastic Leukemia (B-ALL)",
-        transplant_type: "Allogeneic HSCT",
-        donor_type: "Matched Sibling Donor",
-        transplant_date: "2026-10-23",
-        conditioning: "TBI/Cy Myeloablative",
-        cell_dose_cd34: 7.1,
-        chimerism_donor_pct: 92.0,
-        cmv_status: "D-/R- (Low Risk)",
-        hla_match: "12/12",
-        status: "Aplastic Nadir - Intensive Isolation",
-        created_at: "2026-10-23T08:00:00Z"
-      }
-    ];
+    const remote = await getJson<Patient[]>('/patients');
+    // Keep every cohort patient; backend records override matching ids, extra backend patients are appended.
+    const merged = COHORT_PATIENTS.map(p => withCohortMetadata(remote.find(r => r.patient_id === p.patient_id) ?? p));
+    const extras = remote.filter(r => !COHORT_PATIENTS.some(p => p.patient_id === r.patient_id)).map(withCohortMetadata);
+    return [...merged, ...extras];
+  } catch {
+    return COHORT_PATIENTS;
   }
 }
 
@@ -567,10 +543,8 @@ export async function fetchPatient(patientId: string): Promise<Patient> {
 
 export async function fetchPatientObservations(patientId: string): Promise<ClinicalObservation[]> {
   try {
-    const res = await fetch(`${API_BASE}/patients/${patientId}/observations`);
-    if (!res.ok) throw new Error("Backend unavailable");
-    return await res.json();
-  } catch (e) {
+    return await getJson<ClinicalObservation[]>(`/patients/${patientId}/observations`);
+  } catch {
     return [];
   }
 }
@@ -581,229 +555,460 @@ export async function addPatientObservation(patientId: string, obs: any): Promis
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(obs)
   });
-  if (!res.ok) throw new Error("Failed to record observation");
+  if (!res.ok) throw new Error('The clinical backend is offline, so this observation could not be saved.');
   return await res.json();
 }
 
-export async function fetchPatientProgress(patientId: string): Promise<PatientProgress> {
-  try {
-    const res = await fetch(`${API_BASE}/patients/${patientId}/progress`);
-    if (!res.ok) throw new Error("Backend unavailable");
-    return await res.json();
-  } catch (e) {
-    // Generate high-fidelity fallback trajectory
-    const days = [-2, 0, 3, 7, 10, 12, 14];
-    const ancs = [2800, 450, 30, 80, 190, 280, 420];
-    const plts = [145000, 85000, 32000, 14000, 12500, 15000, 18500];
-    const series = [];
-    for (let d = -2; d <= 45; d++) {
-      const idx = days.indexOf(d);
-      const obsAnc = idx >= 0 ? ancs[idx] : undefined;
-      const obsPlt = idx >= 0 ? plts[idx] : undefined;
-      const predAnc = d < 0 ? 2500 - (d + 2) * 1000 : (d < 4 ? Math.max(30, 500 - d * 150) : Math.round(30 + 2600 / (1 + Math.exp(-0.45 * (d - 15)))));
-      const predPlt = d < 0 ? 140000 - (d + 2) * 30000 : (d < 4 ? Math.max(12000, 80000 - d * 20000) : Math.round(11000 + 130000 / (1 + Math.exp(-0.35 * (d - 19)))));
-      series.push({
-        day: d,
-        is_observed: idx >= 0,
-        anc_observed: obsAnc,
-        anc_predicted: predAnc,
-        anc_lower_95: Math.round(predAnc * 0.88),
-        anc_upper_95: Math.round(predAnc * 1.12),
-        plt_observed: obsPlt,
-        plt_predicted: predPlt,
-        plt_lower_95: Math.round(predPlt * 0.86),
-        plt_upper_95: Math.round(predPlt * 1.14)
-      });
+// ---------------------------------------------------------------------------
+// Offline engraftment trajectory model
+// ANC and platelets follow a conditioning decline followed by a logistic
+// recovery that crosses the engraftment threshold on the patient's expected day.
+// ---------------------------------------------------------------------------
+const ANC_K = 3200, ANC_RATE = 0.45, ANC_FLOOR = 20;
+const PLT_K = 150000, PLT_RATE = 0.3, PLT_FLOOR = 9000;
+
+function logisticCenter(threshold: number, floor: number, k: number, rate: number, day: number): number {
+  // Solve floor + k / (1 + e^(-rate (day - c))) = threshold for c.
+  return day + Math.log(k / (threshold - floor) - 1) / rate;
+}
+
+function modelCounts(d: number, ancDay: number, pltDay: number) {
+  const ancC = logisticCenter(500, ANC_FLOOR, ANC_K, ANC_RATE, ancDay);
+  const pltC = logisticCenter(20000, PLT_FLOOR, PLT_K, PLT_RATE, pltDay);
+  const anc = Math.max(3000 * Math.exp(-0.75 * (d + 2)), ANC_FLOOR + ANC_K / (1 + Math.exp(-ANC_RATE * (d - ancC))));
+  const plt = Math.max(160000 * Math.exp(-0.35 * (d + 2)), PLT_FLOOR + PLT_K / (1 + Math.exp(-PLT_RATE * (d - pltC))));
+  const hb = d <= ancDay ? 8.1 + 3.4 * Math.exp(-0.28 * (d + 2)) : 8.1 + 0.06 * (d - ancDay);
+  const wbc = (anc / 1000) * 1.6 + 0.15;
+  return { anc, plt, hb, wbc };
+}
+
+function syntheticProgress(patient: Patient): PatientProgress {
+  const latest = Math.max(0, daysPostTransplant(patient));
+  const { ancDay, pltDay } = ENGRAFTMENT_PROFILE[patient.patient_id]
+    ?? (patient.transplant_type.toLowerCase().includes('auto') ? { ancDay: 11, pltDay: 13 } : { ancDay: 16, pltDay: 21 });
+  const seed = [...patient.patient_id].reduce((a, c) => a + c.charCodeAt(0), 0);
+  const jitter = (d: number) => 1 + 0.07 * Math.sin(d * 1.7 + seed);
+
+  const drawDays = new Set([-2, 0, 3, 5, 7, 10, 12, 14, 16, 18, 21, 24, 28, 31, 34, 38, 42].filter(d => d <= latest));
+  drawDays.add(latest);
+  const horizon = Math.max(35, latest + 12);
+
+  const series: TrajectoryPoint[] = [];
+  for (let d = -2; d <= horizon; d++) {
+    const m = modelCounts(d, ancDay, pltDay);
+    const observed = drawDays.has(d);
+    const ahead = Math.max(0, d - latest);
+    const spread = Math.min(0.08 + 0.035 * ahead, 0.6);
+    series.push({
+      day: d,
+      is_observed: observed,
+      anc_observed: observed ? Math.round(m.anc * jitter(d)) : undefined,
+      anc_predicted: Math.round(m.anc),
+      anc_lower_95: Math.round(m.anc * (1 - spread)),
+      anc_upper_95: Math.round(m.anc * (1 + spread)),
+      plt_observed: observed ? Math.round(m.plt * jitter(d + 3)) : undefined,
+      plt_predicted: Math.round(m.plt),
+      plt_lower_95: Math.round(m.plt * (1 - spread)),
+      plt_upper_95: Math.round(m.plt * (1 + spread)),
+      hb_observed: observed ? Math.round(m.hb * 10) / 10 : undefined,
+      wbc_observed: observed ? Math.round(m.wbc * 10) / 10 : undefined
+    });
+  }
+
+  const last = series.find(p => p.day === latest)!;
+  const prev = [...series].reverse().find(p => p.is_observed && p.day < latest);
+  const ancEngrafted = latest >= ancDay + 2;
+  const pltEngrafted = latest >= pltDay + 2;
+  const delta = prev && prev.anc_observed != null && last.anc_observed != null ? last.anc_observed - prev.anc_observed : 0;
+  const isAuto = patient.transplant_type.toLowerCase().includes('auto');
+  const txDate = new Date(patient.transplant_date);
+  const dateOf = (day: number) => new Date(txDate.getTime() + day * 86400000).toISOString().slice(0, 10);
+
+  const milestones: Milestone[] = [
+    { id: 'infusion', name: 'Stem cell infusion (Day 0)', target_day: 0, status: 'COMPLETED', actual_day: 0, actual_date: patient.transplant_date, notes: `${patient.cell_dose_cd34 ?? '—'} ×10⁶ CD34+/kg infused` },
+    latest >= 7
+      ? { id: 'nadir', name: 'Neutrophil nadir', target_day: 7, status: 'COMPLETED', actual_day: 7, actual_date: dateOf(7), notes: 'Conditioning-induced aplasia reached' }
+      : { id: 'nadir', name: 'Neutrophil nadir', target_day: 7, status: 'PROJECTED', projected_day: 7, notes: 'Counts still falling after conditioning' },
+    ancEngrafted
+      ? { id: 'anc', name: 'Neutrophil engraftment (ANC ≥ 500)', target_day: ancDay, status: 'COMPLETED', actual_day: ancDay, actual_date: dateOf(ancDay), notes: 'First of 3 consecutive days ≥ 500/µL' }
+      : { id: 'anc', name: 'Neutrophil engraftment (ANC ≥ 500)', target_day: ancDay, status: 'PROJECTED', projected_day: ancDay, forecast_interval: `Day ${ancDay - 1} – ${ancDay + 2}`, notes: latest >= ancDay - 3 ? 'Expected within the next few days' : 'Awaiting count recovery' },
+    pltEngrafted
+      ? { id: 'plt', name: 'Platelet engraftment (≥ 20,000 unsupported)', target_day: pltDay, status: 'COMPLETED', actual_day: pltDay, actual_date: dateOf(pltDay), notes: 'Transfusion-independent for 7 days' }
+      : { id: 'plt', name: 'Platelet engraftment (≥ 20,000 unsupported)', target_day: pltDay, status: 'PROJECTED', projected_day: pltDay, forecast_interval: `Day ${pltDay - 2} – ${pltDay + 3}`, notes: 'Follows neutrophil recovery' },
+    { id: 'review', name: isAuto ? 'Day +30 response review' : 'Day +100 chimerism & GvHD review', target_day: isAuto ? 30 : 100, status: latest >= (isAuto ? 30 : 100) ? 'COMPLETED' : 'PENDING', notes: isAuto ? 'Restaging and disease response' : 'Chimerism, GvHD and infection screen' }
+  ];
+
+  const statusDescription = ancEngrafted
+    ? `Day +${latest}. Neutrophil engraftment confirmed on Day +${ancDay}; counts tracking within the expected band.`
+    : latest < 7
+      ? `Day +${latest}. Expected post-conditioning decline toward nadir; protective isolation in place.`
+      : `Day +${latest}. Recovery under way; neutrophil engraftment projected around Day +${ancDay}.`;
+
+  return {
+    patient_id: patient.patient_id,
+    patient_name: patient.name,
+    transplant_date: patient.transplant_date,
+    latest_observed_day: latest,
+    expected_anc_engraft_day: ancDay,
+    expected_plt_engraft_day: pltDay,
+    is_anc_engrafted: ancEngrafted,
+    is_plt_engrafted: pltEngrafted,
+    timeline_series: series,
+    milestones,
+    clinical_summary: {
+      current_anc: last.anc_observed ?? Math.round(last.anc_predicted),
+      current_plt: last.plt_observed ?? Math.round(last.plt_predicted),
+      current_hb: last.hb_observed ?? '—',
+      current_wbc: last.wbc_observed ?? '—',
+      velocity: delta > 40 ? 'Rising' : delta < -40 ? 'Falling' : 'Stable',
+      status_description: statusDescription
     }
-    return {
-      patient_id: patientId,
-      patient_name: "Eleanora Vance",
-      transplant_date: "2026-10-14",
-      latest_observed_day: 14,
-      expected_anc_engraft_day: 15,
-      expected_plt_engraft_day: 19,
-      is_anc_engrafted: false,
-      is_plt_engrafted: false,
-      timeline_series: series,
-      milestones: [
-        { id: "m1", name: "Transplant Infusion (Day 0)", target_day: 0, status: "COMPLETED", actual_date: "2026-10-14", notes: "Infused CD34+ cell dose 6.4 x10^6/kg" },
-        { id: "m2", name: "Nadir Aplasia Phase", target_day: 7, status: "COMPLETED", actual_day: 7, notes: "Expected leukocyte and platelet depletion" },
-        { id: "m3", name: "Absolute Neutrophil Engraftment (ANC ≥ 500 cells/μL)", target_day: 15, status: "PROJECTED", projected_day: 15, forecast_interval: "Day 14 - Day 17", notes: "Impending milestone within 24h" },
-        { id: "m4", name: "Platelet Engraftment (≥ 20,000/μL Transfusion-Independent)", target_day: 19, status: "PROJECTED", projected_day: 19, forecast_interval: "Day 17 - Day 21", notes: "Platelet recovery slope positive" }
-      ],
-      clinical_summary: {
-        current_anc: 420,
-        current_plt: 18500,
-        current_hb: 9.6,
-        current_wbc: 1.9,
-        velocity: "Accelerated",
-        status_description: "Day +14 post-transplant. Recovery curve tracks within expected 95% confidence interval."
-      }
-    };
+  };
+}
+
+export async function fetchPatientProgress(patient: Patient): Promise<PatientProgress> {
+  try {
+    return await getJson<PatientProgress>(`/patients/${patient.patient_id}/progress`);
+  } catch {
+    return syntheticProgress(patient);
   }
 }
 
 export async function fetchPatientPredictions(patientId: string): Promise<any[]> {
   try {
-    const res = await fetch(`${API_BASE}/patients/${patientId}/predictions`);
-    if (!res.ok) throw new Error("Backend unavailable");
-    return await res.json();
-  } catch (e) {
+    return await getJson<any[]>(`/patients/${patientId}/predictions`);
+  } catch {
     return [];
   }
 }
 
+// ---------------------------------------------------------------------------
+// Offline agent orchestration — mirrors backend/app/core/agents.py step by step.
+// The quantum step evaluates the real ZZFeatureMap fidelity kernel in the browser.
+// ---------------------------------------------------------------------------
+const QUANTUM_ANCHORS = [[3.85, 4.12], [1.2, 1.45]];
+const clip = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+const round4 = (v: number) => Math.round(v * 10000) / 10000;
+
+async function localOrchestration(patient: Patient, labs: { anc: number; platelets: number }): Promise<OrchestrationResult> {
+  const t0 = performance.now();
+  const taskId = `task-local-${Math.random().toString(16).slice(2, 10)}`;
+  const now = () => new Date().toISOString();
+  const trail: AgentTrailItem[] = [];
+  const push = (agent_id: string, status: AgentTrailItem['status'], output_data: Record<string, any>, warnings: string[] = [], confidence?: number) =>
+    trail.push({ agent_id, task_id: taskId, status, output_data, warnings, errors: [], confidence, timestamp: now() });
+
+  // 1. Data quality
+  const dq: string[] = [];
+  const cd34 = patient.cell_dose_cd34 ?? 5;
+  if (labs.anc < 500) dq.push(`Severe neutropenia detected: ANC ${labs.anc} cells/μL (< 500 engraftment threshold)`);
+  if (labs.platelets < 20000) dq.push(`Severe thrombocytopenia: Platelet count ${labs.platelets}/μL (transfusion precaution)`);
+  if (!/Myeloid|Lymphoblastic|MDS/.test(patient.disease)) dq.push('Rare diagnostic subtype: input distribution differs from primary CIBMTR leukemia training cohort');
+  push('clinical_data_quality_agent', dq.length ? 'WARNING' : 'SUCCESS', { validation_passed: true, quality_warnings: dq, proceed_to_inference: true }, dq, dq.length ? 0.85 : 0.98);
+
+  // 2. Feature engineering
+  const chimerism = patient.chimerism_donor_pct ?? 95;
+  const q1 = round4(clip((labs.anc / 2000 + cd34 / 10) * Math.PI, 0, 2 * Math.PI));
+  const q2 = round4(clip((chimerism / 100 + (1 - patient.age / 80)) * Math.PI, 0, 2 * Math.PI));
+  push('clinical_feature_engineering_agent', 'SUCCESS', { feature_vector_classical: [patient.age, cd34, labs.anc, labs.platelets, chimerism], feature_vector_quantum: [q1, q2] }, [], 1);
+
+  // 3. Classical models
+  const pLr = clip(1 / (1 + Math.exp(-(-2.2 + 0.0035 * labs.anc + 0.28 * cd34))), 0.05, 0.96);
+  const pRf = clip(0.35 + (labs.anc > 300 ? 0.5 : 0.15) + (cd34 >= 5 ? 0.15 : 0), 0.1, 0.95);
+  const pSvm = clip(0.5 * (pLr + pRf) + 0.02, 0.08, 0.94);
+  const classical = {
+    logistic_regression: { probability: round4(pLr), predicted_engraftment: pLr >= 0.5, model_version: 'LogisticRegression_v1.4' },
+    random_forest: { probability: round4(pRf), predicted_engraftment: pRf >= 0.5, model_version: 'RandomForest_n100_v2.0', feature_importance_top: 'ANC_velocity (42%), CD34_cell_dose (28%)' },
+    classical_rbf_svm: { probability: round4(pSvm), predicted_engraftment: pSvm >= 0.5, model_version: 'SVC_rbf_C1.0_v1.2' }
+  };
+  push('classical_ml_prediction_service', 'SUCCESS', { models: classical }, [], 0.91);
+
+  // 4. Quantum kernel (exact 2-qubit statevector in the browser)
+  const qStart = performance.now();
+  const [kEng, kDel] = zzKernelMatrix([[q1, q2]], QUANTUM_ANCHORS)[0];
+  const eE = Math.exp(kEng * 3), eD = Math.exp(kDel * 3);
+  const pQ = eE / (eE + eD);
+  const quantum = {
+    model_name: 'Quantum-Kernel SVM (ZZFeatureMap)',
+    model_version: 'QSVM_ZZ_reps1_v2.0',
+    probability: round4(pQ),
+    predicted_engraftment: pQ >= 0.5,
+    fidelity_to_engraftment_state: round4(kEng),
+    fidelity_to_delayed_state: round4(kDel),
+    backend_used: 'Browser statevector simulator',
+    circuit_depth: zzCircuitDepth(2),
+    circuit_width: 2,
+    shots: 0,
+    duration_ms: Math.round((performance.now() - qStart) * 100) / 100,
+    provenance: 'browser_statevector:exact_closed_form',
+    transparency_notice: 'Backend offline: the 2-qubit ZZFeatureMap kernel was evaluated exactly in your browser. No quantum hardware was used.'
+  };
+  push('quantum_ml_prediction_service', 'SUCCESS', quantum, [], round4(0.88 + 0.1 * kEng));
+
+  // 5. Validation
+  const probs = [pLr, pRf, pSvm, pQ];
+  const votes = probs.map(p => p >= 0.5);
+  const mean = probs.reduce((a, b) => a + b, 0) / probs.length;
+  const variance = probs.reduce((a, b) => a + (b - mean) ** 2, 0) / probs.length;
+  const unanimous = votes.every(v => v === votes[0]);
+  const vWarn: string[] = [];
+  if (!unanimous) vWarn.push('Model disagreement: classical and quantum predictions fall on opposite sides of p = 0.5. Clinician review required.');
+  if (variance > 0.04) vWarn.push(`High inter-model variance (σ² = ${round4(variance)}). Prediction uncertainty elevated.`);
+  const validationStatus = unanimous && variance <= 0.04 ? 'VALIDATED_CONSENSUS' : !unanimous ? 'VALIDATED_WITH_DISAGREEMENT' : 'VALIDATED_HIGH_VARIANCE';
+  push('independent_prediction_validation_agent', vWarn.length ? 'WARNING' : 'SUCCESS', {
+    ensemble_mean_probability: round4(mean), inter_model_variance: round4(variance), unanimous_agreement: unanimous,
+    disagreement_flag: !unanimous, validation_status: validationStatus,
+    recommendation: unanimous ? 'PROCEED' : 'FLAG_FOR_HEMATOLOGIST_REVIEW'
+  }, vWarn, round4(1 - Math.sqrt(variance)));
+
+  // 6. Evidence
+  const evidence = [
+    cd34 >= 5
+      ? { factor: 'Optimal CD34+ dose', observation: `${cd34} ×10⁶/kg CD34+ infused`, clinical_impact: 'Higher CD34+ doses are associated with faster neutrophil recovery', reference_registry: 'CIBMTR registry analyses' }
+      : { factor: 'Sub-optimal CD34+ dose', observation: `${cd34} ×10⁶/kg CD34+ infused`, clinical_impact: 'Associated with delayed neutrophil engraftment', reference_registry: 'CIBMTR registry analyses' },
+    ...(labs.anc > 300 ? [{ factor: 'Neutrophil recovery under way', observation: `Current ANC ${labs.anc.toLocaleString()} cells/μL`, clinical_impact: 'Approaching the 500/μL engraftment threshold', reference_registry: 'EBMT engraftment criteria' }] : []),
+    patient.chimerism_donor_pct != null
+      ? { factor: 'Donor chimerism', observation: `${patient.chimerism_donor_pct}% donor DNA in peripheral blood`, clinical_impact: patient.chimerism_donor_pct >= 95 ? 'Full donor chimerism, no sign of graft rejection' : 'Mixed chimerism, repeat testing advised', reference_registry: 'ASHI chimerism standards' }
+      : { factor: 'Autologous graft', observation: 'Patient’s own mobilized stem cells', clinical_impact: 'No graft rejection or GvHD risk', reference_registry: 'EBMT handbook' }
+  ];
+  push('evidence_clinical_context_agent', 'SUCCESS', { evidence_items: evidence }, [], 0.92);
+
+  // 7. Trajectory
+  const progress = syntheticProgress(patient);
+  push('recovery_trajectory_agent', 'SUCCESS', { expected_anc_day: progress.expected_anc_engraft_day, expected_plt_day: progress.expected_plt_engraft_day, summary: progress.clinical_summary }, [], 0.9);
+
+  // 8. Reports
+  const day = daysPostTransplant(patient);
+  const first = patient.name.split(' ')[0];
+  const physician = [
+    `CLINICAL DECISION SUPPORT SUMMARY — ${patient.patient_id} (${patient.name})`,
+    `Diagnosis: ${patient.disease} | Day +${day} post-transplant`,
+    `Validation: ${validationStatus}`,
+    '',
+    'MULTI-MODEL SYNTHESIS',
+    `• Ensemble engraftment likelihood: ${(mean * 100).toFixed(1)}% (σ² = ${round4(variance)})`,
+    `• Logistic regression ${(pLr * 100).toFixed(1)}% · Random forest ${(pRf * 100).toFixed(1)}% · RBF SVM ${(pSvm * 100).toFixed(1)}%`,
+    `• Quantum-kernel SVM ${(pQ * 100).toFixed(1)}% (fidelity to engrafted anchor ${round4(kEng)}) — experimental; underperforms classical models in the held-out benchmark`,
+    `• Quantum provenance: ${quantum.backend_used} (${quantum.provenance})`,
+    '',
+    'CURRENT LABS',
+    `ANC ${labs.anc.toLocaleString()}/μL · Platelets ${labs.platelets.toLocaleString()}/μL`,
+    '',
+    'For clinician review only. Not a substitute for clinical judgement.'
+  ].join('\n');
+  const engrafted = progress.is_anc_engrafted;
+  const patientSummary = [
+    `Hello ${first},`,
+    '',
+    `Here is your recovery update for Day +${day} after your transplant.`,
+    '',
+    engrafted
+      ? `• Your new stem cells have started making infection-fighting white cells (neutrophils). Your count is ${labs.anc.toLocaleString()}, above the 500 mark doctors look for.`
+      : `• Your infection-fighting white cells (neutrophils) are at ${labs.anc.toLocaleString()}. Doctors are waiting for this to reach 500, which usually happens around Day +${progress.expected_anc_engraft_day}.`,
+    `• Your platelets, which help your blood clot, are at ${labs.platelets.toLocaleString()}.`,
+    '',
+    'Please keep taking your protective medicines and tell your nurse straight away if you have a temperature of 38°C or higher, chills, or unusual bleeding.'
+  ].join('\n');
+  push('clinical_report_agent', 'SUCCESS', { generated: true }, [], 0.95);
+
+  return {
+    task_id: taskId,
+    prediction_id: `PR-${patient.patient_id}-local`,
+    patient_id: patient.patient_id,
+    status: 'COMPLETED',
+    duration_ms: Math.round((performance.now() - t0) * 100) / 100,
+    validation_status: validationStatus,
+    disagreement_detected: !unanimous,
+    models_comparison: { ...classical, quantum_kernel_svm: quantum },
+    evidence,
+    trajectory_summary: progress.clinical_summary,
+    reports: { physician_technical_report: physician, patient_friendly_summary: patientSummary, generated_at: now() },
+    agent_trail: trail
+  };
+}
+
 export async function runAgentOrchestration(params: {
-  patient_id: string;
+  patient: Patient;
   current_labs?: Record<string, number>;
   quantum_backend?: string;
   execution_mode?: string;
-}): Promise<OrchestrationResult> {
-  const res = await fetch(`${API_BASE}/agents/orchestrate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params)
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Agent orchestration failed");
+}): Promise<OrchestrationResult & { source: 'backend' | 'browser' }> {
+  const { patient, ...rest } = params;
+  try {
+    const res = await fetch(`${API_BASE}/agents/orchestrate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patient_id: patient.patient_id, ...rest }),
+      signal: AbortSignal.timeout(20000)
+    });
+    if (res.ok && (res.headers.get('content-type') ?? '').includes('json')) {
+      const data = await res.json();
+      if (data.status === 'COMPLETED') return { ...data, source: 'backend' };
+    }
+  } catch {
+    // fall through to local orchestration
   }
-  return await res.json();
+  const progress = syntheticProgress(patient);
+  const labs = {
+    anc: Number(params.current_labs?.anc ?? progress.clinical_summary.current_anc),
+    platelets: Number(params.current_labs?.platelets ?? progress.clinical_summary.current_plt)
+  };
+  return { ...(await localOrchestration(patient, labs)), source: 'browser' };
 }
 
-export async function fetchQuantumStatus(): Promise<QuantumStatus> {
+export async function fetchQuantumStatus(): Promise<QuantumStatus & { backend_online: boolean }> {
   try {
-    const res = await fetch(`${API_BASE}/quantum/status`);
-    if (!res.ok) throw new Error("Backend unavailable");
-    return await res.json();
-  } catch (e) {
+    return { ...(await getJson<QuantumStatus>('/quantum/status')), backend_online: true };
+  } catch {
     return {
-      has_ibm_runtime_installed: true,
+      backend_online: false,
+      has_ibm_runtime_installed: false,
       has_token_configured: false,
-      token_masked: "NOT_CONFIGURED",
+      token_masked: 'NOT_CONFIGURED',
       is_connected_to_hardware: false,
-      default_backend: "aer_simulator_statevector",
-      environment_instructions: "Set QISKIT_IBM_TOKEN in backend environment to unlock ibm_brisbane/ibm_kyiv QPU execution.",
-      execution_modes_supported: [
-        "Local Quantum Simulator (Statevector / Shot-based)",
-        "IBM Quantum Hardware (Qiskit Runtime)",
-        "Automatic Transparent Fallback to Simulator"
-      ]
+      default_backend: 'browser_statevector',
+      environment_instructions: 'Start the FastAPI backend and set QISKIT_IBM_TOKEN in its environment to enable IBM Quantum hardware execution.',
+      execution_modes_supported: ['Browser statevector simulation (exact)']
     };
   }
 }
 
+const OFFLINE_BACKENDS: QuantumBackend[] = [
+  {
+    backend_name: 'browser_statevector',
+    backend_type: 'Browser statevector simulator',
+    qubits: 16,
+    status: 'ONLINE',
+    is_hardware: false,
+    avg_queue_depth: 0,
+    description: 'Exact closed-form ZZFeatureMap statevector, computed in your browser while the backend is offline.',
+    basis_gates: ['h', 'p', 'cx'],
+    two_qubit_error_rate: 0
+  }
+];
+
 export async function fetchQuantumBackends(): Promise<QuantumBackend[]> {
   try {
-    const res = await fetch(`${API_BASE}/quantum/backends`);
-    if (!res.ok) throw new Error("Backend unavailable");
-    return await res.json();
-  } catch (e) {
-    return [
-      {
-        backend_name: "aer_simulator_statevector",
-        backend_type: "Local Quantum Simulator",
-        qubits: 32,
-        status: "ONLINE",
-        is_hardware: false,
-        avg_queue_depth: 0,
-        description: "Exact Statevector Simulation (Zero statistical noise, instantaneous evaluation)",
-        basis_gates: ["cx", "id", "rz", "sx", "x"],
-        two_qubit_error_rate: 0.0
-      },
-      {
-        backend_name: "aer_simulator_shot_noise",
-        backend_type: "Local Shot-Based Simulator",
-        qubits: 32,
-        status: "ONLINE",
-        is_hardware: false,
-        avg_queue_depth: 0,
-        description: "Measurement Shot Simulator (Evaluated at 8,192 shots with Poisson noise distribution)",
-        basis_gates: ["cx", "id", "rz", "sx", "x"],
-        two_qubit_error_rate: 0.001
-      },
-      {
-        backend_name: "ibm_brisbane",
-        backend_type: "IBM Quantum Superconducting Hardware",
-        qubits: 127,
-        status: "ONLINE",
-        is_hardware: true,
-        avg_queue_depth: 3,
-        description: "Eagle r3 Processor with tunable couplers. Dynamic decoupling & Twirled Readout mitigation",
-        basis_gates: ["cz", "id", "rz", "sx", "x"],
-        avg_t1_us: 284.6,
-        avg_t2_us: 172.4,
-        two_qubit_error_rate: 0.0058
-      },
-      {
-        backend_name: "ibm_kyiv",
-        backend_type: "IBM Quantum Superconducting Hardware",
-        qubits: 127,
-        status: "ONLINE",
-        is_hardware: true,
-        avg_queue_depth: 7,
-        description: "Eagle r3 Processor with heavy-hex lattice topology. Calibrated for QML kernel matrices",
-        basis_gates: ["cz", "id", "rz", "sx", "x"],
-        avg_t1_us: 268.2,
-        avg_t2_us: 154.0,
-        two_qubit_error_rate: 0.0064
-      }
-    ];
+    return await getJson<QuantumBackend[]>('/quantum/backends');
+  } catch {
+    return OFFLINE_BACKENDS;
   }
 }
+
+export interface QuantumJobResult {
+  job_id: string;
+  status: string;
+  kernel_matrix?: number[][];
+  circuit_depth?: number;
+  circuit_width?: number;
+  shots?: number;
+  duration_ms?: number;
+  backend_used?: string;
+  provenance?: string;
+  is_simulator?: boolean;
+  transparency_notice?: string;
+  error?: string;
+}
+
+const localQuantumJobs: QuantumJob[] = [];
 
 export async function submitQuantumJob(params: {
   backend_name: string;
   execution_mode: string;
   shots: number;
   sample_values?: number[];
-}): Promise<any> {
-  const res = await fetch(`${API_BASE}/quantum/jobs`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params)
-  });
-  if (!res.ok) throw new Error("Failed to submit quantum job");
-  return await res.json();
+}): Promise<QuantumJobResult> {
+  try {
+    const res = await fetch(`${API_BASE}/quantum/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+      signal: AbortSignal.timeout(60000)
+    });
+    if (res.ok && (res.headers.get('content-type') ?? '').includes('json')) return await res.json();
+    if (res.ok) throw new Error('offline');
+    const err = await res.json().catch(() => ({}));
+    throw Object.assign(new Error(err.detail || 'Quantum job failed'), { fromBackend: true });
+  } catch (e: any) {
+    if (e?.fromBackend) throw e;
+  }
+
+  // Backend offline: evaluate the same kernel exactly in the browser.
+  const sample = params.sample_values ?? [3.14, 1.57];
+  const start = performance.now();
+  const kernel = zzKernelMatrix([sample], QUANTUM_ANCHORS);
+  const duration = Math.round((performance.now() - start) * 100) / 100;
+  const job: QuantumJob = {
+    job_id: `qjob-local-${Math.random().toString(16).slice(2, 12)}`,
+    backend_name: 'browser_statevector',
+    backend_type: 'Browser statevector simulator',
+    execution_mode: 'browser',
+    status: 'COMPLETED',
+    shots: 0,
+    circuit_depth: zzCircuitDepth(sample.length),
+    circuit_width: sample.length,
+    submitted_at: new Date().toISOString(),
+    completed_at: new Date().toISOString(),
+    execution_duration_ms: duration,
+    kernel_evaluation_duration_ms: duration,
+    result_provenance: 'browser_statevector:exact_closed_form'
+  };
+  localQuantumJobs.unshift(job);
+  return {
+    job_id: job.job_id,
+    status: 'COMPLETED',
+    kernel_matrix: kernel,
+    circuit_depth: job.circuit_depth,
+    circuit_width: job.circuit_width,
+    shots: 0,
+    duration_ms: duration,
+    backend_used: 'Browser statevector simulator',
+    provenance: job.result_provenance,
+    is_simulator: true,
+    transparency_notice: params.backend_name.startsWith('ibm_')
+      ? `The backend is offline, so ${params.backend_name} could not be reached. The kernel was computed exactly in your browser instead.`
+      : 'The backend is offline, so the kernel was computed exactly in your browser.'
+  };
 }
 
 export async function fetchQuantumJobs(): Promise<QuantumJob[]> {
   try {
-    const res = await fetch(`${API_BASE}/quantum/jobs`);
-    if (!res.ok) throw new Error("Backend unavailable");
-    return await res.json();
-  } catch (e) {
-    return [];
+    return await getJson<QuantumJob[]>('/quantum/jobs');
+  } catch {
+    return [...localQuantumJobs];
   }
 }
 
 export async function fetchHospitalOverview(): Promise<HospitalOverview> {
   try {
-    const res = await fetch(`${API_BASE}/hospital/overview`);
-    if (!res.ok) throw new Error("Backend unavailable");
-    return await res.json();
-  } catch (e) {
+    return await getJson<HospitalOverview>('/hospital/overview');
+  } catch {
     return {
       cohort_summary: {
-        total_active_patients: 3,
-        impending_engraftments: 1,
+        total_active_patients: COHORT_PATIENTS.length,
+        impending_engraftments: COHORT_PATIENTS.filter(p => p.status.includes('Impending')).length,
         pending_clinician_reviews: 1,
-        allogeneic_count: 3,
-        autologous_count: 0
+        allogeneic_count: COHORT_PATIENTS.filter(p => p.transplant_type.includes('Allogeneic')).length,
+        autologous_count: COHORT_PATIENTS.filter(p => p.transplant_type.includes('Autologous')).length
       },
       quantum_service_health: {
-        active_backends_online: 4,
-        total_quantum_jobs_executed: 1,
-        default_backend: "aer_simulator_statevector",
-        hardware_readiness: "AVAILABLE_UPON_TOKEN_CONFIG"
+        active_backends_online: 1,
+        total_quantum_jobs_executed: localQuantumJobs.length,
+        default_backend: 'browser_statevector',
+        hardware_readiness: 'BACKEND_OFFLINE'
       },
       service_health: {
-        api_status: "ONLINE",
-        database: "SQLITE_HYBRID_STORE_ONLINE",
+        api_status: 'OFFLINE',
+        database: 'UNAVAILABLE',
         orchestrator_agents_active: 8,
-        uptime_pct: 99.98
+        uptime_pct: 0
       }
     };
   }
 }
 
+/** Offline-capable cohort trajectory for views that need every patient's engraftment state. */
+export async function fetchCohortProgress(patients: Patient[]): Promise<Record<string, PatientProgress>> {
+  const entries = await Promise.all(patients.map(async p => [p.patient_id, await fetchPatientProgress(p)] as const));
+  return Object.fromEntries(entries);
+}
