@@ -1,312 +1,507 @@
-import React from 'react';
-import { ShieldAlert, ArrowRight, CheckCircle2, AlertCircle, Cpu, Zap, Activity, Award } from 'lucide-react';
-import { DatasetProfile, Experiment } from '../types';
+import React, { useState, useEffect } from 'react';
+import {
+  Activity, Droplet, Heart, BarChart2, Zap, Calendar, ChevronLeft, ChevronRight,
+  ArrowUpRight, ArrowRight, User, Phone, CheckCircle2, ShieldCheck, Dna
+} from 'lucide-react';
+import { Patient } from '../types';
 import { TabId } from '../components/Navigation';
+import { OrganViewer3D } from '../components/OrganViewer3D';
 
 interface OverviewViewProps {
-  dataset: DatasetProfile | null;
-  latestExperiment: Experiment | null;
+  selectedPatient: Patient;
   onNavigate: (tab: TabId) => void;
-  onLoadDemo: () => void;
-  isLoadingDemo: boolean;
 }
 
 export const OverviewView: React.FC<OverviewViewProps> = ({
-  dataset,
-  latestExperiment,
-  onNavigate,
-  onLoadDemo,
-  isLoadingDemo,
+  selectedPatient,
+  onNavigate
 }) => {
-  const isSynthetic = !dataset || dataset.data_mode === 'synthetic';
+  // Dynamically default to the patient's diagnosed target organ!
+  const defaultOrgan = selectedPatient.primary_organ_type || 'heart';
+  const [selectedOrgan, setSelectedOrgan] = useState<'heart' | 'marrow' | 'stem' | 'liver'>(defaultOrgan);
+  const [activePin, setActivePin] = useState<number | null>(1);
+
+  // Sync with selectedPatient when parent changes
+  useEffect(() => {
+    if (selectedPatient.primary_organ_type) {
+      setSelectedOrgan(selectedPatient.primary_organ_type);
+    }
+  }, [selectedPatient.patient_id, selectedPatient.primary_organ_type]);
+
+  // Biological systems items matching the screenshot
+  const organItems = [
+    { id: 'liver', name: 'Liver / Metabolic', label: 'My Liver', img: '/liver_3d.jpg' },
+    { id: 'heart', name: 'Cardiac System', label: 'My Heart', img: '/heart_3d.jpg' },
+    { id: 'stem', name: 'CD34+ Stem Cell', label: 'My Stem Cells', img: '/stem_cell_3d.jpg' },
+    { id: 'marrow', name: 'Bone Marrow', label: 'My Marrow', img: '/marrow_3d.jpg' }
+  ];
+
+  // Dynamic telemetry data configured specifically per organ
+  const getTelemetryData = () => {
+    switch (selectedOrgan) {
+      case 'marrow':
+        return {
+          title: 'My Bone Marrow Engraftment',
+          floatIcon: <Activity size={14} color="#2563eb" />,
+          floatTitle: 'HSC Engraftment',
+          floatValue: '98.4%',
+          card1: { title: 'ANC Recovery', value: '420 cells/μL', badge: 'Day +14', sub: 'Target > 500' },
+          card2: { title: 'Platelet Kinetics', value: '18,500 /μL', badge: 'Impending', sub: 'Rising velocity' },
+          card3: { title: 'Donor Chimerism', value: '98.4%', badge: 'Full Donor', sub: 'Complete engraftment' },
+          card4: { title: 'Cellularity Spongiosa', value: '45%', badge: 'Optimal', sub: 'Endosteal niche stable' }
+        };
+      case 'liver':
+        return {
+          title: 'My Hepatic Condition',
+          floatIcon: <Droplet size={14} color="#2563eb" />,
+          floatTitle: 'Total Bilirubin',
+          floatValue: '0.8 mg/dL',
+          card1: { title: 'Liver Status', value: 'Normal (0.8)', badge: '0.8 mg/dL', sub: 'VOD Clearance' },
+          card2: { title: 'Transaminases (ALT/AST)', value: '32 / 28 U/L', badge: 'Grade 0', sub: 'Enzyme stability' },
+          card3: { title: 'Portal Flow', value: '26 cm/s', badge: 'Optimal', sub: 'Doppler velocity' },
+          card4: { title: 'Serum Albumin', value: '3.9 g/dL', badge: 'Normal', sub: 'Hepatosplenomegaly: None' }
+        };
+      case 'stem':
+        return {
+          title: 'My CD34+ Kinetics',
+          floatIcon: <Zap size={14} color="#2563eb" />,
+          floatTitle: 'CD34+ Viability',
+          floatValue: '98.1%',
+          card1: { title: 'Cell Dose CD34+', value: `${selectedPatient.cell_dose_cd34 || 6.4} ×10⁶`, badge: 'Dose OK', sub: 'Viability 98.1%' },
+          card2: { title: 'CXCR4 Chemokine Homing', value: '94.2%', badge: 'High', sub: 'Bone marrow affinity' },
+          card3: { title: 'HLA Match Level', value: selectedPatient.hla_match || '10/10', badge: '10/10', sub: 'Matched donor' },
+          card4: { title: 'CMV Serostatus', value: selectedPatient.cmv_status || 'D+/R-', badge: 'Monitored', sub: 'Prophylaxis active' }
+        };
+      case 'heart':
+      default:
+        return {
+          title: 'My Heart Condition',
+          floatIcon: <Heart size={14} fill="#2563eb" color="#2563eb" />,
+          floatTitle: 'Heart Rate',
+          floatValue: '120 bpm',
+          card1: { title: 'Blood Status', value: '116/70', badge: '116 /70', sub: 'Systolic / Diastolic' },
+          card2: { title: 'Heart Rate', value: '120 bpm', badge: '120 bpm', sub: 'Sinus rhythm' },
+          card3: { title: 'Blood Count', value: '80-90', badge: '80 /90', sub: 'Hematocrit index' },
+          card4: { title: 'Glucose Level', value: '230/ml', badge: '230 /ml', sub: 'Post-prandial' }
+        };
+    }
+  };
+
+  const telemetry = getTelemetryData();
 
   return (
-    <div>
-      {/* Disclaimer Banner */}
-      <div className="alert-banner alert-synthetic">
-        <ShieldAlert size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
-        <div>
-          <strong>RESEARCH PROTOTYPE NOTICE & CLINICAL BOUNDARY:</strong>
-          <p style={{ marginTop: '0.25rem' }}>
-            {isSynthetic ? (
-              <>
-                <strong>SYNTHETIC DEMONSTRATION DATA — NOT CLINICAL EVIDENCE.</strong> This software evaluates machine learning and quantum computing pipelines on simulated clinical covariates modeled after CIBMTR published registry distributions. It is strictly for algorithmic benchmarking and must never be used for therapeutic guidance or real patient care.
-              </>
-            ) : (
-              <>
-                <strong>SECONDARY RESEARCH DATASET LOADED:</strong> Operating in Research Cohort Mode under de-identified study protocols. Results are exploratory and not approved for clinical decision support.
-              </>
-            )}
-          </p>
-        </div>
-      </div>
-
-      {/* Main Hero Card */}
-      <div className="card" style={{ background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' }}>
-        <div style={{ maxWidth: '850px' }}>
-          <h1 style={{ fontSize: '1.65rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.025em' }}>
-            Quantum-Assisted Hematopoietic Stem Cell Recovery Prediction
+    <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1.35fr 0.85fr', gap: '2rem', alignItems: 'start' }}>
+      
+      {/* ============================================================ */}
+      {/* COLUMN 1: LEFT SHOWCASE & INTERACTIVE 3D WEBGL ORGAN         */}
+      {/* ============================================================ */}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {/* Massive Typography matching reference */}
+        <div style={{ marginBottom: '1.25rem' }}>
+          <h1 style={{
+            fontSize: '3rem',
+            fontWeight: 800,
+            lineHeight: 1.08,
+            letterSpacing: '-0.035em',
+            color: '#ffffff',
+            margin: 0
+          }}>
+            Overview<br />Conditions
           </h1>
-          <p style={{ marginTop: '0.75rem', color: '#475569', fontSize: '0.95rem', lineHeight: '1.6' }}>
-            MarrowQ investigates whether quantum-kernel support vector methods (Qiskit ML FidelityQuantumKernel with ZZFeatureMap) offer representational utility over established classical baselines (Logistic Regression, Random Forest, Classical RBF SVM) in predicting timely neutrophil engraftment (Absolute Neutrophil Count &ge; 500/&mu;L on or before Day 28) following allogeneic hematopoietic cell transplantation.
-          </p>
-
-          <div style={{ display: 'flex', gap: '0.85rem', marginTop: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            {!dataset && (
-              <button className="btn btn-primary" onClick={onLoadDemo} disabled={isLoadingDemo}>
-                <Zap size={16} />
-                {isLoadingDemo ? 'Generating Cohort...' : 'Load CIBMTR Synthetic Demo (N=500)'}
-              </button>
-            )}
-            <button className="btn btn-secondary" onClick={() => onNavigate('dataset')}>
-              Inspect Dataset & Schema <ArrowRight size={16} />
-            </button>
-            {dataset && (
-              <button className="btn btn-primary" onClick={() => onNavigate('setup')}>
-                Configure Experiment <ArrowRight size={16} />
-              </button>
-            )}
-            <a
-              href="https://colab.research.google.com/github/Nikhil-r-projects/marrowQ-quanthack-project/blob/main/notebooks/MarrowQ_Quantum_Benchmark.ipynb"
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-secondary"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', borderColor: '#f59e0b', color: '#b45309' }}
-            >
-              <Cpu size={16} /> Open in Google Colab
-            </a>
-          </div>
-
-          <div style={{ marginTop: '1.25rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.72rem', background: '#ede9fe', color: '#5b21b6', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 600 }}>
-              Prototype Type: Hybrid Quantum-Classical Application
-            </span>
-            <span style={{ fontSize: '0.72rem', background: '#e0f2fe', color: '#0369a1', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 600 }}>
-              Quantum Circuit: 2-Qubit ZZFeatureMap (Linear Entanglement)
-            </span>
-            <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#15803d', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 600 }}>
-              Simulation: Qiskit Statevector Fidelity Kernel
+          <div style={{
+            fontSize: '0.8rem',
+            color: '#94a3b8',
+            marginTop: '0.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem'
+          }}>
+            <span style={{ color: '#38bdf8', fontWeight: 600 }}>{selectedPatient.name}</span>
+            <span>•</span>
+            <span>{selectedPatient.disease.split('(')[0]}</span>
+            <span>•</span>
+            <span style={{
+              background: 'rgba(37, 99, 235, 0.2)',
+              color: '#93c5fd',
+              padding: '0.1rem 0.5rem',
+              borderRadius: '9999px',
+              fontSize: '0.72rem',
+              border: '1px solid rgba(37, 99, 235, 0.4)'
+            }}>
+              Primary Organ Target: {selectedPatient.organ_label || 'Heart'}
             </span>
           </div>
         </div>
-      </div>
 
-      {/* 3 Pillar Summary Grid */}
-      <div className="grid-3">
-        <div className="stat-box">
-          <div className="stat-label">1. Clinical Endpoint</div>
-          <div className="stat-value" style={{ fontSize: '1.25rem', marginTop: '0.4rem' }}>
-            Neutrophil Day 28
-          </div>
-          <div className="stat-sub">
-            Binary horizon benchmark: timely ANC recovery (&ge; 500/&mu;L for 3 days) vs delayed recovery (&gt; Day 28).
-          </div>
-        </div>
+        {/* 3D WebGL Hologram Stage with Three.js Interactive Viewer */}
+        <div style={{
+          position: 'relative',
+          width: '100%',
+          height: '460px',
+          borderRadius: '24px',
+          background: 'radial-gradient(circle at center, rgba(30, 41, 59, 0.25) 0%, transparent 70%)'
+        }}>
+          {/* Real 3D Interactive Three.js WebGL Model */}
+          <OrganViewer3D
+            organType={selectedOrgan}
+            activePinId={activePin}
+            onSelectPin={setActivePin}
+            primaryMetricValue={telemetry.floatValue}
+            bpm={selectedOrgan === 'heart' ? 120 : 75}
+          />
 
-        <div className="stat-box">
-          <div className="stat-label">2. Leakage Protection</div>
-          <div className="stat-value" style={{ fontSize: '1.25rem', marginTop: '0.4rem', color: '#059669' }}>
-            Zero Leakage
-          </div>
-          <div className="stat-sub">
-            Pre-transplant features only. Preprocessors, imputers, scalers, and encoders are fit strictly on training splits.
-          </div>
-        </div>
-
-        <div className="stat-box">
-          <div className="stat-label">3. Quantum Evaluation</div>
-          <div className="stat-value" style={{ fontSize: '1.25rem', marginTop: '0.4rem', color: '#6366f1' }}>
-            Fidelity Kernel
-          </div>
-          <div className="stat-sub">
-            Qiskit FidelityQuantumKernel with statevector simulator matched against Classical RBF SVM on equal dimensions.
-          </div>
-        </div>
-      </div>
-
-      {/* Visual System Architecture & Flowchart Card */}
-      <div className="card" style={{ marginTop: '1.5rem', background: '#ffffff' }}>
-        <div className="card-header">
-          <div>
-            <div className="card-title" style={{ fontSize: '1rem' }}>
-              <Activity size={18} color="#6366f1" /> End-to-End Clinical & Quantum Pipeline Flowchart
+          {/* Floating Frosted Glass Telemetry Card in Front */}
+          <div style={{
+            position: 'absolute',
+            bottom: 12,
+            left: 12,
+            background: 'rgba(25, 28, 38, 0.85)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid rgba(255, 255, 255, 0.14)',
+            borderRadius: '16px',
+            padding: '0.85rem 1.15rem',
+            boxShadow: '0 12px 30px rgba(0, 0, 0, 0.7), inset 0 1px 1px rgba(255, 255, 255, 0.2)',
+            zIndex: 15,
+            width: '190px',
+            userSelect: 'none'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.2rem' }}>
+              {telemetry.floatIcon}
+              <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>{telemetry.floatTitle}</span>
             </div>
-            <div className="card-subtitle">
-              Leakage-safe data orchestration from baseline clinical covariates to quantum-kernel statevector simulation
+            <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#ffffff', marginBottom: '0.5rem' }}>
+              {telemetry.floatValue}
             </div>
-          </div>
-          <span className="badge badge-health">
-            Live Automated Pipeline
-          </span>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginTop: '0.5rem' }}>
-          {/* Stage 1 */}
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#e0e7ff', color: '#4338ca', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>1</div>
-              <strong style={{ fontSize: '0.85rem' }}>Pre-Tx Covariates</strong>
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#475569', lineHeight: '1.5' }}>
-              Recipient age, KPS, CMV, comorbidity, donor match, graft source (PBSC/BM/Cord), and CD34+ cell dose at Day 0.
-            </div>
-            <div style={{ marginTop: '0.75rem' }}>
-              <span className="badge badge-prototype" style={{ fontSize: '0.68rem' }}>18 Features</span>
-            </div>
-          </div>
-
-          {/* Stage 2 */}
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#dcfce7', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>2</div>
-              <strong style={{ fontSize: '0.85rem' }}>Leakage Sentry & Split</strong>
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#475569', lineHeight: '1.5' }}>
-              Excludes post-tx complications (aGVHD, infection dates). Stratified 75/25 split. Imputers & scalers fit solely on train.
-            </div>
-            <div style={{ marginTop: '0.75rem' }}>
-              <span className="badge badge-research" style={{ fontSize: '0.68rem' }}>Zero Leakage</span>
-            </div>
-          </div>
-
-          {/* Stage 3 */}
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#f5f3ff', color: '#6d28d9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>3</div>
-              <strong style={{ fontSize: '0.85rem' }}>Model Comparator Suite</strong>
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#475569', lineHeight: '1.5' }}>
-              Fits Dummy, Logistic Reg (L2), Random Forest, and RBF SVM. Compresses subspace to 2-qubit ZZ Fidelity Quantum Kernel.
-            </div>
-            <div style={{ marginTop: '0.75rem' }}>
-              <span className="badge" style={{ background: '#ede9fe', color: '#5b21b6', fontSize: '0.68rem' }}>5 Models</span>
-            </div>
-          </div>
-
-          {/* Stage 4 */}
-          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#ffedd5', color: '#9a3412', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700 }}>4</div>
-              <strong style={{ fontSize: '0.85rem' }}>Evaluation & Report</strong>
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#475569', lineHeight: '1.5' }}>
-              Computes held-out accuracy, ROC-AUC, confusion matrices, quadratic runtime overhead, and exportable research reports.
-            </div>
-            <div style={{ marginTop: '0.75rem' }}>
-              <span className="badge badge-synthetic" style={{ fontSize: '0.68rem' }}>Empirical Verification</span>
-            </div>
+            {/* Live Waveform SVG */}
+            <svg width="100%" height="28" viewBox="0 0 140 28" preserveAspectRatio="none">
+              <path
+                d={selectedOrgan === 'heart'
+                  ? "M 0,14 L 30,14 L 40,4 L 50,24 L 60,8 L 70,18 L 80,14 L 140,14"
+                  : "M 0,14 Q 25,2 50,18 T 100,10 T 140,14"
+                }
+                fill="none"
+                stroke="#2563eb"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </div>
         </div>
       </div>
 
-      {/* Dataset Readiness & Latest Experiment Comparison */}
-      <div className="grid-2" style={{ marginTop: '1.5rem' }}>
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <div className="card-title">
-                <CheckCircle2 size={18} color="#059669" /> Dataset Status & Readiness
+      {/* ============================================================ */}
+      {/* COLUMN 2: CENTER CONDITION 2X2 GRID + BODY SYSTEMS CAROUSEL */}
+      {/* ============================================================ */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem' }}>
+        
+        {/* Section Title 1 */}
+        <div>
+          <div className="spatial-section-title">
+            <span className="blue-dot" />
+            <span>{telemetry.title}</span>
+          </div>
+
+          {/* 2x2 Telemetry Cards Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            
+            {/* CARD 1: Blood Status / Primary Vital */}
+            <div className="spatial-card" style={{ height: '145px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Droplet size={15} color="#94a3b8" />
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{telemetry.card1.title}</span>
               </div>
-              <div className="card-subtitle">Active cohort characteristics and validation profile</div>
-            </div>
-            <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} onClick={() => onNavigate('dataset')}>
-              Manage
-            </button>
-          </div>
-
-          {dataset ? (
-            <div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1rem' }}>
-                <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Records</div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{dataset.total_rows}</div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>
+                {telemetry.card1.value}
+              </div>
+              {/* Vertical Equalizer bars with pill */}
+              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '36px' }}>
+                  {[18, 28, 22, 34, 16, 26, 32].map((h, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        width: '3px',
+                        height: `${h}px`,
+                        borderRadius: '2px',
+                        background: idx === 3 ? '#2563eb' : 'rgba(255, 255, 255, 0.2)'
+                      }}
+                    />
+                  ))}
                 </div>
-                <div style={{ background: '#f8fafc', padding: '0.75rem', borderRadius: '6px' }}>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Covariates</div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: 700 }}>{dataset.total_columns}</div>
+                <div style={{
+                  background: 'rgba(37, 99, 235, 0.2)',
+                  border: '1px solid #2563eb',
+                  borderRadius: '9999px',
+                  padding: '0.15rem 0.55rem',
+                  fontSize: '0.7rem',
+                  color: '#93c5fd',
+                  fontWeight: 600
+                }}>
+                  {telemetry.card1.badge}
                 </div>
               </div>
-              <div style={{ fontSize: '0.85rem', color: '#334155' }}>
-                <strong>Active Target:</strong> <code>{dataset.suggested_target}</code>
+            </div>
+
+            {/* CARD 2: Heart Rate / Kinetics */}
+            <div className="spatial-card" style={{ height: '145px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Heart size={15} color="#94a3b8" />
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{telemetry.card2.title}</span>
               </div>
-              {dataset.class_distribution && (
-                <div style={{ fontSize: '0.825rem', color: '#64748b', marginTop: '0.25rem' }}>
-                  Class Balance: 0 (Delayed): {dataset.class_distribution['0'] || 0} | 1 (Prompt): {dataset.class_distribution['1'] || 0}
+              <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>
+                {telemetry.card2.value}
+              </div>
+              {/* Dynamic Waveform with Electric Blue Capsule Badge */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                <svg width="68%" height="32" viewBox="0 0 100 32" preserveAspectRatio="none">
+                  <path
+                    d="M 0,16 Q 15,2 25,24 T 50,12 T 75,20 T 100,16"
+                    fill="none"
+                    stroke="#2563eb"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+                {/* Solid Electric Blue Pill Badge matching screenshot */}
+                <div style={{
+                  background: '#2563eb',
+                  borderRadius: '12px',
+                  padding: '0.35rem 0.65rem',
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  color: '#ffffff',
+                  boxShadow: '0 4px 12px rgba(37, 99, 235, 0.5)',
+                  textAlign: 'center'
+                }}>
+                  {telemetry.card2.badge}
                 </div>
-              )}
+              </div>
             </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#64748b' }}>
-              <AlertCircle size={32} style={{ margin: '0 auto 0.5rem', opacity: 0.5 }} />
-              <p style={{ fontSize: '0.875rem' }}>No active dataset loaded in memory.</p>
-              <button className="btn btn-primary" style={{ marginTop: '0.75rem' }} onClick={onLoadDemo} disabled={isLoadingDemo}>
-                Load Synthetic Cohort
-              </button>
+
+            {/* CARD 3: Blood Count / Engraftment */}
+            <div className="spatial-card" style={{ height: '145px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <BarChart2 size={15} color="#94a3b8" />
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{telemetry.card3.title}</span>
+              </div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>
+                {telemetry.card3.value}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <svg width="70%" height="24" viewBox="0 0 100 24" preserveAspectRatio="none">
+                  <path
+                    d="M 0,12 Q 25,2 50,18 T 100,10"
+                    fill="none"
+                    stroke="rgba(255, 255, 255, 0.4)"
+                    strokeWidth="1.5"
+                  />
+                </svg>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8', background: 'rgba(255, 255, 255, 0.05)', padding: '0.15rem 0.5rem', borderRadius: '9999px' }}>
+                  {telemetry.card3.badge}
+                </span>
+              </div>
             </div>
-          )}
+
+            {/* CARD 4: Glucose Level / Viability */}
+            <div className="spatial-card" style={{ height: '145px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Zap size={15} color="#94a3b8" />
+                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{telemetry.card4.title}</span>
+              </div>
+              <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>
+                {telemetry.card4.value}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <svg width="70%" height="24" viewBox="0 0 100 24" preserveAspectRatio="none">
+                  <path
+                    d="M 0,16 Q 20,6 40,20 T 70,8 T 100,14"
+                    fill="none"
+                    stroke="rgba(255, 255, 255, 0.4)"
+                    strokeWidth="1.5"
+                  />
+                </svg>
+                <span style={{ fontSize: '0.7rem', color: '#94a3b8', background: 'rgba(255, 255, 255, 0.05)', padding: '0.15rem 0.5rem', borderRadius: '9999px' }}>
+                  {telemetry.card4.badge}
+                </span>
+              </div>
+            </div>
+
+          </div>
         </div>
 
-        {/* Latest Experiment Snapshot */}
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <div className="card-title">
-                <Award size={18} color="#6366f1" /> Latest Experiment Benchmark
-              </div>
-              <div className="card-subtitle">Classical vs Quantum comparison summary</div>
+        {/* Section Title 2: My Body Condition Carousel */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <div className="spatial-section-title" style={{ margin: 0 }}>
+              <span className="blue-dot" />
+              <span>My Body Condition</span>
             </div>
-            {latestExperiment && (
-              <button className="btn btn-secondary" style={{ padding: '0.35rem 0.75rem', fontSize: '0.8rem' }} onClick={() => onNavigate('results')}>
-                Full Results
-              </button>
-            )}
+            <div style={{ display: 'flex', gap: '0.35rem', color: '#94a3b8' }}>
+              <button style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><ChevronLeft size={16} /></button>
+              <button style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><ChevronRight size={16} /></button>
+            </div>
           </div>
 
-          {latestExperiment && latestExperiment.status === 'completed' ? (
-            <div>
-              <div style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '0.75rem' }}>
-                Run ID: <code>{latestExperiment.experiment_id}</code> | Samples: N_test = {latestExperiment.test_sample_count}
-              </div>
+          {/* 4 Organ / Cellular Cards matching screenshot */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem' }}>
+            {organItems.map(item => {
+              const isActive = selectedOrgan === item.id;
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => setSelectedOrgan(item.id as any)}
+                  style={{
+                    height: '115px',
+                    background: 'rgba(25, 28, 38, 0.65)',
+                    backdropFilter: 'blur(16px)',
+                    border: isActive ? '1.5px solid #2563eb' : '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: '16px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0.5rem',
+                    position: 'relative',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    boxShadow: isActive ? '0 0 20px rgba(37, 99, 235, 0.35)' : 'none'
+                  }}
+                >
+                  <img
+                    src={item.img}
+                    alt={item.name}
+                    style={{
+                      width: '65px',
+                      height: '65px',
+                      objectFit: 'contain',
+                      mixBlendMode: 'screen'
+                    }}
+                  />
+                  
+                  {/* Active Pill Badge matching "My Organ ↗" */}
+                  {isActive && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: 8,
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      backdropFilter: 'blur(8px)',
+                      border: '1px solid rgba(255, 255, 255, 0.2)',
+                      borderRadius: '9999px',
+                      padding: '0.15rem 0.5rem',
+                      fontSize: '0.65rem',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.2rem'
+                    }}>
+                      <span>{item.label}</span>
+                      <div style={{ width: 12, height: 12, borderRadius: '50%', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <ArrowUpRight size={8} color="#fff" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-              <div className="table-responsive">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Model</th>
-                      <th>Accuracy</th>
-                      <th>ROC-AUC</th>
-                      <th>Runtime</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(latestExperiment.metrics).map(([key, metric]) => (
-                      <tr key={key}>
-                        <td style={{ fontWeight: 600 }}>{metric.display_name}</td>
-                        <td>{(metric.accuracy * 100).toFixed(1)}%</td>
-                        <td>{metric.roc_auc != null ? metric.roc_auc.toFixed(3) : 'N/A'}</td>
-                        <td>{metric.training_time_seconds.toFixed(3)}s</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+      </div>
+
+      {/* ============================================================ */}
+      {/* COLUMN 3: RIGHT SCHEDULE & CLINICIAN APPOINTMENTS */}
+      {/* ============================================================ */}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div className="spatial-section-title">
+          <span className="blue-dot" />
+          <span>My Schedule</span>
+        </div>
+
+        <div className="spatial-card" style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          
+          {/* Next Checkup Row */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+            <div style={{
+              width: 38,
+              height: 38,
+              borderRadius: '10px',
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#94a3b8'
+            }}>
+              <Calendar size={18} />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Next Checkup</div>
+              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#ffffff' }}>Fri, 24 Mar</div>
+            </div>
+          </div>
+
+          {/* Date Selector Pill Navigator: < 20-March-26 > */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: 'rgba(255, 255, 255, 0.04)',
+            border: '1px solid rgba(255, 255, 255, 0.06)',
+            borderRadius: '9999px',
+            padding: '0.35rem 0.85rem',
+            fontSize: '0.78rem',
+            color: '#cbd5e1'
+          }}>
+            <ChevronLeft size={14} style={{ cursor: 'pointer' }} />
+            <span>20-March-26</span>
+            <ChevronRight size={14} style={{ cursor: 'pointer' }} />
+          </div>
+
+          {/* Clinician Avatars List */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+            {[
+              { name: 'Dr. Hanzer Jon', role: 'Chief Hematologist' },
+              { name: 'Dr. Steve Alex', role: 'BMT Specialist' },
+              { name: 'Dr. Johan Fraz', role: 'Transplant Oncologist' }
+            ].map((doc, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  color: '#ffffff',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                }}>
+                  {doc.name.split(' ')[1][0]}
+                </div>
+                <div style={{ fontSize: '0.82rem', fontWeight: 500, color: '#f8fafc' }}>
+                  {doc.name}
+                </div>
               </div>
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '2rem 1rem', color: '#64748b' }}>
-              <Activity size={32} style={{ margin: '0 auto 0.5rem', opacity: 0.5 }} />
-              <p style={{ fontSize: '0.875rem' }}>No experiment completed yet.</p>
-              <button
-                className="btn btn-secondary"
-                style={{ marginTop: '0.75rem' }}
-                onClick={() => onNavigate('setup')}
-                disabled={!dataset}
-              >
-                Go to Experiment Setup
-              </button>
-            </div>
-          )}
+            ))}
+          </div>
+
+          {/* Single Solid Electric Blue CTA Button */}
+          <button
+            onClick={() => onNavigate('diagnostic')}
+            className="spatial-cta-btn"
+            style={{ marginTop: '0.5rem' }}
+          >
+            <span>Consult Now</span>
+            <ArrowRight size={15} />
+          </button>
+
         </div>
       </div>
+
     </div>
   );
 };

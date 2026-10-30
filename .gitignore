@@ -16,6 +16,5 @@ backend/app/artifacts/
 artifacts/
 .pytest_cache/
 **/.pytest_cache/
-
-
 .vercel
+.playwright-mcp/

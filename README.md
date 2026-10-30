@@ -1,27 +1,27 @@
-# MarrowQ — Quantum-Assisted HSCT Recovery Prediction
+# marrowQ 2.0 — Quantum-Assisted HSCT Recovery Prediction & Clinical Intelligence Platform
 
 <div align="center">
 
 ```
-  __  __                                  ____  
- |  \/  | __ _ _ __ _ __ _____      __   / __ \ 
- | |\/| |/ _` | '__| '__/ _ \ \ /\ / /  / / _` |
- | |  | | (_| | |  | | | (_) \ V  V /  | | (_| |
- |_|  |_|\__,_|_|  |_|  \___/ \_/\_/    \ \__,_|
-                                         \____/ 
+  __  __                                  ____    ____    ___  
+ |  \/  | __ _ _ __ _ __ _____      __   / __ \  |___ \  / _ \ 
+ | |\/| |/ _` | '__| '__/ _ \ \ /\ / /  / / _` |   __) || | | |
+ | |  | | (_| | |  | | | (_) \ V  V /  | | (_| |  / __/ | |_| |
+ |_|  |_|\__,_|_|  |_|  \___/ \_/\_/    \ \__,_| |_____(_)___/ 
+                                         \____/                
 ```
 
-**Research-Grounded Clinical Machine Learning & Quantum Computing Platform**  
-*Evaluating Quantum-Kernel Support Vector Machines against Classical Baselines for Hematopoietic Stem Cell Transplant Recovery*
+**Quantum-Assisted Bone Marrow Transplant Recovery Prediction & Clinical Intelligence Platform**  
+*Integrated IBM Quantum Hardware (`qiskit-ibm-runtime`), 8 Bounded Clinical Intelligence Agents, Longitudinal Trajectory Forecasting & Role-Based Decision Support*
 
 [![Live Deployment](https://img.shields.io/badge/Vercel-Live%20Demo-black?style=for-the-badge&logo=vercel&logoColor=white)](https://marrowq.vercel.app)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nikhil-r-projects/marrowQ-quanthack-project/blob/main/notebooks/MarrowQ_Quantum_Benchmark.ipynb)
-[![Prototype Type](https://img.shields.io/badge/Prototype_Type-Hybrid_Quantum--Classical_Application-7c3aed?style=for-the-badge)]()
-[![Pytest Suite](https://img.shields.io/badge/pytest-11%2F11%20passed-10b981?style=for-the-badge&logo=pytest&logoColor=white)]()
+[![IBM Quantum Runtime](https://img.shields.io/badge/IBM_Quantum-Runtime_v0.51.0-0062ff?style=for-the-badge&logo=ibm&logoColor=white)]()
+[![Pytest Suite](https://img.shields.io/badge/pytest-17%20passed-10b981?style=for-the-badge&logo=pytest&logoColor=white)]()
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.143-059669?style=for-the-badge&logo=fastapi&logoColor=white)]()
 [![React 19](https://img.shields.io/badge/React-19.0-6366f1?style=for-the-badge&logo=react&logoColor=white)]()
 [![Qiskit](https://img.shields.io/badge/Qiskit-2.5.2-7c3aed?style=for-the-badge&logo=qiskit&logoColor=white)]()
-[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)]()
+[![Design System](https://img.shields.io/badge/Stitch_MCP-Quantum_Clinical_Precision-0ea5e9?style=for-the-badge)]()
 
 **🌐 Live Web Application:** [https://marrowq.vercel.app](https://marrowq.vercel.app)  
 **📓 1-Click Google Colab Notebook:** [MarrowQ_Quantum_Benchmark.ipynb](https://colab.research.google.com/github/Nikhil-r-projects/marrowQ-quanthack-project/blob/main/notebooks/MarrowQ_Quantum_Benchmark.ipynb)  

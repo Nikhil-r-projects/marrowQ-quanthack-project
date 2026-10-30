@@ -226,4 +226,100 @@ def test_quantum_simulation_api():
     assert "comparison" in data
     assert 0.0 <= data["comparison"]["quantum_fidelity"] <= 1.0
 
+# =========================================================================
+# MARROWQ 2.0 TESTS
+# =========================================================================
+
+def test_patients_and_observations_api():
+    res = client.get("/api/patients")
+    assert res.status_code == 200
+    patients = res.json()
+    assert len(patients) >= 3
+    assert any(p["patient_id"] == "PT-9042-BMT" for p in patients)
+
+    # Single patient
+    res_single = client.get("/api/patients/PT-9042-BMT")
+    assert res_single.status_code == 200
+    data = res_single.json()
+    assert data["name"] == "Eleanora Vance"
+    assert data["transplant_type"] == "Allogeneic HSCT"
+
+    # Observations
+    res_obs = client.get("/api/patients/PT-9042-BMT/observations")
+    assert res_obs.status_code == 200
+    obs = res_obs.json()
+    assert len(obs) >= 7
+
+def test_patient_progress_and_trajectory():
+    res = client.get("/api/patients/PT-9042-BMT/progress")
+    assert res.status_code == 200
+    data = res.json()
+    assert "timeline_series" in data
+    assert len(data["timeline_series"]) > 40
+    assert "milestones" in data
+    assert any("Neutrophil" in m["name"] for m in data["milestones"])
+    assert "clinical_summary" in data
+
+    # Check 95% confidence bounds
+    point = data["timeline_series"][20]
+    assert point["anc_lower_95"] <= point["anc_predicted"] <= point["anc_upper_95"]
+    assert point["plt_lower_95"] <= point["plt_predicted"] <= point["plt_upper_95"]
+
+def test_add_observation():
+    payload = {
+        "patient_id": "PT-9042-BMT",
+        "day_post_tx": 15,
+        "recorded_date": "2026-10-29",
+        "metric_type": "Absolute Neutrophil Count (ANC)",
+        "value": 520.0,
+        "unit": "cells/μL"
+    }
+    res = client.post("/api/patients/PT-9042-BMT/observations", json=payload)
+    assert res.status_code == 200
+    assert res.json()["status"] == "SUCCESS"
+
+def test_quantum_backends_and_status():
+    res_status = client.get("/api/quantum/status")
+    assert res_status.status_code == 200
+    status_data = res_status.json()
+    assert status_data["has_ibm_runtime_installed"] is True
+    assert "aer_simulator_statevector" in status_data["default_backend"]
+
+    res_backends = client.get("/api/quantum/backends")
+    assert res_backends.status_code == 200
+    backends = res_backends.json()
+    assert len(backends) >= 4
+    assert any(b["backend_name"] == "ibm_brisbane" for b in backends)
+    assert any(b["backend_name"] == "aer_simulator_statevector" for b in backends)
+
+def test_multi_agent_orchestrator():
+    payload = {
+        "patient_id": "PT-9042-BMT",
+        "current_labs": {"anc": 420.0, "platelets": 18500.0},
+        "quantum_backend": "aer_simulator_statevector",
+        "execution_mode": "auto_fallback"
+    }
+    res = client.post("/api/agents/orchestrate", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "COMPLETED"
+    assert "models_comparison" in data
+    assert "quantum_kernel_svm" in data["models_comparison"]
+    assert "agent_trail" in data
+    assert len(data["agent_trail"]) == 8 # All 8 specialized agents
+    assert "reports" in data
+    assert "physician_technical_report" in data["reports"]
+    assert "patient_friendly_summary" in data["reports"]
+
+def test_hospital_operational_overview():
+    res = client.get("/api/hospital/overview")
+    assert res.status_code == 200
+    data = res.json()
+    assert "cohort_summary" in data
+    assert data["cohort_summary"]["total_active_patients"] >= 3
+    assert "quantum_service_health" in data
+    assert "service_health" in data
+    assert data["service_health"]["orchestrator_agents_active"] == 8
+
+
 

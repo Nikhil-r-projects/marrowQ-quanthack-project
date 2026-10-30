@@ -103,3 +103,194 @@ export interface SystemHealth {
     numpy: string;
   };
 }
+
+// ==========================================
+// MARROWQ 2.0 ADVANCED TYPES
+// ==========================================
+
+export type UserRole = 'doctor' | 'researcher' | 'patient' | 'hospital_admin';
+
+export interface Patient {
+  patient_id: string;
+  name: string;
+  age: number;
+  gender: string;
+  disease: string;
+  transplant_type: string;
+  donor_type: string;
+  transplant_date: string;
+  conditioning: string;
+  cell_dose_cd34?: number;
+  chimerism_donor_pct?: number;
+  cmv_status?: string;
+  hla_match?: string;
+  status: string;
+  created_at: string;
+  primary_organ_type?: 'heart' | 'marrow' | 'liver' | 'stem';
+  organ_label?: string;
+  organ_diagnosis?: string;
+}
+
+export interface ClinicalObservation {
+  id: number;
+  patient_id: string;
+  day_post_tx: number;
+  recorded_date: string;
+  metric_type: string;
+  value: number;
+  unit: string;
+  source: string;
+  recorded_by?: string;
+  status: string;
+}
+
+export interface TrajectoryPoint {
+  day: number;
+  is_observed: boolean;
+  anc_observed?: number;
+  anc_predicted: number;
+  anc_lower_95: number;
+  anc_upper_95: number;
+  plt_observed?: number;
+  plt_predicted: number;
+  plt_lower_95: number;
+  plt_upper_95: number;
+  hb_observed?: number;
+  wbc_observed?: number;
+}
+
+export interface Milestone {
+  id: string;
+  name: string;
+  target_day: number;
+  status: 'COMPLETED' | 'PROJECTED' | 'PENDING' | 'DELAYED';
+  actual_date?: string;
+  actual_day?: number;
+  projected_day?: number;
+  forecast_interval?: string;
+  notes?: string;
+}
+
+export interface PatientProgress {
+  patient_id: string;
+  patient_name: string;
+  transplant_date: string;
+  latest_observed_day: number;
+  expected_anc_engraft_day: number;
+  expected_plt_engraft_day: number;
+  is_anc_engrafted: boolean;
+  is_plt_engrafted: boolean;
+  timeline_series: TrajectoryPoint[];
+  milestones: Milestone[];
+  clinical_summary: {
+    current_anc: number | string;
+    current_plt: number | string;
+    current_hb: number | string;
+    current_wbc: number | string;
+    velocity: string;
+    status_description: string;
+  };
+}
+
+export interface QuantumBackend {
+  backend_name: string;
+  backend_type: string;
+  qubits: number;
+  status: 'ONLINE' | 'OFFLINE' | 'MAINTENANCE';
+  is_hardware: boolean;
+  avg_queue_depth: number;
+  description: string;
+  basis_gates: string[];
+  avg_t1_us?: number;
+  avg_t2_us?: number;
+  two_qubit_error_rate: number;
+}
+
+export interface QuantumStatus {
+  has_ibm_runtime_installed: boolean;
+  has_token_configured: boolean;
+  token_masked: string;
+  is_connected_to_hardware: boolean;
+  default_backend: string;
+  environment_instructions: string;
+  execution_modes_supported: string[];
+}
+
+export interface QuantumJob {
+  job_id: string;
+  backend_name: string;
+  backend_type: string;
+  execution_mode: string;
+  status: string;
+  shots: number;
+  circuit_depth?: number;
+  circuit_width?: number;
+  submitted_at: string;
+  completed_at?: string;
+  execution_duration_ms?: number;
+  kernel_evaluation_duration_ms?: number;
+  error_message?: string;
+  result_provenance: string;
+}
+
+export interface AgentTrailItem {
+  agent_id: string;
+  task_id: string;
+  status: 'SUCCESS' | 'WARNING' | 'FAILED';
+  output_data: Record<string, any>;
+  warnings: string[];
+  errors: string[];
+  confidence?: number;
+  timestamp: string;
+}
+
+export interface OrchestrationResult {
+  task_id: string;
+  prediction_id: string;
+  patient_id: string;
+  status: string;
+  duration_ms: number;
+  validation_status: string;
+  disagreement_detected: boolean;
+  models_comparison: {
+    logistic_regression: any;
+    random_forest: any;
+    classical_rbf_svm: any;
+    quantum_kernel_svm: any;
+  };
+  evidence: Array<{
+    factor: string;
+    observation: string;
+    clinical_impact: string;
+    reference_registry: string;
+  }>;
+  trajectory_summary?: any;
+  reports: {
+    physician_technical_report: string;
+    patient_friendly_summary: string;
+    generated_at: string;
+  };
+  agent_trail: AgentTrailItem[];
+}
+
+export interface HospitalOverview {
+  cohort_summary: {
+    total_active_patients: number;
+    impending_engraftments: number;
+    pending_clinician_reviews: number;
+    allogeneic_count: number;
+    autologous_count: number;
+  };
+  quantum_service_health: {
+    active_backends_online: number;
+    total_quantum_jobs_executed: number;
+    default_backend: string;
+    hardware_readiness: string;
+  };
+  service_health: {
+    api_status: string;
+    database: string;
+    orchestrator_agents_active: number;
+    uptime_pct: number;
+  };
+}

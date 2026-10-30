@@ -110,3 +110,43 @@ class QuantumSimulationResponse(BaseModel):
     state_a: Dict[str, Any]
     state_b: Optional[Dict[str, Any]] = None
     comparison: Optional[Dict[str, Any]] = None
+
+class PatientResponse(BaseModel):
+    patient_id: str
+    name: str
+    age: int
+    gender: str
+    disease: str
+    transplant_type: str
+    donor_type: str
+    transplant_date: str
+    conditioning: str
+    cell_dose_cd34: Optional[float] = None
+    chimerism_donor_pct: Optional[float] = None
+    cmv_status: Optional[str] = None
+    hla_match: Optional[str] = None
+    status: str
+    created_at: str
+
+class ObservationCreateRequest(BaseModel):
+    patient_id: str
+    day_post_tx: int
+    recorded_date: str
+    metric_type: str
+    value: float
+    unit: str
+    source: Optional[str] = "EMR Central Lab"
+    recorded_by: Optional[str] = "Clinical Staff"
+
+class AgentOrchestrateRequest(BaseModel):
+    patient_id: str
+    current_labs: Optional[Dict[str, float]] = None
+    quantum_backend: Optional[str] = "aer_simulator_statevector"
+    execution_mode: Optional[str] = "auto_fallback" # "simulator", "hardware", "auto_fallback"
+
+class QuantumJobSubmitRequest(BaseModel):
+    backend_name: str = "aer_simulator_statevector"
+    execution_mode: str = "auto_fallback" # "simulator", "hardware_only", "auto_fallback"
+    shots: int = 8192
+    sample_values: Optional[List[float]] = None
+
