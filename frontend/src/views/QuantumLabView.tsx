@@ -146,7 +146,7 @@ export const QuantumLabView: React.FC = () => {
   const isHardwareSelected = selectedBackendMeta.is_hardware || executionMode === 'hardware';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem', maxWidth: '1360px', margin: '0 auto', color: '#e2e8f0' }}>
+    <div className="quantum-lab-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem', maxWidth: '1360px', margin: '0 auto', color: '#e2e8f0' }}>
       
       {/* 1. Header Card with Live IBM Quantum Service Telemetry */}
       <div className="spatial-card" style={{ padding: '1.75rem 2rem' }}>
@@ -251,13 +251,13 @@ export const QuantumLabView: React.FC = () => {
 
         <div className="spatial-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Feature Reduction & Encoding</span>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>63 → 20 Clinical Features</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>210 → {nFeatures} Clinical Features</div>
           <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>SelectKBest (f_classif) • Zero Leakage</span>
         </div>
 
         <div className="spatial-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
           <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Circuit Width & Depth</span>
-          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>20 Qubits • Depth 6</div>
+          <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#ffffff' }}>{nFeatures} Qubits • Depth 6</div>
           <span style={{ fontSize: '0.75rem', color: '#10b981' }}>Heavy-Hex Transpiled (PassManager)</span>
         </div>
 
@@ -280,7 +280,7 @@ export const QuantumLabView: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
               <div className="spatial-section-title" style={{ margin: 0 }}>
                 <span className="blue-dot" />
-                <span>50+ Clinical Features → 20 Qubit Quantum Experiment</span>
+                <span>210 Pre-Transplant Features → {nFeatures} Qubit Quantum Experiment</span>
               </div>
               <span style={{
                 fontSize: '0.72rem',
@@ -295,7 +295,7 @@ export const QuantumLabView: React.FC = () => {
               </span>
             </div>
             <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: 0, lineHeight: 1.5 }}>
-              Extracts 63 strictly pre-transplant clinical features from the CIBMTR HSCT dataset, optimizes to the Top 20 predictive features on training data, maps to 20 quantum statevector registers, and executes the fidelity kernel on target hardware.
+              Extracts 210 strictly pre-transplant clinical features across 8 physiological domains from the CIBMTR HSCT dataset, optimizes to the Top {nFeatures} predictive features on training data with zero leakage, maps 1-to-1 to {nFeatures} physical qubits, and executes the fidelity kernel on target IBM Heron hardware.
             </p>
           </div>
 
