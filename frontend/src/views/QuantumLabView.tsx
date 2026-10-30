@@ -29,47 +29,21 @@ export const QuantumLabView: React.FC = () => {
   const [connTestResult, setConnTestResult] = useState<any>(null);
 
   // Hardware Confirmation Modal
-    const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
-
-  // Live Laptop GPU Acceleration State (NVIDIA RTX 3050)
-  const [gpuStatus, setGpuStatus] = useState<any>(null);
-  const [gpuSimResult, setGpuSimResult] = useState<any>(null);
-  const [runningGpuSim, setRunningGpuSim] = useState<boolean>(false);
-  const [gpuQubits, setGpuQubits] = useState<number>(16);
-
-  const handleRunGpuSim = async () => {
-    setRunningGpuSim(true);
-    try {
-      const res = await fetch('/api/compute/gpu-simulate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ n_qubits: gpuQubits, n_patients: 25 })
-      }).then(r => r.json());
-      setGpuSimResult(res);
-    } catch (err: any) {
-      console.error("GPU simulation error:", err);
-    } finally {
-      setRunningGpuSim(false);
-    }
-  };
+  const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
 
   const loadData = async () => {
     try {
-      const [bList, statusData, jobList, latestExp, gpuData] = await Promise.all([
+      const [bList, statusData, jobList, latestExp] = await Promise.all([
         fetchQuantumBackends(),
         fetchQuantumStatus(),
         fetchQuantumJobs(),
-        fetchLatestQuantumExperiment(),
-        fetch('/api/compute/gpu-status').then(r => r.json()).catch(() => null)
+        fetchLatestQuantumExperiment()
       ]);
       setBackends(bList);
       setQStatus(statusData);
       setJobs(jobList);
       if (latestExp) {
         setLatestExperiment(latestExp);
-      }
-      if (gpuData) {
-        setGpuStatus(gpuData);
       }
       
       // Select first operational hardware backend if available
@@ -262,159 +236,6 @@ export const QuantumLabView: React.FC = () => {
             </button>
           </div>
         </div>
-      </div>
-
-      {/* 1B. Live NVIDIA RTX 3050 Laptop GPU Quantum Accelerator */}
-      <div className="spatial-card" style={{ padding: '1.75rem 2rem', background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(11, 15, 23, 0.95) 100%)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{
-              width: 42,
-              height: 42,
-              borderRadius: '10px',
-              background: 'rgba(16, 185, 129, 0.15)',
-              border: '1px solid rgba(16, 185, 129, 0.4)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#34d399'
-            }}>
-              <Zap size={22} />
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#ffffff', margin: 0 }}>
-                  {gpuStatus?.gpu_name || 'NVIDIA GeForce RTX 3050 6GB Laptop GPU'}
-                </h3>
-                <span style={{
-                  fontSize: '0.72rem',
-                  padding: '0.2rem 0.6rem',
-                  borderRadius: '9999px',
-                  background: 'rgba(16, 185, 129, 0.2)',
-                  color: '#34d399',
-                  border: '1px solid rgba(16, 185, 129, 0.4)',
-                  fontWeight: 600
-                }}>
-                  CUDA ACCELERATION ACTIVE
-                </span>
-              </div>
-              <div style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
-                Local Hardware • 6,144 MB GDDR6 VRAM • Max Theoretical Capacity: {gpuStatus?.max_statevector_qubits || 28} Qubits ({Math.pow(2, gpuStatus?.max_statevector_qubits || 28).toLocaleString()} amplitudes)
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(0,0,0,0.3)', padding: '0.4rem 0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)' }}>
-              <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>Qubit Scale:</span>
-              <select
-                value={gpuQubits}
-                onChange={(e) => setGpuQubits(Number(e.target.value))}
-                style={{ background: 'transparent', border: 'none', color: '#34d399', fontWeight: 700, fontSize: '0.88rem', outline: 'none', cursor: 'pointer' }}
-              >
-                {[4, 8, 12, 16, 20, 22, 24].map(q => (
-                  <option key={q} value={q} style={{ background: '#0f172a', color: '#fff' }}>
-                    {q} Qubits ({Math.pow(2, q).toLocaleString()} amplitudes)
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              onClick={handleRunGpuSim}
-              disabled={runningGpuSim}
-              style={{
-                background: runningGpuSim ? 'rgba(16, 185, 129, 0.4)' : '#059669',
-                color: '#ffffff',
-                border: 'none',
-                padding: '0.65rem 1.35rem',
-                borderRadius: '8px',
-                fontWeight: 600,
-                fontSize: '0.88rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                cursor: runningGpuSim ? 'wait' : 'pointer',
-                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)'
-              }}
-            >
-              <Zap size={16} />
-              <span>{runningGpuSim ? 'Simulating on RTX 3050...' : `Run ${gpuQubits}-Qubit GPU Simulation`}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Live Simulation Output Visualization */}
-        {gpuSimResult && (
-          <div style={{ marginTop: '1rem', padding: '1.25rem', background: 'rgba(0,0,0,0.4)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.25rem' }}>
-              <div>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase' }}>Statevector Size</span>
-                <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#34d399' }}>{gpuSimResult.n_amplitudes?.toLocaleString()} Amplitudes</div>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{gpuSimResult.vram_allocated_mb} MB VRAM Allocated</span>
-              </div>
-              <div>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase' }}>GPU Execution Time</span>
-                <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#38bdf8' }}>{gpuSimResult.total_elapsed_ms} ms</div>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Kernel Matrix: {gpuSimResult.kernel_time_ms} ms</span>
-              </div>
-              <div>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase' }}>Free GPU VRAM</span>
-                <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#ffffff' }}>{gpuSimResult.vram_free_mb} MB</div>
-                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>of {gpuSimResult.vram_total_mb} MB GDDR6</span>
-              </div>
-              <div>
-                <span style={{ fontSize: '0.72rem', color: '#94a3b8', textTransform: 'uppercase' }}>Hilbert Space Norm</span>
-                <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#a78bfa' }}>{gpuSimResult.state_norm}</div>
-                <span style={{ fontSize: '0.75rem', color: '#10b981' }}>Exact Unitary Preservation</span>
-              </div>
-            </div>
-
-            {/* Visual Probability Amplitudes Bar Chart */}
-            <div style={{ marginBottom: '1rem' }}>
-              <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.5rem', fontWeight: 600 }}>
-                Quantum Statevector Probability Distribution |⟨k|ψ⟩|² (First 16 Basis States on RTX 3050):
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(16, 1fr)', gap: '4px', height: '65px', alignItems: 'flex-end', background: 'rgba(255,255,255,0.02)', padding: '6px', borderRadius: '8px' }}>
-                {gpuSimResult.basis_state_probabilities?.map((p: number, i: number) => {
-                  const heightPct = Math.max(8, Math.min(100, (p / (1.0 / 16)) * 45));
-                  return (
-                    <div key={i} title={`Basis |${i.toString(2).padStart(4, '0')}⟩: prob ${p.toFixed(6)}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
-                      <div style={{ width: '100%', height: `${heightPct}%`, background: 'linear-gradient(180deg, #34d399 0%, #059669 100%)', borderRadius: '3px 3px 0 0', transition: 'height 0.3s ease' }} />
-                      <span style={{ fontSize: '0.62rem', color: '#64748b', marginTop: '2px', fontFamily: 'monospace' }}>|{i}⟩</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Visual Gram Matrix 10x10 Heatmap */}
-            <div>
-              <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: '0.5rem', fontWeight: 600 }}>
-                Quantum Fidelity Kernel Heatmap K(x_i, x_j) (10×10 Patient Submatrix Evaluated on CUDA Tensor Cores):
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: '3px', maxWidth: '320px' }}>
-                {gpuSimResult.gram_matrix_sample?.flatMap((row: number[], rIdx: number) =>
-                  row.map((val: number, cIdx: number) => {
-                    const alpha = Math.max(0.1, val);
-                    return (
-                      <div
-                        key={`${rIdx}-${cIdx}`}
-                        title={`Patient ${rIdx} vs Patient ${cIdx}: Fidelity = ${val.toFixed(4)}`}
-                        style={{
-                          aspectRatio: '1',
-                          background: `rgba(16, 185, 129, ${alpha})`,
-                          borderRadius: '2px',
-                          border: rIdx === cIdx ? '1px solid #34d399' : 'none'
-                        }}
-                      />
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 2. Primary Telemetry KPI Bar */}
