@@ -29,13 +29,12 @@ from app.core.database import (
     save_experiment_record, get_experiment_record, list_experiments
 )
 from app.core.reporter import generate_markdown_report
+from app.core.settings import get_settings
 
 router = APIRouter(prefix="/api")
 
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-ARTIFACTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "artifacts")
-os.makedirs(DATA_DIR, exist_ok=True)
-os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+DATA_DIR = str(get_settings().data_dir)
+ARTIFACTS_DIR = str(get_settings().artifacts_dir)
 
 # In-memory datasets cache for quick lookup
 _DATASET_CACHE: Dict[str, pd.DataFrame] = {}
