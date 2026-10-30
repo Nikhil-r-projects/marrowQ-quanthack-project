@@ -153,9 +153,9 @@ class QuantumJobSubmitRequest(BaseModel):
 class QuantumExperimentRunRequest(BaseModel):
     backend_name: str = Field(default="ibm_fez", description="Target QPU backend name or local simulator")
     execution_mode: str = Field(default="simulator", description="'hardware' for physical IBM QPU or 'simulator' for local statevector")
-    n_features: int = Field(default=20, ge=4, le=30, description="Features selected from pre-transplant pool")
+    n_features: int = Field(default=156, ge=4, le=156, description="Features selected from pre-transplant pool (mapped to physical qubits)")
     shots: int = Field(default=1000, ge=100, le=8192, description="Measurement shots")
     max_hardware_samples: int = Field(default=8, ge=2, le=20, description="Upper bound on samples for hardware execution")
-    dataset_id: Optional[str] = Field(default="cibmtr_hsct_50features", description="Source dataset")
+    dataset_id: Optional[str] = Field(default="cibmtr_hsct_200features", description="Source dataset")
     confirm_hardware: Optional[bool] = Field(default=False, description="Explicit user confirmation for real quantum hardware execution")
 

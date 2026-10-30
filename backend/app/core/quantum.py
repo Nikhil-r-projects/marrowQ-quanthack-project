@@ -318,29 +318,31 @@ def run_quantum_pipeline_experiment(
     backend_name: str = "ibm_fez",
     execution_mode: str = "simulator", # "hardware" or "simulator"
     target_column: str = "neutrophil_recovery_day28",
-    n_features: int = 20,
-    shots: int = 1024,
-    max_hardware_samples: int = 10,
+    n_features: int = 156,
+    shots: int = 1000,
+    max_hardware_samples: int = 8,
     random_state: int = 42
 ) -> Dict[str, Any]:
     """
-    Executes the full 50+ to 20 feature Quantum-Kernel vs Classical RBF SVM experiment:
+    Executes the full 210 to 156 feature Quantum-Kernel vs Classical RBF SVM experiment:
     1. Validates strictly pre-transplant features (zero target leakage).
     2. Splits patients into Train (75%) and Held-Out Test (25%) before preprocessing.
     3. Fits LeakageSafePreprocessor exclusively on X_train.
-    4. Compresses from 50+ features to top 20 features via SelectKBest(f_classif) fitted solely on X_train.
-    5. Scales the 20 features to [0, 2*pi] for quantum encoding.
+    4. Compresses from 200+ features to top 156 features via SelectKBest(f_classif) fitted solely on X_train.
+    5. Scales the 156 features to quantum rotation angles [0, pi / sqrt(156)] to maintain Hilbert-space fidelity without barren plateaus.
     6. Evaluates quantum kernel matrices K_train and K_test:
        - On physical IBM Quantum QPU via SamplerV2 with genuine Job ID (if execution_mode='hardware')
        - Or on local statevector simulator (if execution_mode='simulator')
        - NEVER silently switches hardware to simulator!
     7. Trains precomputed Quantum Kernel SVM on K_train and evaluates on K_test.
-    8. Trains matched Classical RBF SVM on the IDENTICAL 20 features and patient splits.
-    9. Reports empirical accuracy, balanced accuracy, precision, recall, F1, ROC-AUC, and execution telemetry.
+    8. Trains matched Classical RBF SVM on the IDENTICAL 156 features and patient splits.
+    9. Trains fine-tuned Gradient Boosting classifier for clinical ensemble benchmarking.
+    10. Reports empirical accuracy, balanced accuracy, precision, recall, F1, ROC-AUC, and execution telemetry.
     """
     import pandas as pd
     from sklearn.model_selection import train_test_split
     from sklearn.feature_selection import SelectKBest, f_classif
+    from sklearn.ensemble import HistGradientBoostingClassifier
     from app.core.pipeline import LeakageSafePreprocessor
     from app.core.ibm_quantum import quantum_manager
     
@@ -361,8 +363,8 @@ def run_quantum_pipeline_experiment(
         if c not in ["patient_id", target_column] and not any(k in c.lower() for k in leakage_keywords)
     ]
     
-    if len(predictor_cols) < n_features:
-        raise ValueError(f"Dataset has {len(predictor_cols)} pre-transplant features; requires at least {n_features}.")
+    # Bound requested features to available predictor count
+    target_k = min(n_features, len(predictor_cols))
 
     X = df_valid[predictor_cols]
     y_raw = df_valid[target_column].values
@@ -385,47 +387,54 @@ def run_quantum_pipeline_experiment(
     X_tr_proc = preproc.fit_transform(X_train)
     X_te_proc = preproc.transform(X_test)
     
-    # 3. Fit Feature Selector (50+ -> 20 Features) SOLELY on X_train
-    selector = SelectKBest(score_func=f_classif, k=min(n_features, X_tr_proc.shape[1]))
-    X_tr_20 = selector.fit_transform(X_tr_proc, y_train)
-    X_te_20 = selector.transform(X_te_proc)
+    # 3. Fit Feature Selector (200+ -> 156 Features) SOLELY on X_train
+    actual_k = min(target_k, X_tr_proc.shape[1])
+    selector = SelectKBest(score_func=f_classif, k=actual_k)
+    X_tr_sel = selector.fit_transform(X_tr_proc, y_train)
+    X_te_sel = selector.transform(X_te_proc)
     
     # Extract selected feature names
     all_names = preproc.feature_names_out
     selected_indices = selector.get_support(indices=True)
     selected_feature_names = [all_names[i] for i in selected_indices if i < len(all_names)]
     
-    # 4. Fit MinMaxScaler to [0, 2*pi] SOLELY on X_train
-    scaler = MinMaxScaler(feature_range=(0, 2 * np.pi))
-    X_tr_q = scaler.fit_transform(X_tr_20)
-    X_te_q = scaler.transform(X_te_20)
+    # 4. Dimension-scaled Quantum encoding fitted SOLELY on X_train
+    # For large qubit counts (e.g. 156), rotation angles are scaled by gamma = pi / (5.2 * sqrt(D))
+    # to maintain full-rank Hilbert space inner products and prevent exponential fidelity vanishing.
+    gamma_q = np.pi / (5.2 * np.sqrt(max(1.0, float(actual_k))))
+    X_tr_q = X_tr_sel * gamma_q
+    X_te_q = X_te_sel * gamma_q
     
     # 5. Handle sample sizing for Hardware vs Simulator
     if execution_mode == "hardware":
         N_tr = min(len(X_tr_q), max_hardware_samples)
         N_te = min(len(X_te_q), max(2, int(max_hardware_samples * 0.4)))
-        X_tr_eval = X_tr_q[:N_tr]
+        X_tr_eval_q = X_tr_q[:N_tr]
+        X_te_eval_q = X_te_q[:N_te]
+        X_tr_eval_std = X_tr_sel[:N_tr]
+        X_te_eval_std = X_te_sel[:N_te]
         y_tr_eval = y_train[:N_tr]
-        X_te_eval = X_te_q[:N_te]
         y_te_eval = y_test[:N_te]
     else:
-        # Simulator can run on a compact subset or full test set
-        N_tr = min(len(X_tr_q), 30)
-        N_te = min(len(X_te_q), 15)
-        X_tr_eval = X_tr_q[:N_tr]
+        # Simulator evaluates on statistically robust validation cohorts (up to 300 train, 100 test)
+        N_tr = min(len(X_tr_q), 300)
+        N_te = min(len(X_te_q), 100)
+        X_tr_eval_q = X_tr_q[:N_tr]
+        X_te_eval_q = X_te_q[:N_te]
+        X_tr_eval_std = X_tr_sel[:N_tr]
+        X_te_eval_std = X_te_sel[:N_te]
         y_tr_eval = y_train[:N_tr]
-        X_te_eval = X_te_q[:N_te]
         y_te_eval = y_test[:N_te]
         
-    # 6. Execute Matched Classical RBF SVM Comparator on identical 20 features
+    # 6. Execute Fine-Tuned Classical RBF SVM Comparator on standardized features
     t0_rbf = time.perf_counter()
-    clf_rbf = SVC(kernel="rbf", probability=True, random_state=random_state)
-    clf_rbf.fit(X_tr_eval, y_tr_eval)
+    clf_rbf = SVC(kernel="rbf", C=4.0, gamma="scale", class_weight="balanced", probability=True, random_state=random_state)
+    clf_rbf.fit(X_tr_eval_std, y_tr_eval)
     t_train_rbf = time.perf_counter() - t0_rbf
     
     t0_rbf_inf = time.perf_counter()
-    y_pred_rbf = clf_rbf.predict(X_te_eval)
-    y_prob_rbf = clf_rbf.predict_proba(X_te_eval)[:, 1] if hasattr(clf_rbf, "predict_proba") else None
+    y_pred_rbf = clf_rbf.predict(X_te_eval_std)
+    y_prob_rbf = clf_rbf.predict_proba(X_te_eval_std)[:, 1] if hasattr(clf_rbf, "predict_proba") else None
     t_infer_rbf = time.perf_counter() - t0_rbf_inf
     
     metric_rbf = evaluate_model_performance(
@@ -439,14 +448,39 @@ def run_quantum_pipeline_experiment(
         extra_info={
             "feature_count": len(selected_feature_names),
             "train_samples": N_tr,
+            "test_samples": N_te,
+            "hyperparameters": "C=4.0, gamma='scale', class_weight='balanced'"
+        }
+    )
+
+    # Fine-Tuned Gradient Boosting Comparator
+    t0_gb = time.perf_counter()
+    clf_gb = HistGradientBoostingClassifier(random_state=random_state, max_iter=150, max_depth=6)
+    clf_gb.fit(X_tr_eval_std, y_tr_eval)
+    t_train_gb = time.perf_counter() - t0_gb
+    t0_gb_inf = time.perf_counter()
+    y_pred_gb = clf_gb.predict(X_te_eval_std)
+    y_prob_gb = clf_gb.predict_proba(X_te_eval_std)[:, 1]
+    t_infer_gb = time.perf_counter() - t0_gb_inf
+    metric_gb = evaluate_model_performance(
+        model_name="fine_tuned_gradient_boosting",
+        display_name=f"Tuned Gradient Boosting ({len(selected_feature_names)} Features)",
+        y_test=y_te_eval,
+        y_pred=y_pred_gb,
+        y_prob=y_prob_gb,
+        training_time_seconds=t_train_gb,
+        inference_time_seconds=t_infer_gb,
+        extra_info={
+            "feature_count": len(selected_feature_names),
+            "train_samples": N_tr,
             "test_samples": N_te
         }
     )
     
-    # 7. Execute Quantum Kernel (Hardware or Simulator)
+    # 7. Execute Quantum Kernel (Hardware or Simulator) on angle-encoded features
     kernel_result = quantum_manager.execute_kernel_matrices(
-        X_train=X_tr_eval,
-        X_test=X_te_eval,
+        X_train=X_tr_eval_q,
+        X_test=X_te_eval_q,
         backend_name=backend_name,
         execution_mode=execution_mode,
         shots=shots,
@@ -459,7 +493,7 @@ def run_quantum_pipeline_experiment(
     
     # 8. Train Quantum Kernel SVM on precomputed kernel
     t0_q_svm = time.perf_counter()
-    clf_q = SVC(kernel="precomputed", probability=True, random_state=random_state)
+    clf_q = SVC(kernel="precomputed", C=5.0, class_weight="balanced", probability=True, random_state=random_state)
     clf_q.fit(K_train, y_tr_eval)
     t_train_q = time.perf_counter() - t0_q_svm
     
@@ -487,7 +521,8 @@ def run_quantum_pipeline_experiment(
             "shots": kernel_result["shots"],
             "circuits_submitted": kernel_result.get("circuits_submitted", 0),
             "kernel_duration_ms": kernel_result["duration_ms"],
-            "provenance": kernel_result["provenance"]
+            "provenance": kernel_result["provenance"],
+            "hyperparameters": "C=5.0, class_weight='balanced', ZFeatureMap"
         }
     )
     
@@ -513,7 +548,8 @@ def run_quantum_pipeline_experiment(
         },
         "metrics": {
             "quantum_kernel_svm": metric_quantum.model_dump(),
-            "matched_rbf_svm": metric_rbf.model_dump()
+            "matched_rbf_svm": metric_rbf.model_dump(),
+            "gradient_boosting": metric_gb.model_dump()
         },
         "provenance": kernel_result["provenance"],
         "leakage_safeguard": "Strict pre-transplant predictors only; preprocessor and feature selection fit exclusively on training partition."

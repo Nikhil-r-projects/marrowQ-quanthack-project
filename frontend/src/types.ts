@@ -322,6 +322,7 @@ export interface QuantumExperimentResult {
   metrics: {
     quantum_kernel_svm: ModelMetric;
     matched_rbf_svm: ModelMetric;
+    gradient_boosting?: ModelMetric;
   };
   provenance: string;
   leakage_safeguard: string;

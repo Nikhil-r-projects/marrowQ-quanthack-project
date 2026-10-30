@@ -629,15 +629,17 @@ def run_quantum_experiment(req: QuantumExperimentRunRequest):
             detail="Hardware execution requires explicit confirmation ('confirm_hardware': true) to prevent accidental quantum credit consumption."
         )
 
-    # Load 50+ feature dataset
-    dataset_file = os.path.join(DATA_DIR, "cibmtr_hsct_50features.csv")
+    # Load 200+ or 50+ feature dataset
+    dataset_file = os.path.join(DATA_DIR, "cibmtr_hsct_200features.csv")
+    if not os.path.exists(dataset_file):
+        dataset_file = os.path.join(DATA_DIR, "cibmtr_hsct_50features.csv")
     if not os.path.exists(dataset_file):
         dataset_file = os.path.join(DATA_DIR, "demo_synthetic_hsct.csv")
     
     if not os.path.exists(dataset_file):
-        from app.core.synthetic import generate_hsct_50plus_dataset
-        df = generate_hsct_50plus_dataset(500, random_state=42)
-        df.to_csv(dataset_file, index=False)
+        from app.core.synthetic import generate_hsct_200plus_dataset
+        df = generate_hsct_200plus_dataset(600, random_state=42)
+        df.to_csv(os.path.join(DATA_DIR, "cibmtr_hsct_200features.csv"), index=False)
     else:
         df = pd.read_csv(dataset_file)
         

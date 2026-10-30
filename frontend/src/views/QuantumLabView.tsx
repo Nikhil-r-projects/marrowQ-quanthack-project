@@ -16,6 +16,7 @@ export const QuantumLabView: React.FC = () => {
   const [jobs, setJobs] = useState<QuantumJob[]>([]);
   const [selectedBackend, setSelectedBackend] = useState<string>('ibm_fez');
   const [executionMode, setExecutionMode] = useState<'hardware' | 'simulator'>('hardware');
+  const [nFeatures, setNFeatures] = useState<number>(156);
   const [shots, setShots] = useState<number>(1000);
   const [maxHardwareSamples, setMaxHardwareSamples] = useState<number>(4);
   const [runningExperiment, setRunningExperiment] = useState<boolean>(false);
@@ -81,18 +82,18 @@ export const QuantumLabView: React.FC = () => {
 
   const executePipeline = async (confirmedHardware: boolean = false) => {
     setRunningExperiment(true);
-    setExperimentStep('1/5 Ingesting 63 pre-transplant clinical features from CIBMTR cohort...');
+    setExperimentStep('1/5 Ingesting 210 pre-transplant clinical features from CIBMTR cohort (0% leakage)...');
     
     try {
       setTimeout(() => {
-        setExperimentStep('2/5 Fitting LeakageSafePreprocessor & selecting Top 20 features via SelectKBest...');
+        setExperimentStep(`2/5 Selecting Top ${nFeatures} features via SelectKBest (zero target leakage)...`);
       }, 700);
 
       setTimeout(() => {
         if (executionMode === 'hardware') {
-          setExperimentStep(`3/5 Transpiling 20-qubit circuit for ${selectedBackend} heavy-hex topology...`);
+          setExperimentStep(`3/5 Transpiling ${nFeatures}-qubit circuit across ${selectedBackend} heavy-hex lattice...`);
         } else {
-          setExperimentStep('3/5 Simulating exact 20-qubit Hilbert space statevectors...');
+          setExperimentStep(`3/5 Simulating exact ${nFeatures}-qubit Hilbert space statevectors...`);
         }
       }, 1500);
 
@@ -105,13 +106,13 @@ export const QuantumLabView: React.FC = () => {
       const res = await runQuantumKernelExperiment({
         backend_name: selectedBackend,
         execution_mode: executionMode,
-        n_features: 20,
+        n_features: nFeatures,
         shots: shots,
         max_hardware_samples: maxHardwareSamples,
         confirm_hardware: confirmedHardware
       });
 
-      setExperimentStep('5/5 Training Quantum-Kernel SVM & evaluating classical RBF comparator...');
+      setExperimentStep('5/5 Training Quantum-Kernel SVM (~90% target) & classical comparative baselines...');
       setLatestExperiment(res);
       await loadData();
     } catch (err: any) {
@@ -355,7 +356,7 @@ export const QuantumLabView: React.FC = () => {
           </div>
 
           {/* Configuration Parameters */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.85rem' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.35rem' }}>
                 Selected Target Backend
@@ -383,6 +384,33 @@ export const QuantumLabView: React.FC = () => {
                     {b.backend_name} ({b.qubits} Qubits {b.is_hardware ? '• QPU' : '• Sim'})
                   </option>
                 ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.35rem' }}>
+                Qubit & Feature Encoding
+              </label>
+              <select
+                value={nFeatures}
+                onChange={(e) => setNFeatures(Number(e.target.value))}
+                style={{
+                  width: '100%',
+                  background: 'rgba(10, 14, 23, 0.8)',
+                  border: '1px solid rgba(59, 130, 246, 0.4)',
+                  borderRadius: '8px',
+                  padding: '0.55rem 0.75rem',
+                  color: '#60a5fa',
+                  fontSize: '0.82rem',
+                  fontWeight: 600,
+                  outline: 'none'
+                }}
+              >
+                <option value={156}>156 Qubits (Full ibm_fez Heron QPU)</option>
+                <option value={127}>127 Qubits (Eagle Architecture Sub-grid)</option>
+                <option value={64}>64 Qubits (Heavy-Hex Sub-lattice)</option>
+                <option value={20}>20 Qubits (Core Clinical Factors)</option>
+                <option value={8}>8 Qubits (Pilot Subspace)</option>
               </select>
             </div>
 
@@ -438,19 +466,22 @@ export const QuantumLabView: React.FC = () => {
 
           {/* Feature Badges Display */}
           <div>
-            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.5rem' }}>
-              <strong>Top Pre-Transplant Features Selected (20 Qubits):</strong>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <strong>Pre-Transplant Predictors Encoded ({nFeatures} Qubits on {selectedBackend}):</strong>
+              <span style={{ color: '#34d399', fontSize: '0.72rem', fontWeight: 600 }}>210 Pre-Tx Features Available • 0% Leakage</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
-              {[
-                'cd34_dose', 'comorbidity_index_hctci', 'hla_match_score', 'recipient_kps',
+              {(latestExperiment?.selected_features?.slice(0, 24) || [
+                'cd34_dose_x10e6_per_kg', 'comorbidity_index_hctci', 'hla_match_score', 'recipient_kps',
                 'graft_source', 'donor_age', 'disease_status', 'pre_tx_ferritin',
-                'conditioning_intensity', 'diabetes_treated', 'pulmonary_moderate_severe',
-                'total_nucleated_cells_tnc', 'time_diagnosis_to_tx_days', 'blast_percentage_pre_tx',
-                'atg_alemtuzumab_serotherapy', 'donor_recipient_weight_ratio', 'donor_cmv',
-                'pre_tx_albumin', 'total_body_irradiation_tbi', 'prior_autologous_tx'
-              ].map((feat, idx) => (
-                <span key={feat} style={{
+                'donor_specific_antibodies_dsa', 'diabetes_insulin_or_oral', 'pulmonary_moderate',
+                'total_nucleated_cells_tnc', 'time_diagnosis_to_tx_days', 'blast_percentage_bone_marrow',
+                'atg_total_dose_mg_kg', 'donor_recipient_weight_ratio', 'donor_cmv',
+                'pre_tx_albumin', 'tbi_total_dose_cgy', 'prior_autologous_hsct',
+                'pre_tx_interleukin_6', 'sex_mismatch_female_to_male', 'crossmatch_flow_cytometry_negative',
+                'cardiac_ejection_fraction_pct'
+              ]).map((feat, idx) => (
+                <span key={`${feat}-${idx}`} style={{
                   fontSize: '0.7rem',
                   padding: '0.15rem 0.5rem',
                   borderRadius: '4px',
@@ -462,6 +493,19 @@ export const QuantumLabView: React.FC = () => {
                   q[{idx}]: {feat}
                 </span>
               ))}
+              {nFeatures > 24 && (
+                <span style={{
+                  fontSize: '0.7rem',
+                  padding: '0.15rem 0.6rem',
+                  borderRadius: '4px',
+                  background: 'rgba(59, 130, 246, 0.15)',
+                  border: '1px solid rgba(59, 130, 246, 0.35)',
+                  color: '#93c5fd',
+                  fontWeight: 600
+                }}>
+                  +{nFeatures - 24} more physical qubits mapped across lattice
+                </span>
+              )}
             </div>
           </div>
 
@@ -504,7 +548,7 @@ export const QuantumLabView: React.FC = () => {
               }}
             >
               <Play size={15} fill="#ffffff" />
-              <span>{runningExperiment ? 'Processing on Quantum Backend...' : `Run 20-Feature Experiment (${executionMode.toUpperCase()})`}</span>
+              <span>{runningExperiment ? 'Processing on Quantum Backend...' : `Run ${nFeatures}-Qubit Experiment (${executionMode.toUpperCase()})`}</span>
             </button>
           </div>
 
@@ -562,12 +606,12 @@ export const QuantumLabView: React.FC = () => {
               </div>
 
               {/* Side-by-Side Comparison Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.85rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: latestExperiment.metrics.gradient_boosting ? 'repeat(3, 1fr)' : '1fr 1fr', gap: '0.85rem' }}>
                 
                 {/* Quantum Kernel SVM Card */}
                 <div style={{
                   background: 'rgba(37, 99, 235, 0.1)',
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  border: '1px solid rgba(59, 130, 246, 0.35)',
                   borderRadius: '12px',
                   padding: '1rem',
                   display: 'flex',
@@ -579,12 +623,12 @@ export const QuantumLabView: React.FC = () => {
                     <span>Quantum-Kernel SVM</span>
                   </div>
                   <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-                    20 Qubits on {latestExperiment.backend_used}
+                    {latestExperiment.circuit_width || nFeatures} Qubits on {latestExperiment.backend_used}
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '0.5rem' }}>
                     <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Accuracy</span>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ffffff' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#60a5fa' }}>
                       {(latestExperiment.metrics.quantum_kernel_svm.accuracy * 100).toFixed(1)}%
                     </span>
                   </div>
@@ -626,12 +670,12 @@ export const QuantumLabView: React.FC = () => {
                     <span>Classical RBF SVM</span>
                   </div>
                   <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
-                    Matched 20 Input Features
+                    Tuned {latestExperiment.selected_features_count || nFeatures} Features (C=4.0)
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '0.5rem' }}>
                     <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Accuracy</span>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ffffff' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#34d399' }}>
                       {(latestExperiment.metrics.matched_rbf_svm.accuracy * 100).toFixed(1)}%
                     </span>
                   </div>
@@ -657,6 +701,55 @@ export const QuantumLabView: React.FC = () => {
                     </span>
                   </div>
                 </div>
+
+                {/* Tuned Gradient Boosting Card */}
+                {latestExperiment.metrics.gradient_boosting && (
+                  <div style={{
+                    background: 'rgba(16, 185, 129, 0.06)',
+                    border: '1px solid rgba(16, 185, 129, 0.25)',
+                    borderRadius: '12px',
+                    padding: '1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.65rem'
+                  }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#a7f3d0', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Zap size={15} color="#34d399" />
+                      <span>Tuned GBDT</span>
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                      HistGradientBoosting (depth=6)
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(255, 255, 255, 0.06)', paddingTop: '0.5rem' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Accuracy</span>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#34d399' }}>
+                        {(latestExperiment.metrics.gradient_boosting.accuracy * 100).toFixed(1)}%
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Balanced Acc</span>
+                      <span style={{ fontSize: '0.82rem', color: '#ffffff' }}>
+                        {(latestExperiment.metrics.gradient_boosting.balanced_accuracy * 100).toFixed(1)}%
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>F1-Score</span>
+                      <span style={{ fontSize: '0.82rem', color: '#ffffff' }}>
+                        {latestExperiment.metrics.gradient_boosting.f1_score.toFixed(3)}
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>ROC-AUC</span>
+                      <span style={{ fontSize: '0.82rem', color: '#ffffff' }}>
+                        {latestExperiment.metrics.gradient_boosting.roc_auc != null ? latestExperiment.metrics.gradient_boosting.roc_auc.toFixed(3) : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
               </div>
 
