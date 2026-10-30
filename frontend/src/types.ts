@@ -210,10 +210,12 @@ export interface QuantumStatus {
   has_ibm_runtime_installed: boolean;
   has_token_configured: boolean;
   token_masked: string;
+  channel?: string;
+  configured_instance?: string;
   is_connected_to_hardware: boolean;
   default_backend: string;
-  environment_instructions: string;
-  execution_modes_supported: string[];
+  environment_instructions?: string;
+  execution_modes_supported?: any;
 }
 
 export interface QuantumJob {
@@ -293,4 +295,32 @@ export interface HospitalOverview {
     orchestrator_agents_active: number;
     uptime_pct: number;
   };
+}
+
+export interface QuantumExperimentResult {
+  status: string;
+  timestamp: string;
+  backend_used: string;
+  execution_mode: string;
+  is_simulator: boolean;
+  job_id: string;
+  shots: number;
+  circuits_submitted: number;
+  circuit_depth: number;
+  circuit_width: number;
+  duration_ms: number;
+  total_pre_transplant_features_available: number;
+  selected_features_count: number;
+  selected_features: string[];
+  sample_split: {
+    train_samples: number;
+    test_samples: number;
+    total_evaluated: number;
+  };
+  metrics: {
+    quantum_kernel_svm: ModelMetric;
+    matched_rbf_svm: ModelMetric;
+  };
+  provenance: string;
+  leakage_safeguard: string;
 }

@@ -12,7 +12,7 @@ from typing import Dict, Any, List
 from app.schemas import (
     DatasetProfileResponse, ExperimentCreateRequest, ExperimentResponse,
     PredictionRequest, PredictionResponse, SyntheticGenerateRequest, ModelMetric,
-    QuantumSimulationRequest, QuantumSimulationResponse
+    QuantumSimulationRequest, QuantumSimulationResponse, QuantumExperimentRunRequest
 )
 from app.core.synthetic import generate_hsct_synthetic_dataset
 from app.core.profiler import profile_dataset
@@ -22,7 +22,7 @@ from app.core.classical import (
 )
 from app.core.quantum import (
     train_quantum_kernel_svm, simulate_quantum_circuit_and_state,
-    QISKIT_AVAILABLE, QISKIT_VERSION
+    run_quantum_pipeline_experiment, QISKIT_AVAILABLE, QISKIT_VERSION
 )
 from app.core.database import (
     save_dataset_meta, get_dataset_meta, list_datasets,
@@ -594,32 +594,104 @@ def run_agent_orchestrator(req: AgentOrchestrateRequest):
 # IBM QUANTUM HARDWARE & RUNTIME ENDPOINTS
 # =========================================================================
 
+_LATEST_QUANTUM_EXPERIMENT: Dict[str, Any] = {}
+
 @router.get("/quantum/status")
 def get_quantum_runtime_status():
     """Returns genuine IBM Quantum Runtime connection telemetry (never faked)"""
     return quantum_manager.get_status()
 
+@router.post("/api/quantum/test-connection", tags=["quantum"])
+@router.post("/quantum/test-connection")
+def test_quantum_connection():
+    """
+    Validates IBM Quantum Compute Service authentication and accessible QPUs
+    without running circuits or consuming quantum time.
+    """
+    return quantum_manager.test_connection()
+
 @router.get("/quantum/backends")
 def list_quantum_backends():
-    """Lists available QPU hardware backends (ibm_brisbane, ibm_kyiv) and simulators"""
+    """Lists available QPU hardware backends (ibm_fez, ibm_kingston, ibm_marrakesh) and simulators"""
     return quantum_manager.list_backends()
+
+@router.post("/quantum/experiment/run")
+def run_quantum_experiment(req: QuantumExperimentRunRequest):
+    """
+    Executes the 50+ to 20 Feature Quantum-Kernel SVM vs Classical RBF SVM experiment.
+    - Requires explicit confirm_hardware=True if execution_mode is 'hardware'.
+    - Does not silently fall back from physical hardware to simulator.
+    """
+    global _LATEST_QUANTUM_EXPERIMENT
+    
+    if req.execution_mode == "hardware" and not req.confirm_hardware:
+        raise HTTPException(
+            status_code=400,
+            detail="Hardware execution requires explicit confirmation ('confirm_hardware': true) to prevent accidental quantum credit consumption."
+        )
+
+    # Load 50+ feature dataset
+    dataset_file = os.path.join(DATA_DIR, "cibmtr_hsct_50features.csv")
+    if not os.path.exists(dataset_file):
+        dataset_file = os.path.join(DATA_DIR, "demo_synthetic_hsct.csv")
+    
+    if not os.path.exists(dataset_file):
+        from app.core.synthetic import generate_hsct_50plus_dataset
+        df = generate_hsct_50plus_dataset(500, random_state=42)
+        df.to_csv(dataset_file, index=False)
+    else:
+        df = pd.read_csv(dataset_file)
+        
+    try:
+        result = run_quantum_pipeline_experiment(
+            df=df,
+            backend_name=req.backend_name,
+            execution_mode=req.execution_mode,
+            target_column="neutrophil_recovery_day28",
+            n_features=req.n_features,
+            shots=req.shots,
+            max_hardware_samples=req.max_hardware_samples
+        )
+        _LATEST_QUANTUM_EXPERIMENT = result
+        return result
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Quantum pipeline execution failed: {str(exc)}"
+        )
+
+@router.get("/quantum/experiment/latest")
+def get_latest_quantum_experiment():
+    """Retrieves the latest executed quantum experiment results and comparator metrics"""
+    global _LATEST_QUANTUM_EXPERIMENT
+    if not _LATEST_QUANTUM_EXPERIMENT:
+        # If no experiment executed yet, run a fast simulator baseline
+        dataset_file = os.path.join(DATA_DIR, "cibmtr_hsct_50features.csv")
+        if os.path.exists(dataset_file):
+            df = pd.read_csv(dataset_file)
+            _LATEST_QUANTUM_EXPERIMENT = run_quantum_pipeline_experiment(
+                df=df,
+                backend_name="aer_simulator_statevector",
+                execution_mode="simulator",
+                n_features=20,
+                shots=1000
+            )
+    return _LATEST_QUANTUM_EXPERIMENT
 
 @router.post("/quantum/jobs")
 def submit_quantum_job(req: QuantumJobSubmitRequest):
-    """
-    Executes a quantum kernel job on the requested backend.
-    Transparently reports whether simulator or hardware was used.
-    """
+    """Executes a quantum kernel job with transparent reporting of execution mode"""
     sample = req.sample_values or [3.14, 1.57]
     X_test = np.array([sample])
     X_train = np.array([[3.85, 4.12], [1.20, 1.45]])
     
-    result = quantum_manager.execute_kernel_circuit(
+    result = quantum_manager.execute_kernel_matrices(
         X_train=X_train,
         X_test=X_test,
         backend_name=req.backend_name,
-        execution_mode=req.execution_mode,
-        shots=req.shots
+        execution_mode=req.execution_mode if req.execution_mode in ["hardware", "simulator"] else "simulator",
+        shots=req.shots,
+        max_hardware_samples=4
     )
     return result
 
@@ -627,6 +699,15 @@ def submit_quantum_job(req: QuantumJobSubmitRequest):
 def get_quantum_jobs_history():
     """Returns audit log of all executed quantum jobs and their execution provenance"""
     return list_quantum_jobs()
+
+@router.get("/quantum/jobs/{job_id}")
+def get_quantum_job_details(job_id: str):
+    """Retrieves specific quantum job details by ID"""
+    jobs = list_quantum_jobs()
+    job = next((j for j in jobs if j.get("job_id") == job_id), None)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Quantum job '{job_id}' not found.")
+    return job
 
 # =========================================================================
 # HOSPITAL ANALYTICS & CLINICAL OVERVIEW
