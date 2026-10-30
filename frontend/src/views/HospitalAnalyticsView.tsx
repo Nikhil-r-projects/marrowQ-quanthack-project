@@ -1,186 +1,131 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Building2, Users, AlertCircle, CheckCircle2, Cpu, ShieldCheck,
-  TrendingUp, Clock, FileCheck, Activity, ArrowRight
-} from 'lucide-react';
-import { HospitalOverview, Patient } from '../types';
-import { fetchHospitalOverview, fetchPatients } from '../api';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Activity, ArrowRight, BedDouble, Database, Hospital, Server, Users } from 'lucide-react';
+import { HospitalOverview, Patient, PatientProgress } from '../types';
+import { fetchCohortProgress, fetchHospitalOverview } from '../api';
+import { TabId } from '../navigation';
+import { daysPostTransplant } from '../data/cohort';
+import { organProfile } from '../data/organs';
+import { avatarTone, engraftmentDay, initials } from '../lib/format';
 
 interface HospitalAnalyticsViewProps {
-  onSelectPatient: (p: Patient) => void;
-  onNavigateToProgress: () => void;
+  patients: Patient[];
+  onOpenPatient: (patientId: string, tab: TabId) => void;
 }
 
-export const HospitalAnalyticsView: React.FC<HospitalAnalyticsViewProps> = ({
-  onSelectPatient,
-  onNavigateToProgress
-}) => {
+export const HospitalAnalyticsView: React.FC<HospitalAnalyticsViewProps> = ({ patients, onOpenPatient }) => {
   const [overview, setOverview] = useState<HospitalOverview | null>(null);
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [progress, setProgress] = useState<Record<string, PatientProgress>>({});
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const [oData, pList] = await Promise.all([
-          fetchHospitalOverview(),
-          fetchPatients()
-        ]);
-        setOverview(oData);
-        setPatients(pList);
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    fetchHospitalOverview().then(setOverview);
   }, []);
 
+  useEffect(() => {
+    fetchCohortProgress(patients).then(setProgress);
+  }, [patients]);
+
+  const rows = useMemo(() => patients.map(p => {
+    const pr = progress[p.patient_id];
+    const flags = organProfile(p.primary_organ_type ?? 'marrow', p, pr ?? null).metrics.filter(m => m.status !== 'normal' && m.value !== '—');
+    const engrafted = pr?.is_anc_engrafted ?? false;
+    // Priority: alerts first, then pre-engraftment patients, then the rest.
+    const priority = (flags.some(f => f.status === 'alert') ? 0 : flags.length ? 1 : 2) * 2 + (engrafted ? 1 : 0);
+    return { p, pr, flags, engrafted, day: daysPostTransplant(p), priority };
+  }).sort((a, b) => a.priority - b.priority || a.day - b.day), [patients, progress]);
+
+  const loaded = Object.keys(progress).length > 0;
+  const preEngraftment = rows.filter(r => !r.engrafted);
+  const engraftDays = rows.filter(r => r.engrafted && r.pr).map(r => engraftmentDay(r.pr!, 'anc')).sort((a, b) => a - b);
+  const median = engraftDays.length ? engraftDays[Math.floor((engraftDays.length - 1) / 2)] : null;
+  const flagged = rows.filter(r => r.flags.length > 0).length;
+  const allo = patients.filter(p => p.transplant_type.includes('Allogeneic')).length;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.75rem', maxWidth: '1280px', margin: '0 auto' }}>
-      
-      {/* 1. Header Banner */}
-      <div className="spatial-card" style={{ padding: '1.75rem 2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem' }}>
+    <div className="stack">
+      <div className="page-header">
+        <div>
+          <div className="eyebrow"><Hospital size={13} /> Transplant unit</div>
+          <h2>Ward & cohort triage</h2>
+          <p>Every active transplant patient, sorted so the people who need attention today are at the top.</p>
+        </div>
+      </div>
+
+      <div className="grid-4">
+        <div className="card kpi">
+          <span className="kpi-label">Active patients <Users size={15} className="muted" /></span>
+          <span className="kpi-value">{patients.length}</span>
+          <span className="kpi-foot">{allo} allogeneic · {patients.length - allo} autologous</span>
+        </div>
+        <div className="card kpi">
+          <span className="kpi-label">Protective isolation <BedDouble size={15} className="muted" /></span>
+          <span className="kpi-value">{loaded ? preEngraftment.length : '—'}</span>
+          <span className="kpi-foot">Pre-engraftment, need HEPA-filtered rooms</span>
+        </div>
+        <div className="card kpi">
+          <span className="kpi-label">Median days to ANC engraftment</span>
+          <span className="kpi-value">{median != null ? `Day +${median}` : '—'}</span>
+          <span className="kpi-foot">{engraftDays.length} engrafted patient{engraftDays.length === 1 ? '' : 's'} so far</span>
+        </div>
+        <div className="card kpi">
+          <span className="kpi-label">Needs review</span>
+          <span className="kpi-value">{flagged}</span>
+          <span className="kpi-foot">{overview ? `${overview.cohort_summary.pending_clinician_reviews} model prediction${overview.cohort_summary.pending_clinician_reviews === 1 ? '' : 's'} awaiting sign-off` : 'Organ readings out of range'}</span>
+        </div>
+      </div>
+
+      <section className="card flush">
+        <div className="card-header divided" style={{ padding: '1.1rem 1.25rem 0.9rem', margin: 0 }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.35rem' }}>
-              <div style={{
-                width: 36,
-                height: 36,
-                borderRadius: '10px',
-                background: 'rgba(37, 99, 235, 0.15)',
-                border: '1px solid rgba(37, 99, 235, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#60a5fa'
-              }}>
-                <Building2 size={20} />
-              </div>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: 700, color: '#ffffff', margin: 0 }}>
-                Hospital Transplant Operations & Cohort Intelligence
-              </h2>
-              <span style={{
-                fontSize: '0.72rem',
-                padding: '0.2rem 0.65rem',
-                borderRadius: '9999px',
-                background: 'rgba(16, 185, 129, 0.15)',
-                color: '#10b981',
-                border: '1px solid rgba(16, 185, 129, 0.3)',
-                fontWeight: 600
-              }}>
-                BMT Positive Pressure Ward Active
-              </span>
-            </div>
-            <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
-              Real-time monitoring of BMT isolation bed occupancy, organ toxicity surveillance, and readmission risk triage.
-            </div>
+            <div className="card-title"><Activity size={16} /> Cohort triage</div>
+            <div className="card-subtitle">Sorted by open alerts, then engraftment status</div>
           </div>
         </div>
-      </div>
-
-      {/* 2. Top Summary Indicators */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
-        
-        <div className="spatial-card" style={{ height: '125px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Active Transplant Cohort</span>
-          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#ffffff' }}>24 Patients</div>
-          <span style={{ fontSize: '0.72rem', color: '#10b981' }}>18 Engrafted • 6 Surveillance</span>
-        </div>
-
-        <div className="spatial-card" style={{ height: '125px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>BMT Isolation Beds</span>
-          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#ffffff' }}>88% Occupancy</div>
-          <span style={{ fontSize: '0.72rem', color: '#60a5fa' }}>22 of 25 HEPA beds in use</span>
-        </div>
-
-        <div className="spatial-card" style={{ height: '125px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Average Days to ANC Engraft</span>
-          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#ffffff' }}>15.2 Days</div>
-          <span style={{ fontSize: '0.72rem', color: '#10b981' }}>1.8 days ahead of national avg</span>
-        </div>
-
-        <div className="spatial-card" style={{ height: '125px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Predicted Readmission Risk</span>
-          <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#10b981' }}>4.1% (Low)</div>
-          <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Zero unexpected ICU transfers</span>
-        </div>
-
-      </div>
-
-      {/* 3. Cohort Triage Table */}
-      <div className="spatial-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div className="spatial-section-title" style={{ margin: 0 }}>
-          <span className="blue-dot" />
-          <span>Patient Cohort Surveillance & Organ Target Status</span>
-        </div>
-
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.82rem' }}>
+        <div className="table-responsive">
+          <table className="data-table">
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.08)', color: '#94a3b8' }}>
-                <th style={{ padding: '0.75rem 1rem' }}>Patient Name</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Diagnosis</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Primary Organ Target</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Donor / HLA</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Transplant Date</th>
-                <th style={{ padding: '0.75rem 1rem' }}>Status</th>
-                <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Actions</th>
+              <tr>
+                <th>Patient</th>
+                <th>Day</th>
+                <th>Transplant</th>
+                <th>Engraftment</th>
+                <th className="num">ANC /µL</th>
+                <th>Focus & flags</th>
+                <th style={{ textAlign: 'right' }}>Open</th>
               </tr>
             </thead>
             <tbody>
-              {patients.map((p, idx) => (
-                <tr
-                  key={idx}
-                  style={{
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
-                    color: '#f8fafc',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <td style={{ padding: '0.85rem 1rem', fontWeight: 600 }}>
-                    {p.name}
-                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>{p.patient_id}</div>
+              {rows.map(({ p, pr, flags, engrafted, day }) => (
+                <tr key={p.patient_id}>
+                  <td>
+                    <div className="row">
+                      <span className={`avatar ${avatarTone(p.patient_id)}`}>{initials(p.name)}</span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600 }}>{p.name}</div>
+                        <div className="tiny faint mono">{p.patient_id}</div>
+                      </div>
+                    </div>
                   </td>
-                  <td style={{ padding: '0.85rem 1rem', color: '#cbd5e1' }}>{p.disease.split('(')[0]}</td>
-                  <td style={{ padding: '0.85rem 1rem' }}>
-                    <span style={{
-                      background: 'rgba(37, 99, 235, 0.15)',
-                      color: '#93c5fd',
-                      border: '1px solid rgba(37, 99, 235, 0.3)',
-                      borderRadius: '9999px',
-                      padding: '0.2rem 0.6rem',
-                      fontSize: '0.72rem'
-                    }}>
-                      {p.organ_label || 'Heart / Marrow'}
-                    </span>
+                  <td className="tnum">{day >= 0 ? `+${day}` : day}</td>
+                  <td>
+                    <div className="small">{p.disease.split(' (')[0]}</div>
+                    <div className="tiny faint">{p.donor_type}</div>
                   </td>
-                  <td style={{ padding: '0.85rem 1rem', color: '#94a3b8' }}>{p.donor_type.split('(')[0]}</td>
-                  <td style={{ padding: '0.85rem 1rem', color: '#cbd5e1' }}>{p.transplant_date}</td>
-                  <td style={{ padding: '0.85rem 1rem' }}>
-                    <span style={{
-                      color: '#10b981',
-                      background: 'rgba(16, 185, 129, 0.1)',
-                      border: '1px solid rgba(16, 185, 129, 0.3)',
-                      borderRadius: '9999px',
-                      padding: '0.2rem 0.6rem',
-                      fontSize: '0.72rem'
-                    }}>
-                      {p.status}
-                    </span>
+                  <td>
+                    {!pr ? <span className="skeleton" style={{ display: 'inline-block', width: 90, height: 20 }} /> : engrafted
+                      ? <span className="chip chip-green">Engrafted +{engraftmentDay(pr, 'anc')}</span>
+                      : <span className="chip chip-amber">Projected +{pr.expected_anc_engraft_day}</span>}
                   </td>
-                  <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
-                    <button
-                      onClick={() => {
-                        onSelectPatient(p);
-                        onNavigateToProgress();
-                      }}
-                      className="spatial-cta-btn"
-                      style={{ padding: '0.35rem 0.85rem', fontSize: '0.75rem', display: 'inline-flex' }}
-                    >
-                      <span>View Trajectory</span>
-                      <ArrowRight size={12} />
+                  <td className="num tnum">{pr ? Number(pr.clinical_summary.current_anc).toLocaleString() : '—'}</td>
+                  <td>
+                    <div className="small">{p.organ_label}</div>
+                    {flags.length > 0
+                      ? <div className="tiny" style={{ color: flags.some(f => f.status === 'alert') ? 'var(--red-text)' : 'var(--amber-text)' }}>{flags.map(f => f.label).join(', ')}</div>
+                      : <div className="tiny faint">No flags</div>}
+                  </td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button className="btn btn-ghost btn-sm" onClick={() => onOpenPatient(p.patient_id, 'overview')}>Overview</button>
+                    <button className="btn btn-secondary btn-sm" style={{ marginLeft: 6 }} onClick={() => onOpenPatient(p.patient_id, 'progress')}>
+                      Recovery <ArrowRight size={12} />
                     </button>
                   </td>
                 </tr>
@@ -188,8 +133,35 @@ export const HospitalAnalyticsView: React.FC<HospitalAnalyticsViewProps> = ({
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
+      <section className="card">
+        <div className="card-header"><div className="card-title"><Server size={16} /> Platform health</div></div>
+        {!overview ? <div className="skeleton" style={{ height: 60 }} /> : (
+          <div className="grid-4">
+            <div className="stat-box">
+              <span className="stat-label">API</span>
+              <span className="stat-value" style={{ fontSize: '1.1rem' }}>{overview.service_health.api_status === 'ONLINE' ? 'Online' : 'Offline'}</span>
+              <span className="stat-sub">{overview.service_health.api_status === 'ONLINE' ? `${overview.service_health.uptime_pct}% uptime` : 'Static site, computing in the browser'}</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-label"><Database size={11} style={{ display: 'inline', marginRight: 4 }} />Database</span>
+              <span className="stat-value" style={{ fontSize: '1.1rem' }}>{overview.service_health.database.includes('ONLINE') ? 'Connected' : 'Unavailable'}</span>
+              <span className="stat-sub">Patients, observations, audit log</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-label">Clinical agents</span>
+              <span className="stat-value" style={{ fontSize: '1.1rem' }}>{overview.service_health.orchestrator_agents_active} active</span>
+              <span className="stat-sub">Bounded orchestration pipeline</span>
+            </div>
+            <div className="stat-box">
+              <span className="stat-label">Quantum service</span>
+              <span className="stat-value" style={{ fontSize: '1.1rem' }}>{overview.quantum_service_health.total_quantum_jobs_executed} jobs</span>
+              <span className="stat-sub">{overview.quantum_service_health.hardware_readiness === 'AVAILABLE_UPON_TOKEN_CONFIG' ? 'Hardware available once a token is set' : overview.quantum_service_health.hardware_readiness === 'BACKEND_OFFLINE' ? 'Backend offline' : overview.quantum_service_health.hardware_readiness.replace(/_/g, ' ').toLowerCase()}</span>
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 };

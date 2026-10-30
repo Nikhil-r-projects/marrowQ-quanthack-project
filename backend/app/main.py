@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.api.routes import router
+from app.api.compute_routes import router as compute_router
 from app.core.database import init_db
 
 @asynccontextmanager
@@ -29,6 +30,7 @@ app.add_middleware(
 
 # Include API Router
 app.include_router(router)
+app.include_router(compute_router)
 
 # Serve frontend build if dist folder exists
 repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

@@ -6,9 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MarrowQ</title>
     <meta name="description" content="Research-grounded clinical machine learning platform comparing Qiskit Fidelity Quantum-Kernel SVMs against classical baselines for HSCT neutrophil recovery prediction." />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#f6f5f2" />
+    <script>
+      // Apply the saved theme before first paint so there is no light/dark flash.
+      (function () {
+        try {
+          var pref = JSON.parse(localStorage.getItem('marrowq.theme') || '"light"');
+          var dark = pref === 'dark' || (pref === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        } catch (e) { document.documentElement.dataset.theme = 'light'; }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

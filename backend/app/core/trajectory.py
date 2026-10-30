@@ -95,9 +95,10 @@ def compute_patient_trajectory(patient_id: str, max_horizon_days: int = 45) -> D
 
     # Milestones evaluation
     # 1. Neutrophil Engraftment: ANC > 500 for 3 days
+    # Only post-infusion counts qualify; pre-transplant baseline counts are always above 500.
     anc_engrafted_day = None
     for day in sorted(anc_observed.keys()):
-        if anc_observed[day] >= 500:
+        if day > 0 and anc_observed[day] >= 500:
             anc_engrafted_day = day
             break
             

@@ -1,697 +1,605 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { Eye, RotateCw, Zap, Play, Pause, ZoomIn, ZoomOut, CheckCircle2 } from 'lucide-react';
+import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { Box, Info, Maximize2, Pause, Play, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { OrganType } from '../types';
+import { OrganMetric } from '../data/organs';
 
-export interface MilestonePin3D {
-  id: number;
-  label: string;
-  position: [number, number, number];
-  description: string;
-  value: string;
+interface ModelCredit {
+  title: string;
+  author: string;
+  url: string;
+  license: string;
 }
 
+interface ModelSpec {
+  url: string;
+  credit?: ModelCredit;
+  /** Sketchfab model shown through the official embed until a local .glb is added. */
+  sketchfabId?: string;
+  /** Per-model material adjustments applied to the cloned scene. */
+  tune?: (root: THREE.Object3D) => void;
+}
+
+// Drop new .glb files into /public/models with these names and they are picked up automatically.
+const MODELS: Record<OrganType, ModelSpec> = {
+  heart: {
+    url: '/models/heart.glb',
+    credit: { title: 'Realistic Human Heart', author: 'neshallads', url: 'https://sketchfab.com/neshallads', license: 'CC BY 4.0' }
+  },
+  liver: {
+    url: '/models/liver.glb',
+    sketchfabId: 'a20686a3e4a54792bfede17ad32f4b1a',
+    credit: { title: '3D Human Liver Anatomy', author: '3D4SCI', url: 'https://sketchfab.com/3d-models/3d-human-liver-anatomy-a20686a3e4a54792bfede17ad32f4b1a', license: 'See Sketchfab page' }
+  },
+  marrow: {
+    url: '/models/marrow.glb',
+    sketchfabId: 'f237e781b9934197a6f2f0f1da22e894',
+    credit: { title: 'Bone Marrow', author: 'Coffee Hangover Studio', url: 'https://sketchfab.com/3d-models/bone-marrow-f237e781b9934197a6f2f0f1da22e894', license: 'See Sketchfab page' }
+  },
+  stem: {
+    url: '/models/stem_cell.glb',
+    // The membrane is opaque in the source file; make it glassy so the nucleus shows through.
+    tune: root => {
+      root.traverse(obj => {
+        const mesh = obj as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        const mat = mesh.material as THREE.MeshStandardMaterial;
+        if (mat.name === 'Membrane') {
+          mat.transparent = true;
+          mat.opacity = 0.32;
+          mat.depthWrite = false;
+          mat.roughness = 0.12;
+          mat.color.set('#e6ecf0');
+          mesh.renderOrder = 2;
+        } else if (mat.name === 'Nucleus') {
+          mat.roughness = 0.35;
+          mat.emissive = new THREE.Color('#5b0b2e');
+          mat.emissiveIntensity = 0.35;
+        }
+      });
+    }
+  }
+};
+
+// Hide Sketchfab's chrome that duplicates ours; animation_autoplay=0 keeps models whole (the liver
+// otherwise plays an exploded-vessel animation); dnt=1 keeps the embed from tracking viewers.
+const sketchfabEmbedUrl = (id: string) =>
+  `https://sketchfab.com/models/${id}/embed?autostart=1&preload=1&autospin=0.2&animation_autoplay=0&transparent=1&ui_theme=dark&dnt=1` +
+  '&ui_infos=0&ui_inspector=0&ui_settings=0&ui_vr=0&ui_ar=0&ui_help=0&ui_annotations=0&ui_stop=0&ui_hint=2';
+
+const TARGET_SIZE = 2.2;
+const CAMERA_DISTANCE = 5;
+
+const gltfLoader = new GLTFLoader();
+const modelCache = new Map<string, Promise<GLTF>>();
+
+function loadModel(url: string, onProgress: (pct: number) => void): Promise<GLTF> {
+  let pending = modelCache.get(url);
+  if (!pending) {
+    pending = new Promise<GLTF>((resolve, reject) => {
+      gltfLoader.load(
+        url,
+        resolve,
+        e => { if (e.total) onProgress(Math.round((e.loaded / e.total) * 100)); },
+        reject
+      );
+    });
+    // Allow a retry after a failed load (e.g. model not added yet).
+    pending.catch(() => modelCache.delete(url));
+    modelCache.set(url, pending);
+  }
+  return pending;
+}
+
+/** Clone the cached scene with its own materials so per-view tweaks (wireframe, tune) never leak into the cache. */
+function instantiate(gltf: GLTF, spec: ModelSpec): THREE.Object3D {
+  const root = gltf.scene.clone(true);
+  root.traverse(obj => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(m => m.clone()) : mesh.material.clone();
+  });
+  spec.tune?.(root);
+  return root;
+}
+
+/** Centre the object on the origin and scale its largest dimension to TARGET_SIZE. */
+function normalize(obj: THREE.Object3D): THREE.Group {
+  const pivot = new THREE.Group();
+  pivot.add(obj);
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  const scale = TARGET_SIZE / Math.max(size.x, size.y, size.z, 1e-6);
+  obj.scale.multiplyScalar(scale);
+  obj.position.sub(center.multiplyScalar(scale));
+  return pivot;
+}
+
+function disposeObject(obj: THREE.Object3D, disposeGeometry: boolean) {
+  obj.traverse(child => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if (disposeGeometry) mesh.geometry.dispose();
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mats.forEach(m => m.dispose());
+  });
+}
+
+function setWireframe(obj: THREE.Object3D, on: boolean) {
+  obj.traverse(child => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mats.forEach(m => { if ('wireframe' in m) (m as THREE.MeshStandardMaterial).wireframe = on; });
+  });
+}
+
+interface PinAnchor {
+  point: THREE.Vector3;
+  normal: THREE.Vector3;
+}
+
+/** Cast a ray from outside the model toward its centre along each pin direction and anchor the pin on the first surface hit. */
+function anchorPins(model: THREE.Object3D, metrics: OrganMetric[]): Map<string, PinAnchor> {
+  const anchors = new Map<string, PinAnchor>();
+  const raycaster = new THREE.Raycaster();
+  model.updateMatrixWorld(true);
+  for (const m of metrics) {
+    const dir = new THREE.Vector3(...m.pin).normalize();
+    raycaster.set(dir.clone().multiplyScalar(10), dir.clone().negate());
+    const hit = raycaster.intersectObject(model, true).find(h => h.face);
+    if (hit && hit.face) {
+      const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+      anchors.set(m.key, { point: hit.point.clone(), normal });
+    } else {
+      anchors.set(m.key, { point: dir.clone().multiplyScalar(TARGET_SIZE * 0.42), normal: dir });
+    }
+  }
+  return anchors;
+}
+
+type LoadState = { status: 'loading'; progress: number } | { status: 'ready' } | { status: 'fallback' } | { status: 'embed'; ready: boolean };
+
 interface OrganViewer3DProps {
-  organType: 'heart' | 'marrow' | 'liver' | 'stem';
-  activePinId: number | null;
-  onSelectPin: (id: number) => void;
-  primaryMetricValue?: string;
+  organType: OrganType;
+  metrics: OrganMetric[];
+  activeMetricKey: string | null;
+  onSelectMetric: (key: string) => void;
+  /** Heart rate used for the beating animation. */
   bpm?: number;
+  height?: number | string;
 }
 
 export const OrganViewer3D: React.FC<OrganViewer3DProps> = ({
   organType,
-  activePinId,
-  onSelectPin,
-  primaryMetricValue = '120 bpm',
-  bpm = 120
+  metrics,
+  activeMetricKey,
+  onSelectMetric,
+  bpm = 72,
+  height = 520
 }) => {
-  const mountRef = useRef<HTMLDivElement>(null);
-  const [isWireframe, setIsWireframe] = useState<boolean>(false);
-  const [isAnimated, setIsAnimated] = useState<boolean>(true);
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [zoomLevel, setZoomLevel] = useState<number>(4.6);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const canvasHostRef = useRef<HTMLDivElement>(null);
+  const pinEls = useRef(new Map<string, HTMLButtonElement>());
 
-  // References for three.js objects
-  const sceneRef = useRef<THREE.Scene | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const organGroupRef = useRef<THREE.Group | null>(null);
-  const pinsGroupRef = useRef<THREE.Group | null>(null);
-  const animFrameIdRef = useRef<number | null>(null);
+  const controlsRef = useRef<OrbitControls | null>(null);
+  const stageGroupRef = useRef<THREE.Group | null>(null);
+  const contentRef = useRef<{ obj: THREE.Object3D; ownsGeometry: boolean } | null>(null);
+  const anchorsRef = useRef<Map<string, PinAnchor>>(new Map());
+  const animatedRef = useRef(true);
+  const bpmRef = useRef(bpm);
+  const organRef = useRef(organType);
 
-  // Dynamic 3D pins per organ
-  const getPinsForOrgan = (type: string): MilestonePin3D[] => {
-    switch (type) {
-      case 'heart':
-        return [
-          { id: 1, label: 'Aorta Outflow Arch', position: [-0.1, 0.95, 0.4], description: 'LV Ejection Fraction', value: '62%' },
-          { id: 2, label: 'Left Ventricle Wall', position: [0.65, 0.1, 0.6], description: 'Myocardial Wall Thickness', value: '11mm' },
-          { id: 3, label: 'Apex Conduction Focus', position: [-0.45, -0.85, 0.4], description: 'Sinus Tachycardia Rate', value: primaryMetricValue },
-          { id: 4, label: 'Pericardial Sac', position: [0.45, -0.5, -0.4], description: 'Pericardial Effusion Screen', value: 'Clear (Safe)' }
-        ];
-      case 'marrow':
-        return [
-          { id: 1, label: 'Endosteal Stem Niche', position: [0.15, 0.85, 0.4], description: 'HSC Homing Density', value: '98.4%' },
-          { id: 2, label: 'Trabecular Spongiosa', position: [-0.5, 0.1, 0.5], description: 'Cellularity Index', value: '45%' },
-          { id: 3, label: 'Sinusoidal Microvascular', position: [0.45, -0.65, 0.35], description: 'Marrow Perfusion Index', value: 'Normal' },
-          { id: 4, label: 'Cortical Bone Boundary', position: [0.0, -0.95, -0.4], description: 'Osteoblastic Activity', value: 'Preserved' }
-        ];
-      case 'liver':
-        return [
-          { id: 1, label: 'Right Hepatic Lobe', position: [0.65, 0.3, 0.4], description: 'Hepatosplenomegaly Ultrasound', value: '14.2cm' },
-          { id: 2, label: 'Portal Triad Bifurcation', position: [-0.05, -0.1, 0.65], description: 'Portal Flow Velocity', value: '26 cm/s' },
-          { id: 3, label: 'Left Lobe Parenchyma', position: [-0.7, 0.2, 0.25], description: 'VOD / SOS Clearance', value: 'Grade 0' },
-          { id: 4, label: 'Biliary System', position: [0.1, -0.7, 0.35], description: 'Total Serum Bilirubin', value: '0.8 mg/dL' }
-        ];
-      case 'stem':
-        return [
-          { id: 1, label: 'CD34+ Surface Epitope', position: [0.0, 0.95, 0.2], description: 'Stem Cell Purity Ratio', value: '99.2%' },
-          { id: 2, label: 'CXCR4 Chemokine Receptor', position: [0.8, 0.2, 0.4], description: 'Homing Affinity to Stroma', value: 'High' },
-          { id: 3, label: 'Lipid Bilayer Membrane', position: [-0.7, -0.45, 0.45], description: 'Viability Membrane Integrity', value: '98.1%' },
-          { id: 4, label: 'Nuclear CD38 Negative Core', position: [0.15, -0.75, -0.5], description: 'Pluripotency Status', value: 'Optimal' }
-        ];
-      default:
-        return [];
-    }
-  };
+  const reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const [animated, setAnimated] = useState(!reducedMotion);
+  const [wireframe, setWireframeState] = useState(false);
+  const [load, setLoad] = useState<LoadState>({ status: 'loading', progress: 0 });
+  const [showCredit, setShowCredit] = useState(false);
+  const [webglError, setWebglError] = useState(false);
 
-  const pins = getPinsForOrgan(organType);
-  const activePin = pins.find(p => p.id === activePinId) || pins[0];
-
+  const metricsRef = useRef(metrics);
+  const wireframeRef = useRef(wireframe);
+  // Mirror the latest props for the render loop; declared before the effects that read them.
   useEffect(() => {
-    const container = mountRef.current;
-    if (!container) return;
+    bpmRef.current = bpm;
+    organRef.current = organType;
+    metricsRef.current = metrics;
+    wireframeRef.current = wireframe;
+  });
 
-    const width = container.clientWidth || 400;
-    const height = container.clientHeight || 420;
+  // ---- One-time scene setup -------------------------------------------------
+  useEffect(() => {
+    const host = canvasHostRef.current;
+    const stage = stageRef.current;
+    if (!host || !stage) return;
 
-    // 1. Scene
-    const scene = new THREE.Scene();
-    sceneRef.current = scene;
-
-    // 2. Camera - position at proper distance so models don't clip
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000);
-    camera.position.set(0, 0, zoomLevel);
-    cameraRef.current = camera;
-
-    // 3. Renderer with antialiasing and alpha
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
-    renderer.setSize(width, height);
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    } catch {
+      setWebglError(true);
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.toneMappingExposure = 1.05;
+    host.appendChild(renderer.domElement);
     rendererRef.current = renderer;
-    container.replaceChildren(renderer.domElement);
 
-    // 4. Studio Multi-Point Lighting for Anatomical Depth
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
-    scene.add(ambientLight);
+    const scene = new THREE.Scene();
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = envTexture;
+    sceneRef.current = scene;
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.8);
-    keyLight.position.set(4, 5, 5);
-    scene.add(keyLight);
+    const key = new THREE.DirectionalLight(0xffffff, 1.6);
+    key.position.set(3, 4, 5);
+    // Neutral studio lighting so tissue keeps its true colour.
+    const rim = new THREE.DirectionalLight(0xf1efe9, 1.4);
+    rim.position.set(-4, 2, -4);
+    const under = new THREE.DirectionalLight(0xffffff, 0.35);
+    under.position.set(0, -4, 2);
+    scene.add(key, rim, under, new THREE.AmbientLight(0xffffff, 0.25));
 
-    const blueRimLight = new THREE.DirectionalLight(0x3b82f6, 2.5);
-    blueRimLight.position.set(-5, 3, -4);
-    scene.add(blueRimLight);
+    const camera = new THREE.PerspectiveCamera(35, 1, 0.05, 100);
+    camera.position.set(0, 0.2, CAMERA_DISTANCE);
+    cameraRef.current = camera;
 
-    const warmFillLight = new THREE.PointLight(0xffedd5, 1.2, 12);
-    warmFillLight.position.set(0, -3, 3);
-    scene.add(warmFillLight);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.enablePan = false;
+    controls.minDistance = 2.6;
+    controls.maxDistance = 9;
+    controls.autoRotateSpeed = 1.1;
+    controls.saveState();
+    controlsRef.current = controls;
 
-    // 5. Organ Group - Scaled appropriately so it fits within the viewport perfectly
-    const organGroup = new THREE.Group();
-    organGroup.scale.set(0.72, 0.72, 0.72);
-    organGroupRef.current = organGroup;
-    scene.add(organGroup);
+    let resumeTimer: number | undefined;
+    const onStart = () => { controls.autoRotate = false; window.clearTimeout(resumeTimer); };
+    const onEnd = () => { resumeTimer = window.setTimeout(() => { controls.autoRotate = animatedRef.current; }, 2500); };
+    controls.addEventListener('start', onStart);
+    controls.addEventListener('end', onEnd);
 
-    // Construct refined 3D anatomical geometry
-    buildRefinedOrganGeometry(organType, organGroup, isWireframe);
+    const stageGroup = new THREE.Group();
+    scene.add(stageGroup);
+    stageGroupRef.current = stageGroup;
 
-    // 6. Concentric Holographic Orbital Rings
-    const ringGroup = new THREE.Group();
-    const ringMat1 = new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.35 });
-    const ringGeo1 = new THREE.RingGeometry(1.7, 1.715, 64);
-    const ring1 = new THREE.Line(ringGeo1, ringMat1);
-    ring1.rotation.x = Math.PI / 2.3;
-    ringGroup.add(ring1);
+    const resize = () => {
+      const w = host.clientWidth || 1;
+      const h = host.clientHeight || 1;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+    };
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(host);
 
-    const ringMat2 = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.15 });
-    const ringGeo2 = new THREE.RingGeometry(2.1, 2.11, 64);
-    const ring2 = new THREE.Line(ringGeo2, ringMat2);
-    ring2.rotation.x = -Math.PI / 4;
-    ringGroup.add(ring2);
-    scene.add(ringGroup);
+    const projected = new THREE.Vector3();
+    const toCamera = new THREE.Vector3();
 
-    // 7. Interactive 3D Milestone Hotspot Pins
-    const pinsGroup = new THREE.Group();
-    pinsGroupRef.current = pinsGroup;
-    pins.forEach((pin) => {
-      const isSelected = activePinId === pin.id;
+    const renderFrame = (timeMs: number) => {
+      const t = timeMs / 1000;
+      controls.update();
 
-      // Pin core sphere
-      const pinGeo = new THREE.SphereGeometry(0.065, 16, 16);
-      const pinMat = new THREE.MeshStandardMaterial({
-        color: isSelected ? 0x2563eb : 0xffffff,
-        emissive: isSelected ? 0x3b82f6 : 0xffffff,
-        emissiveIntensity: isSelected ? 2.5 : 1.2,
-        roughness: 0.2,
-        metalness: 0.8
-      });
-      const pinMesh = new THREE.Mesh(pinGeo, pinMat);
-      pinMesh.position.set(...pin.position);
-      pinMesh.userData = { pinId: pin.id };
-
-      // Halo ring around pin
-      const haloGeo = new THREE.RingGeometry(0.09, 0.12, 24);
-      const haloMat = new THREE.MeshBasicMaterial({
-        color: isSelected ? 0x60a5fa : 0xffffff,
-        transparent: true,
-        opacity: isSelected ? 0.9 : 0.45,
-        side: THREE.DoubleSide
-      });
-      const haloMesh = new THREE.Mesh(haloGeo, haloMat);
-      haloMesh.position.set(...pin.position);
-      haloMesh.position.z += 0.02;
-      haloMesh.userData = { pinId: pin.id };
-
-      pinsGroup.add(pinMesh);
-      pinsGroup.add(haloMesh);
-    });
-    organGroup.add(pinsGroup);
-
-    // 8. Animation Loop
-    let clock = new THREE.Clock();
-    const animate = () => {
-      animFrameIdRef.current = requestAnimationFrame(animate);
-      const elapsedTime = clock.getElapsedTime();
-
-      if (isAnimated && organGroupRef.current) {
-        if (organType === 'heart') {
-          // Realistic dual ventricular contraction (systole + diastole)
-          const beatFreq = (bpm / 60) * Math.PI * 2;
-          const beat = Math.sin(elapsedTime * beatFreq);
-          const secondary = Math.sin(elapsedTime * beatFreq * 2 + 0.3) * 0.4;
-          const scaleMod = 1.0 + Math.max(0, beat + secondary) * 0.075;
-          organGroupRef.current.scale.set(0.72 * scaleMod, 0.72 * scaleMod * 1.02, 0.72 * scaleMod);
-        } else if (organType === 'stem') {
-          // Dynamic membrane wave
-          const wave = Math.sin(elapsedTime * 2.2) * 0.035;
-          organGroupRef.current.scale.set(0.72 * (1.0 + wave), 0.72 * (1.0 - wave), 0.72 * (1.0 + wave * 0.5));
+      if (animatedRef.current) {
+        let s = 1;
+        if (organRef.current === 'heart') {
+          // Lub-dub: two gaussian pulses per cardiac cycle.
+          const phase = (t * bpmRef.current / 60) % 1;
+          s = 1 + 0.035 * (Math.exp(-(((phase - 0.08) / 0.05) ** 2)) + 0.6 * Math.exp(-(((phase - 0.28) / 0.06) ** 2)));
+        } else if (organRef.current === 'stem') {
+          s = 1 + 0.015 * Math.sin(t * 1.8);
         } else {
-          // Gentle metabolic breathing cycle
-          const breath = Math.sin(elapsedTime * 1.2) * 0.02;
-          organGroupRef.current.scale.set(0.72 * (1.0 + breath), 0.72 * (1.0 + breath), 0.72 * (1.0 + breath));
+          s = 1 + 0.008 * Math.sin(t * 1.2);
         }
-
-        // Smooth continuous slow rotation when idle
-        if (!isDragging) {
-          organGroupRef.current.rotation.y += 0.003;
-        }
-      }
-
-      // Billboard pins to always face the camera
-      if (pinsGroupRef.current) {
-        pinsGroupRef.current.children.forEach(child => {
-          if (child instanceof THREE.Mesh && child.geometry instanceof THREE.RingGeometry) {
-            child.quaternion.copy(camera.quaternion);
-          }
-        });
+        stageGroup.scale.setScalar(s);
       }
 
       renderer.render(scene, camera);
+
+      // Project pins into screen space; hide ones on the far side of the model.
+      const w = host.clientWidth;
+      const h = host.clientHeight;
+      pinEls.current.forEach((el, k) => {
+        const a = anchorsRef.current.get(k);
+        if (!a) { el.dataset.visible = 'false'; return; }
+        projected.copy(a.point).project(camera);
+        toCamera.copy(camera.position).sub(a.point);
+        const facing = a.normal.dot(toCamera) > 0;
+        const x = (projected.x * 0.5 + 0.5) * w;
+        const y = (-projected.y * 0.5 + 0.5) * h;
+        el.style.transform = `translate(${x - 7}px, ${y - 7}px)`;
+        el.dataset.visible = String(facing && projected.z <= 1);
+        // Open the label toward the centre so it never runs off the viewer edge.
+        el.dataset.side = x > w * 0.55 ? 'left' : 'right';
+      });
     };
 
-    animate();
-
-    const handleResize = () => {
-      if (!container || !rendererRef.current || !cameraRef.current) return;
-      const newW = container.clientWidth;
-      const newH = container.clientHeight;
-      cameraRef.current.aspect = newW / newH;
-      cameraRef.current.updateProjectionMatrix();
-      rendererRef.current.setSize(newW, newH);
-    };
-
-    window.addEventListener('resize', handleResize);
+    // Only render while the viewer is on screen and the tab is visible.
+    let onScreen = true;
+    const sync = () => renderer.setAnimationLoop(onScreen && !document.hidden ? renderFrame : null);
+    const io = new IntersectionObserver(([entry]) => { onScreen = entry.isIntersecting; sync(); });
+    io.observe(stage);
+    document.addEventListener('visibilitychange', sync);
+    sync();
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
+      renderer.setAnimationLoop(null);
+      io.disconnect();
+      ro.disconnect();
+      document.removeEventListener('visibilitychange', sync);
+      window.clearTimeout(resumeTimer);
+      controls.removeEventListener('start', onStart);
+      controls.removeEventListener('end', onEnd);
+      controls.dispose();
+      if (contentRef.current) disposeObject(contentRef.current.obj, contentRef.current.ownsGeometry);
+      contentRef.current = null;
+      envTexture.dispose();
+      pmrem.dispose();
       renderer.dispose();
-      container.replaceChildren();
+      renderer.domElement.remove();
+      rendererRef.current = null;
     };
-  }, [organType, isWireframe, isAnimated, activePinId, zoomLevel]);
+  }, []);
 
-  // Interactive mouse drag orbit controls
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setIsDragging(true);
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const initialRotY = organGroupRef.current?.rotation.y || 0;
-    const initialRotX = organGroupRef.current?.rotation.x || 0;
+  // ---- Load / swap organ model ---------------------------------------------
+  useEffect(() => {
+    const stageGroup = stageGroupRef.current;
+    if (!stageGroup) return;
+    let cancelled = false;
+    setLoad({ status: 'loading', progress: 0 });
+    setShowCredit(false);
+    anchorsRef.current = new Map();
 
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX;
-      const deltaY = moveEvent.clientY - startY;
-      if (organGroupRef.current) {
-        organGroupRef.current.rotation.y = initialRotY + deltaX * 0.01;
-        organGroupRef.current.rotation.x = Math.max(-0.6, Math.min(0.6, initialRotX + deltaY * 0.01));
+    const mount = (obj: THREE.Object3D, ownsGeometry: boolean, state: LoadState) => {
+      if (cancelled) { disposeObject(obj, ownsGeometry); return; }
+      if (contentRef.current) {
+        stageGroup.remove(contentRef.current.obj);
+        disposeObject(contentRef.current.obj, contentRef.current.ownsGeometry);
       }
+      setWireframe(obj, wireframeRef.current);
+      stageGroup.add(obj);
+      contentRef.current = { obj, ownsGeometry };
+      anchorsRef.current = anchorPins(obj, metricsRef.current);
+      controlsRef.current?.reset();
+      if (controlsRef.current) controlsRef.current.autoRotate = animatedRef.current;
+      setLoad(state);
     };
 
-    const handleMouseUp = () => {
-      setIsDragging(false);
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
+    const spec = MODELS[organType];
+    loadModel(spec.url, pct => { if (!cancelled) setLoad({ status: 'loading', progress: pct }); })
+      .then(gltf => mount(normalize(instantiate(gltf, spec)), false, { status: 'ready' }))
+      .catch(() => {
+        if (cancelled) return;
+        if (spec.sketchfabId && navigator.onLine) {
+          if (contentRef.current) {
+            stageGroup.remove(contentRef.current.obj);
+            disposeObject(contentRef.current.obj, contentRef.current.ownsGeometry);
+            contentRef.current = null;
+          }
+          setLoad({ status: 'embed', ready: false });
+        } else {
+          mount(normalize(buildProceduralOrgan(organType)), true, { status: 'fallback' });
+        }
+      });
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    return () => { cancelled = true; };
+  }, [organType]);
+
+  // Re-anchor pins when the pin set changes for the same organ.
+  const pinSignature = metrics.map(m => `${m.key}:${m.pin.join(',')}`).join('|');
+  useEffect(() => {
+    if (contentRef.current) anchorsRef.current = anchorPins(contentRef.current.obj, metrics);
+  }, [pinSignature]);
+
+  useEffect(() => {
+    if (contentRef.current) setWireframe(contentRef.current.obj, wireframe);
+  }, [wireframe]);
+
+  useEffect(() => {
+    animatedRef.current = animated;
+    if (controlsRef.current) controlsRef.current.autoRotate = animated;
+    if (!animated) stageGroupRef.current?.scale.setScalar(1);
+  }, [animated]);
+
+  const dolly = (factor: number) => {
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!camera || !controls) return;
+    const offset = camera.position.clone().sub(controls.target);
+    const dist = THREE.MathUtils.clamp(offset.length() * factor, controls.minDistance, controls.maxDistance);
+    camera.position.copy(controls.target).add(offset.setLength(dist));
+    controls.update();
   };
 
-  // Zoom with mouse wheel
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const newZoom = Math.max(3.4, Math.min(6.2, zoomLevel + e.deltaY * 0.003));
-    setZoomLevel(newZoom);
-    if (cameraRef.current) {
-      cameraRef.current.position.z = newZoom;
-    }
+  const toggleFullscreen = () => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    if (document.fullscreenElement) document.exitFullscreen();
+    else stage.requestFullscreen?.();
   };
+
+  const isEmbed = load.status === 'embed';
+  const spec = MODELS[organType];
+  // The Sketchfab embed shows its own title and author, so only local models need our credit.
+  const credit = load.status === 'ready' ? spec.credit : undefined;
 
   return (
-    <div
-      onWheel={handleWheel}
-      style={{
-        position: 'relative',
-        width: '100%',
-        height: '460px',
-        userSelect: 'none',
-        overflow: 'hidden',
-        borderRadius: '24px'
-      }}
-    >
-      {/* 3D WebGL Canvas */}
-      <div
-        ref={mountRef}
-        onMouseDown={handleMouseDown}
-        style={{
-          width: '100%',
-          height: '100%',
-          cursor: isDragging ? 'grabbing' : 'grab'
-        }}
-      />
+    <div ref={stageRef} className="organ-stage" style={{ height }}>
+      <div className="organ-floor" />
+      <div ref={canvasHostRef} className="organ-canvas" aria-label={`Interactive 3D model: ${organType}`} role="img" />
 
-      {/* Floating 3D Tool Controls */}
-      <div style={{
-        position: 'absolute',
-        top: 14,
-        right: 14,
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.45rem',
-        background: 'rgba(18, 20, 27, 0.85)',
-        backdropFilter: 'blur(16px)',
-        border: '1px solid rgba(255, 255, 255, 0.12)',
-        borderRadius: '9999px',
-        padding: '0.3rem 0.6rem',
-        zIndex: 20
-      }}>
-        {/* Toggle Wireframe Mode */}
-        <button
-          onClick={() => setIsWireframe(!isWireframe)}
-          title="Toggle Wireframe Holo-scan"
-          style={{
-            background: isWireframe ? '#2563eb' : 'transparent',
-            border: 'none',
-            color: '#f8fafc',
-            borderRadius: '50%',
-            width: 26,
-            height: 26,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer'
-          }}
-        >
-          <Zap size={13} />
-        </button>
+      {isEmbed && spec.sketchfabId && (
+        <iframe
+          key={spec.sketchfabId}
+          className="organ-embed"
+          title={`${spec.credit?.title ?? organType} (3D model on Sketchfab)`}
+          src={sketchfabEmbedUrl(spec.sketchfabId)}
+          allow="autoplay; fullscreen; xr-spatial-tracking"
+          allowFullScreen
+          onLoad={() => setLoad({ status: 'embed', ready: true })}
+        />
+      )}
 
-        {/* Toggle Animation */}
-        <button
-          onClick={() => setIsAnimated(!isAnimated)}
-          title={isAnimated ? 'Pause 3D Dynamics' : 'Resume 3D Dynamics'}
-          style={{
-            background: isAnimated ? 'rgba(37, 99, 235, 0.25)' : 'transparent',
-            border: 'none',
-            color: '#f8fafc',
-            borderRadius: '50%',
-            width: 26,
-            height: 26,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer'
-          }}
-        >
-          {isAnimated ? <Pause size={13} /> : <Play size={13} />}
-        </button>
-
-        {/* Zoom In */}
-        <button
-          onClick={() => {
-            const z = Math.max(3.4, zoomLevel - 0.4);
-            setZoomLevel(z);
-            if (cameraRef.current) cameraRef.current.position.z = z;
-          }}
-          title="Zoom In"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: '#94a3b8',
-            borderRadius: '50%',
-            width: 26,
-            height: 26,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer'
-          }}
-        >
-          <ZoomIn size={13} />
-        </button>
-
-        {/* Zoom Out */}
-        <button
-          onClick={() => {
-            const z = Math.min(6.2, zoomLevel + 0.4);
-            setZoomLevel(z);
-            if (cameraRef.current) cameraRef.current.position.z = z;
-          }}
-          title="Zoom Out"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: '#94a3b8',
-            borderRadius: '50%',
-            width: 26,
-            height: 26,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer'
-          }}
-        >
-          <ZoomOut size={13} />
-        </button>
-
-        {/* Reset 3D Rotation */}
-        <button
-          onClick={() => {
-            if (organGroupRef.current) {
-              organGroupRef.current.rotation.set(0, 0, 0);
-            }
-          }}
-          title="Reset 3D Orientation"
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: '#94a3b8',
-            borderRadius: '50%',
-            width: 26,
-            height: 26,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer'
-          }}
-        >
-          <RotateCw size={13} />
-        </button>
+      <div className="pin-layer" hidden={isEmbed}>
+        {metrics.map(m => (
+          <button
+            key={m.key}
+            ref={el => { if (el) pinEls.current.set(m.key, el); else pinEls.current.delete(m.key); }}
+            className={`pin ${m.status} ${activeMetricKey === m.key ? 'active' : ''}`}
+            onClick={() => onSelectMetric(m.key)}
+            aria-label={`${m.label}: ${m.value}${m.unit ? ' ' + m.unit : ''}`}
+            aria-pressed={activeMetricKey === m.key}
+          >
+            <span className="pin-dot" />
+            <span className="pin-label">{m.label}</span>
+          </button>
+        ))}
       </div>
 
-      {/* Top Left Status Badge */}
-      <div style={{
-        position: 'absolute',
-        top: 14,
-        left: 14,
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.35rem',
-        background: 'rgba(18, 20, 27, 0.85)',
-        backdropFilter: 'blur(16px)',
-        border: '1px solid rgba(255, 255, 255, 0.08)',
-        borderRadius: '9999px',
-        padding: '0.25rem 0.75rem',
-        fontSize: '0.72rem',
-        color: '#94a3b8',
-        zIndex: 20
-      }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb', display: 'inline-block' }} />
-        <span style={{ fontWeight: 600, color: '#f8fafc' }}>Interactive 3D WebGL</span>
-        <span style={{ opacity: 0.6 }}>• Drag to orbit • Scroll to zoom</span>
+      <div className="viewer-toolbar" role="toolbar" aria-label="3D viewer controls" hidden={isEmbed}>
+        <button onClick={() => setAnimated(a => !a)} aria-pressed={animated} title={animated ? 'Pause motion' : 'Resume motion'} aria-label={animated ? 'Pause motion' : 'Resume motion'}>
+          {animated ? <Pause size={15} /> : <Play size={15} />}
+        </button>
+        <button onClick={() => setWireframeState(w => !w)} aria-pressed={wireframe} title="Wireframe" aria-label="Toggle wireframe">
+          <Box size={15} />
+        </button>
+        <button onClick={() => dolly(0.82)} title="Zoom in" aria-label="Zoom in"><ZoomIn size={15} /></button>
+        <button onClick={() => dolly(1.2)} title="Zoom out" aria-label="Zoom out"><ZoomOut size={15} /></button>
+        <button onClick={() => controlsRef.current?.reset()} title="Reset view" aria-label="Reset view"><RotateCcw size={15} /></button>
+        <button onClick={toggleFullscreen} title="Fullscreen" aria-label="Fullscreen"><Maximize2 size={15} /></button>
       </div>
 
-      {/* Active Pin Hotspot Inspector HUD Pill */}
-      {activePin && (
-        <div style={{
-          position: 'absolute',
-          top: 55,
-          left: 14,
-          background: 'rgba(18, 20, 27, 0.92)',
-          backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(37, 99, 235, 0.4)',
-          borderRadius: '12px',
-          padding: '0.5rem 0.85rem',
-          zIndex: 20,
-          boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.15rem' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#60a5fa' }} />
-            <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#ffffff' }}>{activePin.label}</span>
+      {(load.status === 'loading' || (isEmbed && !load.ready)) && !webglError && (
+        <div className="viewer-status">
+          <div className="loader">
+            <div className="ring" />
+            <span>Loading 3D model</span>
+            {load.status === 'loading' && <div className="bar"><span style={{ width: `${load.progress}%` }} /></div>}
           </div>
-          <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
-            {activePin.description}: <strong style={{ color: '#38bdf8' }}>{activePin.value}</strong>
+        </div>
+      )}
+
+      {webglError && (
+        <div className="viewer-status">
+          <div className="loader" style={{ maxWidth: 260, textAlign: 'center' }}>
+            <span>3D view needs WebGL, which isn't available in this browser.</span>
           </div>
+        </div>
+      )}
+
+      {(load.status === 'ready' || load.status === 'fallback') && !webglError && (
+        <div className="viewer-hint">Drag to rotate · scroll or pinch to zoom · tap a marker</div>
+      )}
+
+      {load.status === 'fallback' && (
+        <span className="chip chip-neutral viewer-placeholder" title={`Add ${MODELS[organType].url.replace('/models/', '')} to public/models to show the detailed model`}>
+          Placeholder model
+        </span>
+      )}
+
+      {credit && (
+        <div className="viewer-credit">
+          <button className="viewer-credit-btn" onClick={() => setShowCredit(s => !s)} aria-expanded={showCredit}>
+            <Info size={11} /> Model credit
+          </button>
+          {showCredit && (
+            <div className="viewer-credit-pop">
+              “{credit.title}” by{' '}
+              <a href={credit.url} target="_blank" rel="noreferrer">{credit.author}</a>{' '}
+              on Sketchfab · {credit.license}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 };
 
+export default OrganViewer3D;
+
 // =========================================================================
-// Refined Anatomical 3D Mesh Builders
+// Procedural fallback geometry, used until a .glb exists for an organ
 // =========================================================================
-function buildRefinedOrganGeometry(type: string, parentGroup: THREE.Group, wireframe: boolean) {
-  while (parentGroup.children.length > 0) {
-    parentGroup.remove(parentGroup.children[0]);
-  }
-
-  // Refined organic shader materials with soft roughness and specular reflection
-  const heartMuscleMat = new THREE.MeshStandardMaterial({
-    color: 0x9e1717,
-    roughness: 0.38,
-    metalness: 0.15,
-    wireframe: wireframe
-  });
-
-  const aortaRedMat = new THREE.MeshStandardMaterial({
-    color: 0xba1a1a,
-    roughness: 0.3,
-    metalness: 0.2,
-    wireframe: wireframe
-  });
-
-  const pulmBlueMat = new THREE.MeshStandardMaterial({
-    color: 0x1d4ed8,
-    roughness: 0.28,
-    metalness: 0.25,
-    wireframe: wireframe
-  });
-
-  const boneCorticalMat = new THREE.MeshStandardMaterial({
-    color: 0xd6d3d1,
-    roughness: 0.5,
-    metalness: 0.05,
-    wireframe: wireframe
-  });
-
-  const marrowRedMat = new THREE.MeshStandardMaterial({
-    color: 0x7f1d1d,
-    roughness: 0.45,
-    metalness: 0.15,
-    wireframe: wireframe
-  });
-
-  const liverTissueMat = new THREE.MeshStandardMaterial({
-    color: 0x6e2511,
-    roughness: 0.35,
-    metalness: 0.12,
-    wireframe: wireframe
-  });
-
-  const stemMembraneMat = new THREE.MeshStandardMaterial({
-    color: 0xf1f5f9,
-    roughness: 0.2,
-    metalness: 0.3,
-    wireframe: wireframe
-  });
+function buildProceduralOrgan(type: OrganType): THREE.Group {
+  const group = new THREE.Group();
+  const mat = (color: number, roughness = 0.4, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) =>
+    new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.08, ...extra });
 
   switch (type) {
     case 'heart': {
-      // 1. Ventricular Body (Sculpted organic heart shape)
-      const ventGeo = new THREE.SphereGeometry(1.0, 36, 36);
-      const pos = ventGeo.attributes.position;
+      const geo = new THREE.SphereGeometry(1, 48, 48);
+      const pos = geo.attributes.position;
       for (let i = 0; i < pos.count; i++) {
-        let x = pos.getX(i);
-        let y = pos.getY(i);
-        let z = pos.getZ(i);
-        // Taper towards the apex at bottom
-        if (y < 0) {
-          pos.setX(i, x * (1 + y * 0.45));
-          pos.setZ(i, z * (1 + y * 0.45));
-        }
-        // Slightly rotate ventricular groove
+        const y = pos.getY(i);
+        if (y < 0) { pos.setX(i, pos.getX(i) * (1 + y * 0.45)); pos.setZ(i, pos.getZ(i) * (1 + y * 0.45)); }
         pos.setX(i, pos.getX(i) + Math.sin(y * 2) * 0.08);
       }
-      ventGeo.computeVertexNormals();
-      const ventricles = new THREE.Mesh(ventGeo, heartMuscleMat);
-      ventricles.scale.set(0.9, 1.15, 0.85);
-      parentGroup.add(ventricles);
-
-      // 2. Aortic Arch (Curved Torus at top)
-      const aortaGeo = new THREE.TorusGeometry(0.42, 0.16, 20, 36, Math.PI * 1.15);
-      const aorta = new THREE.Mesh(aortaGeo, aortaRedMat);
+      geo.computeVertexNormals();
+      const body = new THREE.Mesh(geo, mat(0x9e1717, 0.38));
+      body.scale.set(0.9, 1.15, 0.85);
+      const aorta = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.16, 20, 36, Math.PI * 1.15), mat(0xba1a1a, 0.3));
       aorta.position.set(-0.08, 0.9, 0.05);
       aorta.rotation.z = -Math.PI / 6;
-      parentGroup.add(aorta);
-
-      // 3. Brachiocephalic and Carotid Branches on Aorta Arch
-      [-0.2, 0.05, 0.25].forEach((offsetX, idx) => {
-        const branchGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.35, 12);
-        const branch = new THREE.Mesh(branchGeo, aortaRedMat);
-        branch.position.set(offsetX - 0.1, 1.3, 0.08);
-        branch.rotation.z = (idx - 1) * 0.15;
-        parentGroup.add(branch);
-      });
-
-      // 4. Pulmonary Trunk (Blue vessel branching)
-      const pulmGeo = new THREE.CylinderGeometry(0.18, 0.22, 0.75, 20);
-      const pulm = new THREE.Mesh(pulmGeo, pulmBlueMat);
+      const pulm = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.75, 20), mat(0x1d4ed8, 0.3));
       pulm.position.set(0.35, 0.7, 0.3);
-      pulm.rotation.z = Math.PI / 4.2;
-      pulm.rotation.x = Math.PI / 7;
-      parentGroup.add(pulm);
-
-      // 5. Superior Vena Cava
-      const svcGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.7, 16);
-      const svc = new THREE.Mesh(svcGeo, pulmBlueMat);
-      svc.position.set(-0.55, 0.75, -0.15);
-      parentGroup.add(svc);
-
-      // 6. Coronary Arteries (Vascular curves across myocardium)
-      const curve1 = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(-0.05, 0.6, 0.85),
-        new THREE.Vector3(0.25, 0.2, 0.88),
-        new THREE.Vector3(0.4, -0.3, 0.7),
-        new THREE.Vector3(0.2, -0.85, 0.45)
-      ]);
-      const tubeGeo1 = new THREE.TubeGeometry(curve1, 30, 0.03, 8, false);
-      const coronary1 = new THREE.Mesh(tubeGeo1, aortaRedMat);
-      parentGroup.add(coronary1);
+      pulm.rotation.set(Math.PI / 7, 0, Math.PI / 4.2);
+      group.add(body, aorta, pulm);
       break;
     }
-
-    case 'marrow': {
-      // Femoral Bone Cross-Section
-      // 1. Cortical outer bone shaft
-      const outerBoneGeo = new THREE.CylinderGeometry(0.75, 0.7, 2.4, 32, 1, true);
-      const outerBone = new THREE.Mesh(outerBoneGeo, boneCorticalMat);
-      parentGroup.add(outerBone);
-
-      // 2. Interior medullary cavity with red hematopoietic bone marrow
-      const marrowCoreGeo = new THREE.CylinderGeometry(0.6, 0.56, 2.35, 28);
-      const marrowCore = new THREE.Mesh(marrowCoreGeo, marrowRedMat);
-      parentGroup.add(marrowCore);
-
-      // 3. Spongy cancellous trabecular niches
-      const nicheGroup = new THREE.Group();
-      for (let i = 0; i < 30; i++) {
-        const rad = 0.06 + Math.random() * 0.07;
-        const sphereGeo = new THREE.SphereGeometry(rad, 10, 10);
-        const sphere = new THREE.Mesh(sphereGeo, marrowRedMat);
-        const theta = Math.random() * Math.PI * 2;
-        const r = Math.random() * 0.45;
-        const y = -1.0 + Math.random() * 2.0;
-        sphere.position.set(r * Math.cos(theta), y, r * Math.sin(theta));
-        nicheGroup.add(sphere);
-      }
-      parentGroup.add(nicheGroup);
-      break;
-    }
-
     case 'liver': {
-      // Hepatic Bi-lobar geometry
-      // 1. Right Hepatic Lobe
-      const rightLobeGeo = new THREE.SphereGeometry(1.0, 32, 28);
-      rightLobeGeo.scale(1.15, 0.75, 0.85);
-      const rightLobe = new THREE.Mesh(rightLobeGeo, liverTissueMat);
-      rightLobe.position.set(0.25, 0, 0);
-      parentGroup.add(rightLobe);
-
-      // 2. Left Lobe (Tapered Cone)
-      const leftLobeGeo = new THREE.ConeGeometry(0.85, 1.3, 28);
-      leftLobeGeo.scale(0.75, 0.65, 0.55);
-      const leftLobe = new THREE.Mesh(leftLobeGeo, liverTissueMat);
-      leftLobe.position.set(-0.85, -0.1, 0.1);
-      leftLobe.rotation.z = Math.PI / 2.3;
-      parentGroup.add(leftLobe);
-
-      // 3. Portal Vein Trunk
-      const portalGeo = new THREE.CylinderGeometry(0.15, 0.18, 0.7, 16);
-      const portal = new THREE.Mesh(portalGeo, pulmBlueMat);
-      portal.position.set(0.1, -0.55, 0.4);
+      const tissue = mat(0x7a2a14, 0.35);
+      const right = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 32), tissue);
+      right.scale.set(1.15, 0.72, 0.82);
+      right.position.x = 0.25;
+      const left = new THREE.Mesh(new THREE.SphereGeometry(0.75, 32, 24), tissue);
+      left.scale.set(1.2, 0.45, 0.6);
+      left.position.set(-0.95, 0.12, 0.1);
+      left.rotation.z = -0.25;
+      const gall = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.35, 8, 16), mat(0x2f7d4a, 0.3));
+      gall.position.set(0.35, -0.55, 0.45);
+      gall.rotation.z = 0.6;
+      const portal = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.7, 16), mat(0x1d4ed8, 0.3));
+      portal.position.set(0.0, -0.55, 0.2);
       portal.rotation.x = Math.PI / 6;
-      parentGroup.add(portal);
+      group.add(right, left, gall, portal);
       break;
     }
-
-    case 'stem': {
-      // CD34+ Spherical Hematopoietic Stem Cell
-      // 1. Central Lipid Membrane Core
-      const stemGeo = new THREE.SphereGeometry(0.95, 36, 36);
-      const stemMesh = new THREE.Mesh(stemGeo, stemMembraneMat);
-      parentGroup.add(stemMesh);
-
-      // 2. Glycoprotein Receptors (CD34, CXCR4) radiating on surface
-      const receptorGroup = new THREE.Group();
-      const numReceptors = 36;
-      for (let i = 0; i < numReceptors; i++) {
-        const phi = Math.acos(-1 + (2 * i) / numReceptors);
-        const theta = Math.sqrt(numReceptors * Math.PI) * phi;
-        const x = Math.cos(theta) * Math.sin(phi);
-        const y = Math.sin(theta) * Math.sin(phi);
-        const z = Math.cos(phi);
-
-        const isCD34 = i % 2 === 0;
-        const stalkGeo = new THREE.CylinderGeometry(0.015, 0.015, 0.22, 6);
-        const headGeo = new THREE.SphereGeometry(0.05, 8, 8);
-        const stalkMat = new THREE.MeshStandardMaterial({ color: isCD34 ? 0x2563eb : 0x10b981 });
-        const stalk = new THREE.Mesh(stalkGeo, stalkMat);
-        const head = new THREE.Mesh(headGeo, stalkMat);
-        head.position.y = 0.12;
-
-        const stud = new THREE.Group();
-        stud.add(stalk);
-        stud.add(head);
-
-        stud.position.set(x * 0.96, y * 0.96, z * 0.96);
-        stud.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(x, y, z));
-        receptorGroup.add(stud);
+    case 'marrow': {
+      const bone = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.58, 2.4, 40, 1, true), mat(0xd6d3d1, 0.55, { side: THREE.DoubleSide }));
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 24), mat(0xd6d3d1, 0.55));
+      head.position.y = 1.35;
+      head.scale.set(1, 0.7, 1);
+      const core = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.46, 2.35, 32), mat(0x8b1c1c, 0.45));
+      group.add(bone, head, core);
+      // Deterministic niche placement so the shape is stable between renders.
+      let seed = 7;
+      const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const niche = mat(0xb91c1c, 0.4);
+      for (let i = 0; i < 28; i++) {
+        const s = new THREE.Mesh(new THREE.SphereGeometry(0.06 + rand() * 0.07, 12, 12), niche);
+        const theta = rand() * Math.PI * 2;
+        const r = 0.5 + rand() * 0.06;
+        s.position.set(r * Math.cos(theta), -1 + rand() * 2, r * Math.sin(theta));
+        group.add(s);
       }
-      parentGroup.add(receptorGroup);
+      break;
+    }
+    case 'stem': {
+      const membrane = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 48), mat(0xdbeafe, 0.15, { transparent: true, opacity: 0.32, depthWrite: false }));
+      const nucleus = new THREE.Mesh(new THREE.SphereGeometry(0.5, 32, 32), mat(0xcc0f65, 0.35));
+      group.add(nucleus, membrane);
       break;
     }
   }
+  return group;
 }
