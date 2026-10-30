@@ -39,7 +39,7 @@ export const SECTIONS: Section[] = [
   { id: 'monitor', label: 'Run Monitor', description: 'Live experiment stages and logs', group: 'Research', icon: Gauge, roles: ['researcher'] },
   { id: 'results', label: 'Results', description: 'Metrics, confusion matrix and runtime', group: 'Research', icon: BarChart3, roles: ['researcher', 'doctor'] },
   { id: 'report', label: 'Research Report', description: 'Exportable Markdown study report', group: 'Research', icon: FileText, roles: ['researcher', 'doctor'] },
-  { id: 'quantum_lab', label: 'Quantum Lab', description: 'Quantum kernel circuits, backends and jobs', group: 'Quantum', icon: Atom, roles: ['researcher', 'doctor'] },
+  { id: 'quantum_lab', label: 'Quantum Lab', description: '156-qubit QPU circuits, backends and hardware telemetry', group: 'Quantum', icon: Atom, roles: ['doctor', 'researcher', 'patient', 'hospital_admin'] },
   { id: 'hospital', label: 'Ward & Cohort', description: 'Cohort triage and service health', group: 'Operations', icon: Hospital, roles: ['hospital_admin', 'doctor'] }
 ];
 

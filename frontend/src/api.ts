@@ -1,7 +1,7 @@
 import {
   DatasetProfile, Experiment, PredictionResult, SystemHealth, AvailableModel,
   Patient, ClinicalObservation, PatientProgress, QuantumBackend, QuantumStatus,
-  QuantumJob, OrchestrationResult, HospitalOverview, CohortOverview
+  QuantumJob, OrchestrationResult, HospitalOverview, CohortOverview, QuantumExperimentResult
 } from './types';
 import { zzCircuitDepth, zzKernelMatrix } from './lib/quantumKernel';
 
@@ -207,6 +207,64 @@ export async function submitQuantumJob(params: { backend_name: string; execution
       ? `The server is offline, so ${params.backend_name} could not be reached. The kernel was computed exactly in your browser instead.`
       : 'The server is offline, so the kernel was computed exactly in your browser.'
   };
+}
+
+export async function testQuantumConnection(): Promise<{
+  success: boolean;
+  channel?: string;
+  instance?: string;
+  token_configured?: boolean;
+  token_masked?: string;
+  accessible_backends_count?: number;
+  backends?: Array<{ name: string; qubits: number; operational: boolean; pending_jobs: number; is_configured_target: boolean }>;
+  configured_backend?: string;
+  configured_backend_operational?: boolean;
+  message?: string;
+  error?: string;
+}> {
+  const res = await fetch(`${API_BASE}/quantum/test-connection`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({})
+  });
+  return await res.json();
+}
+
+export async function runQuantumKernelExperiment(params: {
+  backend_name: string;
+  execution_mode: 'hardware' | 'simulator';
+  n_features?: number;
+  shots?: number;
+  max_hardware_samples?: number;
+  confirm_hardware?: boolean;
+}): Promise<QuantumExperimentResult> {
+  const res = await fetch(`${API_BASE}/quantum/experiment/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      backend_name: params.backend_name,
+      execution_mode: params.execution_mode,
+      n_features: params.n_features || 20,
+      shots: params.shots || 1000,
+      max_hardware_samples: params.max_hardware_samples || 8,
+      confirm_hardware: params.confirm_hardware ?? (params.execution_mode === 'hardware')
+    })
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || "Failed to execute quantum experiment");
+  }
+  return await res.json();
+}
+
+export async function fetchLatestQuantumExperiment(): Promise<QuantumExperimentResult | null> {
+  try {
+    const res = await fetch(`${API_BASE}/quantum/experiment/latest`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
 }
 
 export async function fetchQuantumJobs(): Promise<QuantumJob[]> {
