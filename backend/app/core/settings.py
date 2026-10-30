@@ -30,6 +30,9 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
+    settings.db_path = settings.db_path.expanduser()
+    settings.data_dir = settings.data_dir.expanduser()
+    settings.artifacts_dir = settings.artifacts_dir.expanduser()
     for d in (settings.db_path.parent, settings.data_dir, settings.artifacts_dir):
         d.mkdir(parents=True, exist_ok=True)
     return settings
