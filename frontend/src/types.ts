@@ -128,9 +128,44 @@ export interface Patient {
   hla_match?: string;
   status: string;
   created_at: string;
-  primary_organ_type?: OrganType;
-  organ_label?: string;
-  organ_diagnosis?: string;
+  /** 'clinical' = admitted through intake; 'example' = pre-transplant data copied from a UCI cohort record. */
+  source: 'clinical' | 'example';
+  source_record?: string | null;
+  pretransplant?: Record<string, string | number> | null;
+}
+
+/** One variable of the UCI cohort data dictionary (backend/app/core/datasets/uci_bmt.py). */
+export interface CohortVariable {
+  name: string;
+  label: string;
+  description: string;
+  kind: 'numeric' | 'categorical' | 'binary';
+  phase: 'pre_transplant' | 'outcome' | 'id';
+  unit?: string | null;
+  categories?: string[] | null;
+  observed_min?: number;
+  observed_max?: number;
+  missing?: number;
+}
+
+export interface CohortOverview {
+  dataset_id: string;
+  citation: string;
+  license: string;
+  source_url: string;
+  summary: {
+    n_patients: number;
+    recipient_age_range: [number, number];
+    anc_recovery_median_day: number;
+    anc_recovery_iqr: [number, number];
+    anc_never_recovered: number;
+    early_engraftment_rate: number;
+    recovered_by_day: Record<string, number>;
+    log_cd34_vs_recovery_day_r: number;
+  };
+  quality_notes: string[];
+  required_for_intake: string[];
+  dictionary: CohortVariable[];
 }
 
 export interface ClinicalObservation {
@@ -278,21 +313,22 @@ export interface OrchestrationResult {
 export interface HospitalOverview {
   cohort_summary: {
     total_active_patients: number;
-    impending_engraftments: number;
+    example_patients: number;
     pending_clinician_reviews: number;
     allogeneic_count: number;
     autologous_count: number;
   };
   quantum_service_health: {
-    active_backends_online: number;
+    backends_available: number;
+    hardware_backends_available: number;
     total_quantum_jobs_executed: number;
     default_backend: string;
-    hardware_readiness: string;
+    ibm_connected: boolean;
   };
   service_health: {
     api_status: string;
     database: string;
-    orchestrator_agents_active: number;
-    uptime_pct: number;
+    workers_online: number;
+    gpu: string | null;
   };
 }

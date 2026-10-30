@@ -1,0 +1,4 @@
+# Linux / WSL2 with an NVIDIA GPU (CUDA 12 driver). Install after requirements.txt:
+#   uv pip install -r requirements.txt -r requirements-gpu.txt
+qiskit-aer-gpu==0.18.2
+cupy-cuda12x==14.2.0

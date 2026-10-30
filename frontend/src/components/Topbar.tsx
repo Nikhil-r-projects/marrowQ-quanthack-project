@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, Check, ChevronDown, Link2, Menu, Monitor, Moon, Phone, Search, Sun, UserPlus, Users } from 'lucide-react';
+import { Bell, Check, ChevronDown, Link2, Menu, Monitor, Moon, Search, Sun, UserPlus, UserRound, Users } from 'lucide-react';
 import { Patient, UserRole } from '../types';
 import { ROLE_LABELS, Section, TabId } from '../navigation';
 import { ThemePreference, useDismiss, useTheme } from '../hooks';
-import { daysPostTransplant } from '../data/cohort';
+import { daysPostTransplant } from '../data/observations';
 import { avatarTone, initials } from '../lib/format';
 
 export interface ClinicalAlert {
@@ -21,7 +21,7 @@ interface TopbarProps {
   role: UserRole;
   onRoleChange: (role: UserRole) => void;
   patients: Patient[];
-  selectedPatient: Patient;
+  selectedPatient: Patient | null;
   onSelectPatient: (patientId: string) => void;
   onNavigate: (tab: TabId, patientId?: string) => void;
   alerts: ClinicalAlert[];
@@ -30,7 +30,6 @@ interface TopbarProps {
   onOpenMobileNav: () => void;
   onShare: () => void;
   onNewPatient: () => void;
-  onCall: () => void;
 }
 
 const THEME_OPTIONS: { id: ThemePreference; label: string; Icon: typeof Sun }[] = [
@@ -53,8 +52,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   onAlertsSeen,
   onOpenMobileNav,
   onShare,
-  onNewPatient,
-  onCall
+  onNewPatient
 }) => {
   const [open, setOpen] = useState<'patients' | 'search' | 'alerts' | 'user' | null>(null);
   const [theme, setTheme] = useTheme();
@@ -74,7 +72,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   const [highlight, setHighlight] = useState(0);
 
   const isPatientRole = role === 'patient';
-  const showPatientSwitch = section.patientScoped;
+  const showPatientSwitch = section.patientScoped && selectedPatient != null;
 
   // "/" or Ctrl/Cmd+K focuses search.
   useEffect(() => {
@@ -98,7 +96,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       .filter(s => `${s.label} ${s.description} ${s.group}`.toLowerCase().includes(q))
       .map(s => ({ key: `s-${s.id}`, title: s.label, sub: s.description, icon: s.icon, run: () => onNavigate(s.id) }));
     const patientHits = isPatientRole ? [] : patients
-      .filter(p => `${p.name} ${p.patient_id} ${p.disease} ${p.organ_label}`.toLowerCase().includes(q))
+      .filter(p => `${p.name} ${p.patient_id} ${p.disease} ${p.source_record ?? ''}`.toLowerCase().includes(q))
       .map(p => ({ key: `p-${p.patient_id}`, title: p.name, sub: `${p.patient_id} · ${p.disease}`, icon: Users, run: () => onNavigate(section.patientScoped ? section.id : 'overview', p.patient_id) }));
     return [...patientHits, ...sectionHits].slice(0, 8);
   }, [query, sections, patients, isPatientRole, onNavigate, section]);
@@ -112,7 +110,7 @@ export const Topbar: React.FC<TopbarProps> = ({
     searchInput.current?.blur();
   };
 
-  const day = daysPostTransplant(selectedPatient);
+  const day = selectedPatient ? daysPostTransplant(selectedPatient) : 0;
 
   return (
     <header className="topbar">
@@ -127,7 +125,7 @@ export const Topbar: React.FC<TopbarProps> = ({
 
       <div className="topbar-spacer" />
 
-      {showPatientSwitch && (
+      {showPatientSwitch && selectedPatient && (
         <div className="popover-anchor" ref={patientRef}>
           <button
             className="patient-switch"
@@ -169,7 +167,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                         <span className="mi-title">{p.name}</span>
                         <span className="tiny faint">Day {d >= 0 ? `+${d}` : d}</span>
                       </span>
-                      <span className="mi-sub" style={{ display: 'block' }}>{p.disease.split(' (')[0]} · {p.organ_label}</span>
+                      <span className="mi-sub" style={{ display: 'block' }}>{p.patient_id} · {p.disease}{p.source === 'example' ? ' · example' : ''}</span>
                     </span>
                   </button>
                 );
@@ -222,11 +220,6 @@ export const Topbar: React.FC<TopbarProps> = ({
       </div>
 
       <div className="topbar-actions">
-        {role !== 'researcher' && (
-          <button className="icon-btn desktop-only" onClick={onCall} title={isPatientRole ? 'Call your care team' : 'Start consultation call'} aria-label="Start consultation call">
-            <Phone size={16} />
-          </button>
-        )}
         <button className="icon-btn desktop-only" onClick={onShare} title="Copy link to this view" aria-label="Copy link to this view">
           <Link2 size={16} />
         </button>
@@ -270,15 +263,15 @@ export const Topbar: React.FC<TopbarProps> = ({
             aria-label="Account and role"
             aria-expanded={open === 'user'}
           >
-            <span className="avatar" style={{ width: '100%', height: '100%' }}>{isPatientRole ? initials(selectedPatient.name) : 'HJ'}</span>
+            <span className="avatar" style={{ width: '100%', height: '100%' }}><UserRound size={16} /></span>
           </button>
           {open === 'user' && (
             <div className="popover" style={{ width: 280 }}>
               <div className="row" style={{ padding: '0.5rem 0.6rem 0.75rem' }}>
-                <span className="avatar lg">{isPatientRole ? initials(selectedPatient.name) : 'HJ'}</span>
+                <span className="avatar lg"><UserRound size={18} /></span>
                 <div>
-                  <div style={{ fontWeight: 600 }}>{isPatientRole ? selectedPatient.name : 'Dr. Hanzer Jon'}</div>
-                  <div className="small muted">{ROLE_LABELS[role]}</div>
+                  <div style={{ fontWeight: 600 }}>{ROLE_LABELS[role]}</div>
+                  <div className="small muted">{isPatientRole && selectedPatient ? `Record of ${selectedPatient.name}` : 'Local workstation · no sign-in'}</div>
                 </div>
               </div>
               <div className="menu-sep" />

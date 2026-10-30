@@ -22,7 +22,7 @@ class DatasetProfileResponse(BaseModel):
 
 class ExperimentCreateRequest(BaseModel):
     dataset_id: str
-    target_column: str = "neutrophil_recovery_day28"
+    target_column: str = "early_engraftment"
     positive_class: Any = 1
     selected_features: Optional[List[str]] = None
     test_size: float = Field(default=0.25, ge=0.1, le=0.5)
@@ -114,7 +114,7 @@ class QuantumSimulationResponse(BaseModel):
 class PatientResponse(BaseModel):
     patient_id: str
     name: str
-    age: int
+    age: float
     gender: str
     disease: str
     transplant_type: str
@@ -127,6 +127,20 @@ class PatientResponse(BaseModel):
     hla_match: Optional[str] = None
     status: str
     created_at: str
+    source: str = "clinical"
+    source_record: Optional[str] = None
+    pretransplant: Optional[Dict[str, Any]] = None
+
+class PatientCreateRequest(BaseModel):
+    """Intake for a transplant recipient. `pretransplant` uses the cohort data-dictionary variable names."""
+    label: str = Field(min_length=1, max_length=80, description="Name or medical record number as used locally")
+    transplant_date: str = Field(description="Date of stem-cell infusion (Day 0), ISO format")
+    conditioning: str = Field(default="Not recorded", max_length=80)
+    pretransplant: Dict[str, Any]
+
+class ExamplePatientsRequest(BaseModel):
+    count: int = Field(default=4, ge=1, le=8)
+    seed: int = 7
 
 class ObservationCreateRequest(BaseModel):
     patient_id: str

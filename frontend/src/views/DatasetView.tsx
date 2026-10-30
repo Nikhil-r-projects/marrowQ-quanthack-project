@@ -44,12 +44,12 @@ export const DatasetView: React.FC<DatasetViewProps> = ({ dataset, onDatasetLoad
         <div>
           <div className="eyebrow"><Database size={13} /> Research · step 1 of 4</div>
           <h2>Datasets</h2>
-          <p>Load the CIBMTR-grounded synthetic cohort or upload an approved, de-identified research extract. Every dataset is profiled and screened for post-transplant leakage before modelling.</p>
+          <p>Load the UCI paediatric transplant cohort (187 real recipients) or upload an approved, de-identified research extract. Every dataset is profiled and screened for post-transplant leakage before modelling.</p>
         </div>
         <div className="actions">
           <button className="btn btn-secondary" onClick={onLoadDemo} disabled={isLoadingDemo}>
             <RefreshCw size={14} className={isLoadingDemo ? 'spin' : ''} />
-            {isLoadingDemo ? 'Generating…' : 'Load synthetic cohort (N = 500)'}
+            {isLoadingDemo ? 'Loading…' : 'Load UCI cohort (N = 187)'}
           </button>
           <button className="btn btn-primary" onClick={() => onNavigate('setup')} disabled={!dataset}>
             Configure benchmark <ArrowRight size={14} />
@@ -74,8 +74,8 @@ export const DatasetView: React.FC<DatasetViewProps> = ({ dataset, onDatasetLoad
           <div className="card-title" style={{ marginBottom: '0.6rem' }}><ShieldAlert size={16} /> Data requirements</div>
           <ul className="small muted" style={{ paddingLeft: '1.1rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
             <li><strong style={{ color: 'var(--text)' }}>Pre-transplant features only.</strong> Columns recorded after Day 0 (GvHD, chimerism, infections) leak the outcome and are flagged.</li>
-            <li><strong style={{ color: 'var(--text)' }}>Binary target.</strong> Recommended: <code>neutrophil_recovery_day28</code> (1 = ANC ≥ 500 by Day +28).</li>
-            <li><strong style={{ color: 'var(--text)' }}>De-identified.</strong> CIBMTR terms forbid direct identifiers and re-identification attempts.</li>
+            <li><strong style={{ color: 'var(--text)' }}>Binary target.</strong> For the UCI cohort: <code>early_engraftment</code> (1 = ANC &gt; 500 by Day +14; 42% of recipients). Day +28 is not used because 97% of these children engraft by then.</li>
+            <li><strong style={{ color: 'var(--text)' }}>De-identified.</strong> No names or direct identifiers; registry data-use terms (e.g. CIBMTR) forbid re-identification attempts.</li>
           </ul>
         </div>
       </div>
@@ -86,7 +86,7 @@ export const DatasetView: React.FC<DatasetViewProps> = ({ dataset, onDatasetLoad
         <div className="card empty-state">
           <FileSpreadsheet size={34} />
           <h3>No dataset loaded</h3>
-          <p>{isLoadingDemo ? 'Generating the synthetic cohort…' : 'Load the synthetic cohort or upload a CSV to see its profile.'}</p>
+          <p>{isLoadingDemo ? 'Loading the UCI cohort…' : 'Load the UCI cohort or upload a CSV to see its profile.'}</p>
         </div>
       ) : (
         <>

@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # Hard ceiling on estimated QPU seconds per submission; the Open Plan allows 600 s per 28 days.
     ibm_max_seconds_per_run: float = Field(default=60.0, alias="IBM_MAX_SECONDS_PER_RUN")
 
+    # Claude drafts clinical review reports from computed results; the key never leaves the server.
+    anthropic_api_key: str | None = Field(default=None, alias="ANTHROPIC_API_KEY")
+
     worker_poll_seconds: float = Field(default=1.0, alias="MARROWQ_WORKER_POLL_SECONDS")
 
 

@@ -8,23 +8,25 @@ import numpy as np
 
 
 def detect_capabilities() -> Dict[str, Any]:
-    caps: Dict[str, Any] = {"python": platform.python_version(), "platform": platform.platform(), "torch_cuda": False, "aer_devices": []}
+    caps: Dict[str, Any] = {"python": platform.python_version(), "platform": platform.platform(), "cuda": False, "aer_devices": []}
     try:
-        import torch
+        import cupy
 
-        caps["torch"] = torch.__version__
-        if torch.cuda.is_available():
-            free, total = torch.cuda.mem_get_info()
+        caps["cupy"] = cupy.__version__
+        if cupy.cuda.runtime.getDeviceCount() > 0:
+            free, total = cupy.cuda.Device(0).mem_info
             caps.update(
-                torch_cuda=True,
-                gpu_name=torch.cuda.get_device_name(0),
+                cuda=True,
+                gpu_name=cupy.cuda.runtime.getDeviceProperties(0)["name"].decode(),
                 gpu_memory_total_mb=round(total / 2**20),
                 gpu_memory_free_mb=round(free / 2**20),
                 # A double-precision statevector needs 16 bytes per amplitude.
                 max_statevector_qubits=int(math.log2(free / 16)),
             )
     except ImportError:
-        caps["torch"] = None
+        caps["cupy"] = None
+    except Exception as exc:  # driver or runtime problems: report them instead of crashing the worker
+        caps["cuda_error"] = str(exc)
     try:
         from qiskit_aer import AerSimulator
         import qiskit_aer

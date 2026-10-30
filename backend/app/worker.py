@@ -84,7 +84,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="MarrowQ compute worker")
     parser.add_argument("--id", default=f"{socket.gethostname()}-worker", help="stable id, so interrupted jobs are requeued on restart")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    # Libraries such as the Qiskit transpiler log every pass at INFO; keep only our own progress lines.
+    logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s")
+    log.setLevel(logging.INFO)
 
     worker = Worker(args.id)
     for sig in (signal.SIGINT, signal.SIGTERM):

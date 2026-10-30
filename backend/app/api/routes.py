@@ -30,6 +30,7 @@ from app.core.database import (
 )
 from app.core.reporter import generate_markdown_report
 from app.core.settings import get_settings
+from app.core.datasets import uci_bmt
 
 router = APIRouter(prefix="/api")
 
@@ -67,32 +68,9 @@ def get_health():
 
 @router.get("/datasets/demo")
 def get_or_create_demo_dataset():
-    dataset_id = "demo_synthetic_hsct"
-    filepath = os.path.join(DATA_DIR, f"{dataset_id}.csv")
-    
-    df = generate_hsct_synthetic_dataset(n_samples=500, random_state=42)
-    df.to_csv(filepath, index=False)
-    _DATASET_CACHE[dataset_id] = df
-    
-    profile = profile_dataset(
-        df=df,
-        dataset_id=dataset_id,
-        name="CIBMTR-Grounded Synthetic HSCT Cohort (N=500)",
-        source="MarrowQ Clinically Grounded Synthetic Generator",
-        data_mode="synthetic"
-    )
-    
-    save_dataset_meta(
-        dataset_id=dataset_id,
-        name=profile.name,
-        source=profile.source,
-        data_mode=profile.data_mode,
-        filepath=filepath,
-        row_count=profile.total_rows,
-        col_count=profile.total_columns,
-        profile_dict=profile.model_dump()
-    )
-    
+    """The default research dataset: the real UCI paediatric HSCT cohort (cached after first download)."""
+    profile, df = uci_bmt.register_dataset()
+    _DATASET_CACHE[uci_bmt.DATASET_ID] = df
     return profile
 
 @router.post("/datasets/synthetic/generate")
@@ -107,7 +85,7 @@ def generate_synthetic_dataset(req: SyntheticGenerateRequest):
     profile = profile_dataset(
         df=df,
         dataset_id=dataset_id,
-        name=f"Synthetic HSCT Cohort (N={req.n_samples})",
+        name=f"Synthetic sandbox cohort (N={req.n_samples}, simulated)",
         source="MarrowQ Clinically Grounded Synthetic Generator",
         data_mode="synthetic"
     )
@@ -387,6 +365,13 @@ def get_available_trained_models():
                     })
     return models
 
+# Plain-language outcome labels (positive, negative) for known binary targets.
+TARGET_DESCRIPTIONS = {
+    "early_engraftment": (f"Neutrophil engraftment by Day +{uci_bmt.EARLY_ENGRAFTMENT_DAY}", f"Neutrophil engraftment after Day +{uci_bmt.EARLY_ENGRAFTMENT_DAY}"),
+    "neutrophil_recovery_day28": ("Neutrophil recovery by Day +28", "Neutrophil recovery after Day +28"),
+}
+
+
 @router.post("/predictions", response_model=PredictionResponse)
 def generate_prediction(req: PredictionRequest):
     exp = get_experiment_record(req.experiment_id)
@@ -403,8 +388,12 @@ def generate_prediction(req: PredictionRequest):
         
     preprocessor = joblib.load(preprocessor_path)
     
-    # Input DataFrame
-    input_df = pd.DataFrame([req.features])
+    features = dict(req.features)
+    if exp["dataset_id"] == uci_bmt.DATASET_ID:
+        # Same derivations as intake (malignant flag, ABO mismatch, dose ratio, allele differences).
+        features = uci_bmt.derive_fields(features)
+    # Align to the trained feature list; anything not supplied is imputed by the fitted preprocessor.
+    input_df = pd.DataFrame([features]).reindex(columns=exp["selected_features"])
     
     # Preprocess
     try:
@@ -457,7 +446,8 @@ def generate_prediction(req: PredictionRequest):
     else:
         raise HTTPException(status_code=400, detail=f"Unknown model name '{req.model_name}'.")
         
-    label_str = "Prompt Recovery (Day <= 28)" if pred == 1 else "Delayed Recovery (> Day 28)"
+    outcome = TARGET_DESCRIPTIONS.get(exp["target_column"], (f"{exp['target_column']} = 1", f"{exp['target_column']} = 0"))
+    label_str = outcome[0] if pred == 1 else outcome[1]
     
     disclaimer = (
         "SYNTHETIC DEMONSTRATION DATA — NOT CLINICAL EVIDENCE. "
@@ -466,7 +456,10 @@ def generate_prediction(req: PredictionRequest):
         "RESEARCH PROTOTYPE EVALUATION — NOT CLINICAL ADVICE. strictly for secondary research analysis."
     )
     
-    conf_desc = f"Model estimated {prob*100:.1f}% probability of timely engraftment by Day 28." if prob is not None else "Binary classification score without calibrated probability."
+    conf_desc = (
+        f"Model estimated {prob*100:.1f}% probability of: {outcome[0].lower()}."
+        if prob is not None else "Binary classification score without calibrated probability."
+    )
     
     return PredictionResponse(
         experiment_id=req.experiment_id,
@@ -508,7 +501,7 @@ def simulate_quantum(req: QuantumSimulationRequest):
 
 from app.core.database import (
     list_patients, get_patient, save_patient, get_patient_observations,
-    save_clinical_observation, list_quantum_jobs, list_prediction_runs, log_audit_event
+    save_clinical_observation, list_quantum_jobs, list_prediction_runs, log_audit_event, get_connection
 )
 from app.core.trajectory import compute_patient_trajectory
 from app.core.agents import orchestrator
@@ -600,7 +593,7 @@ def get_quantum_runtime_status():
 
 @router.get("/quantum/backends")
 def list_quantum_backends():
-    """Lists available QPU hardware backends (ibm_brisbane, ibm_kyiv) and simulators"""
+    """Local simulators, plus IBM processors when an authenticated runtime session exists"""
     return quantum_manager.list_backends()
 
 @router.post("/quantum/jobs")
@@ -633,42 +626,40 @@ def get_quantum_jobs_history():
 
 @router.get("/hospital/overview")
 def get_hospital_operational_overview():
-    """
-    Provides hospital-level operational metrics:
-    - Active BMT cohort size
-    - Engraftment milestones impending
-    - Predictions pending clinician review
-    - Quantum hardware service status
-    """
+    """Ward and platform status, computed from the database and live service checks (no constants)."""
+    from app.core.jobs import list_workers
+
     patients = list_patients()
-    jobs = list_quantum_jobs()
     predictions = list_prediction_runs()
-    
-    active_count = len(patients)
-    pending_reviews = sum(1 for p in predictions if p.get("clinician_review_status") == "PENDING_REVIEW")
-    impending_engraftments = sum(1 for p in patients if "Impending" in p.get("status", ""))
-    completed_jobs = len(jobs)
-    
+    workers = list_workers()
+    backends = quantum_manager.list_backends()
+    status = quantum_manager.get_status()
+    try:
+        with get_connection() as conn:
+            conn.execute("SELECT 1")
+        database_ok = True
+    except Exception:
+        database_ok = False
+
     return {
         "cohort_summary": {
-            "total_active_patients": active_count,
-            "impending_engraftments": impending_engraftments,
-            "pending_clinician_reviews": pending_reviews,
+            "total_active_patients": len(patients),
+            "example_patients": sum(1 for p in patients if p.get("source") == "example"),
+            "pending_clinician_reviews": sum(1 for p in predictions if p.get("clinician_review_status") == "PENDING_REVIEW"),
             "allogeneic_count": sum(1 for p in patients if "Allogeneic" in p.get("transplant_type", "")),
-            "autologous_count": sum(1 for p in patients if "Autologous" in p.get("transplant_type", ""))
+            "autologous_count": sum(1 for p in patients if "Autologous" in p.get("transplant_type", "")),
         },
         "quantum_service_health": {
-            "active_backends_online": 4,
-            "total_quantum_jobs_executed": completed_jobs,
+            "backends_available": len(backends),
+            "hardware_backends_available": sum(1 for b in backends if b.get("is_hardware")),
+            "total_quantum_jobs_executed": len(list_quantum_jobs()),
             "default_backend": "aer_simulator_statevector",
-            "hardware_readiness": "AVAILABLE_UPON_TOKEN_CONFIG"
+            "ibm_connected": bool(status.get("is_connected_to_hardware")),
         },
         "service_health": {
             "api_status": "ONLINE",
-            "database": "SQLITE_HYBRID_STORE_ONLINE",
-            "orchestrator_agents_active": 8,
-            "uptime_pct": 99.98
-        }
+            "database": "ONLINE" if database_ok else "UNAVAILABLE",
+            "workers_online": sum(1 for w in workers if w["online"]),
+            "gpu": next((w["capabilities"].get("gpu_name") for w in workers if w["online"] and w["capabilities"].get("cuda")), None),
+        },
     }
-
-

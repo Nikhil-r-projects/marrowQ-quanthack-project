@@ -11,7 +11,7 @@ interface DiagnosticIntelligenceViewProps {
   role: UserRole;
 }
 
-type Result = OrchestrationResult & { source: 'backend' | 'browser' };
+type Result = OrchestrationResult;
 
 const AGENT_NAMES: Record<string, { name: string; role: string }> = {
   clinical_data_quality_agent: { name: 'Data quality', role: 'Validates ranges and flags out-of-distribution inputs' },
@@ -81,9 +81,7 @@ export const DiagnosticIntelligenceView: React.FC<DiagnosticIntelligenceViewProp
         </div>
         <div className="actions">
           {result && (
-            <span className={`chip ${result.source === 'backend' ? 'chip-green' : 'chip-neutral'}`} title={result.source === 'backend' ? 'Computed by the MarrowQ API' : 'Backend offline, computed in your browser'}>
-              {result.source === 'backend' ? 'Live backend' : 'Computed in browser'}
-            </span>
+            <span className="chip chip-amber" title="Model probabilities on this page still come from fixed formulas; the trained UCI models replace them in the clinical-review update.">Prototype scoring</span>
           )}
           <button className="btn btn-primary" onClick={run} disabled={running}>
             <RefreshCw size={15} className={running ? 'spin' : ''} />
@@ -92,6 +90,15 @@ export const DiagnosticIntelligenceView: React.FC<DiagnosticIntelligenceViewProp
         </div>
       </div>
 
+      {result && !isPatient && (
+        <div className="alert-banner alert-warn" role="note">
+          <AlertTriangle size={16} />
+          <div>
+            <strong>Prototype scoring.</strong> The four model probabilities on this page still come from fixed formulas, not from models trained on patient data.
+            For scores from models trained on the UCI cohort, use the Engraftment predictor.
+          </div>
+        </div>
+      )}
       {error && (
         <div className="alert-banner alert-error"><XCircle size={16} /><div>{error}</div></div>
       )}

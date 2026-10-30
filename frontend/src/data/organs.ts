@@ -1,6 +1,8 @@
-import { OrganType, Patient, PatientProgress } from '../types';
+import { ClinicalObservation, OrganType, Patient } from '../types';
+import { LatestReading, OBSERVATION_TYPES, ObservationKey, latestReadings } from './observations';
 
-export type MetricStatus = 'normal' | 'watch' | 'alert';
+/** 'missing' = nothing recorded yet; never shown as abnormal. */
+export type MetricStatus = 'normal' | 'watch' | 'alert' | 'missing';
 
 export interface OrganMetric {
   key: string;
@@ -22,168 +24,198 @@ export interface OrganProfile {
   metrics: OrganMetric[];
 }
 
-const fmt = (n: number) => n.toLocaleString('en-US');
-
-function heart(patient: Patient): OrganProfile {
-  // Patient-specific demo values: Vance is on cardiotoxicity watch after Bu/Cy.
-  const watch = patient.patient_id === 'PT-9042-BMT';
-  return {
-    organ: 'heart',
-    title: 'Cardiac toxicity surveillance',
-    rationale: 'High-dose cyclophosphamide and prior anthracyclines can cause acute cardiotoxicity in the first weeks after conditioning.',
-    metrics: [
-      {
-        key: 'lvef', label: 'LV ejection fraction', value: watch ? '53' : '61', unit: '%', reference: '≥ 55%',
-        status: watch ? 'watch' : 'normal',
-        note: watch ? 'Down from 62% at pre-transplant echo' : 'Stable versus pre-transplant echo',
-        pin: [0.5, 0.05, 0.85]
-      },
-      {
-        key: 'troponin', label: 'hs-Troponin T', value: watch ? '18' : '9', unit: 'ng/L', reference: '< 14 ng/L',
-        status: watch ? 'watch' : 'normal',
-        note: watch ? 'Mild rise, repeat in 24 h' : 'No myocardial injury signal',
-        pin: [-0.35, -0.75, 0.6]
-      },
-      {
-        key: 'bnp', label: 'NT-proBNP', value: watch ? '410' : '98', unit: 'pg/mL', reference: '< 125 pg/mL',
-        status: watch ? 'watch' : 'normal',
-        note: watch ? 'Consistent with fluid load, trend daily' : 'No ventricular strain',
-        pin: [-0.2, 0.9, 0.35]
-      },
-      {
-        key: 'qtc', label: 'QTc interval', value: watch ? '452' : '428', unit: 'ms', reference: patient.gender === 'Female' ? '< 470 ms' : '< 450 ms',
-        status: 'normal',
-        note: 'Relevant with azole antifungal prophylaxis',
-        pin: [0.7, -0.4, -0.5]
-      }
-    ]
-  };
-}
-
-function liver(patient: Patient): OrganProfile {
-  // Chen: haplo + reduced intensity, now Day +34 with rising bilirubin and ALT.
-  const watch = patient.patient_id === 'PT-8104-BMT';
-  return {
-    organ: 'liver',
-    title: 'Hepatic VOD/SOS & liver GvHD',
-    rationale: 'Sinusoidal obstruction syndrome (EBMT criteria: bilirubin ≥ 2 mg/dL plus weight gain, painful hepatomegaly or ascites) and liver GvHD are leading early causes of transplant mortality.',
-    metrics: [
-      {
-        key: 'bilirubin', label: 'Total bilirubin', value: watch ? '1.9' : '0.8', unit: 'mg/dL', reference: '< 1.2 mg/dL (VOD ≥ 2.0)',
-        status: watch ? 'watch' : 'normal',
-        note: watch ? 'Rising for 3 days, just below VOD threshold' : 'Within normal range',
-        pin: [0.55, 0.35, 0.75]
-      },
-      {
-        key: 'weight', label: 'Weight gain vs baseline', value: watch ? '+3.1' : '+1.2', unit: '%', reference: '< 5%',
-        status: 'normal',
-        note: 'No fluid retention signal',
-        pin: [-0.75, 0.2, 0.55]
-      },
-      {
-        key: 'alt', label: 'ALT', value: watch ? '88' : '32', unit: 'U/L', reference: '< 40 U/L',
-        status: watch ? 'watch' : 'normal',
-        note: watch ? 'Pattern compatible with early liver GvHD' : 'Enzymes stable',
-        pin: [0.1, -0.6, 0.8]
-      },
-      {
-        key: 'portal', label: 'Portal vein flow (Doppler)', value: 'Antegrade', reference: 'Antegrade',
-        status: 'normal',
-        note: 'No hepatofugal flow or ascites',
-        pin: [-0.1, -0.3, -0.95]
-      }
-    ]
-  };
-}
-
-function marrow(patient: Patient, progress: PatientProgress | null): OrganProfile {
-  const s = progress?.clinical_summary;
-  const anc = Number(s?.current_anc ?? NaN);
-  const plt = Number(s?.current_plt ?? NaN);
-  const hb = Number(s?.current_hb ?? NaN);
-  const chim = patient.chimerism_donor_pct;
-  const isAuto = patient.transplant_type.toLowerCase().includes('auto');
-
-  return {
-    organ: 'marrow',
-    title: 'Marrow recovery & engraftment',
-    rationale: 'Neutrophil engraftment (ANC ≥ 500/µL for 3 consecutive days) ends the highest-risk window for bacterial and fungal sepsis.',
-    metrics: [
-      {
-        key: 'anc', label: 'Neutrophils (ANC)', value: isNaN(anc) ? '—' : fmt(anc), unit: 'cells/µL', reference: '≥ 500 cells/µL',
-        status: isNaN(anc) ? 'watch' : anc < 100 ? 'alert' : anc < 500 ? 'watch' : 'normal',
-        note: isNaN(anc) ? 'Awaiting lab draw' : anc < 100 ? 'Profound neutropenia, neutropenic precautions' : anc < 500 ? 'Rising toward engraftment threshold' : 'Neutrophil engraftment achieved',
-        pin: [0.2, 0.85, 0.5]
-      },
-      {
-        key: 'plt', label: 'Platelets', value: isNaN(plt) ? '—' : fmt(plt), unit: '/µL', reference: '≥ 20,000 /µL unsupported',
-        status: isNaN(plt) ? 'watch' : plt < 10000 ? 'alert' : plt < 20000 ? 'watch' : 'normal',
-        note: isNaN(plt) ? 'Awaiting lab draw' : plt < 10000 ? 'Below prophylactic transfusion trigger' : plt < 20000 ? 'Transfusion-dependent' : 'Transfusion-independent',
-        pin: [-0.6, 0.1, 0.7]
-      },
-      {
-        key: 'hb', label: 'Hemoglobin', value: isNaN(hb) ? '—' : hb.toFixed(1), unit: 'g/dL', reference: '≥ 8.0 g/dL',
-        status: isNaN(hb) ? 'watch' : hb < 7 ? 'alert' : hb < 8 ? 'watch' : 'normal',
-        note: isNaN(hb) ? 'Awaiting lab draw' : hb < 8 ? 'Consider red cell support' : 'No transfusion needed',
-        pin: [0.55, -0.55, 0.55]
-      },
-      {
-        key: 'chimerism', label: 'Donor chimerism', value: isAuto || chim == null ? 'N/A' : String(chim), unit: isAuto || chim == null ? undefined : '%', reference: '≥ 95% full donor',
-        status: isAuto || chim == null ? 'normal' : chim < 90 ? 'alert' : chim < 95 ? 'watch' : 'normal',
-        note: isAuto ? 'Autologous graft, not applicable' : chim != null && chim < 95 ? 'Mixed chimerism, repeat at Day +30' : 'Full donor hematopoiesis',
-        pin: [-0.1, -0.9, -0.4]
-      }
-    ]
-  };
-}
-
-function stem(patient: Patient): OrganProfile {
-  const dose = patient.cell_dose_cd34;
-  return {
-    organ: 'stem',
-    title: 'Stem cell graft quality',
-    rationale: 'CD34+ cell dose, viability and HLA compatibility are the strongest pre-transplant predictors of timely engraftment.',
-    metrics: [
-      {
-        key: 'cd34', label: 'CD34+ cell dose', value: dose != null ? dose.toFixed(1) : '—', unit: '×10⁶/kg', reference: '≥ 2.0 minimum, ≥ 4.0 optimal',
-        status: dose == null ? 'watch' : dose < 2 ? 'alert' : dose < 4 ? 'watch' : 'normal',
-        note: dose != null && dose >= 4 ? 'Optimal dose, supports early engraftment' : 'Low dose, higher risk of delayed engraftment',
-        pin: [0.1, 0.95, 0.3]
-      },
-      {
-        key: 'viability', label: 'Graft viability (7-AAD)', value: '97.8', unit: '%', reference: '≥ 70%',
-        status: 'normal',
-        note: 'Post-thaw viability check passed',
-        pin: [0.85, 0.1, 0.5]
-      },
-      {
-        key: 'hla', label: 'HLA match', value: patient.hla_match ?? '—', reference: '10/10 preferred',
-        status: (patient.hla_match ?? '').toLowerCase().includes('haplo') ? 'watch' : 'normal',
-        note: (patient.hla_match ?? '').toLowerCase().includes('haplo') ? 'Haploidentical, PTCy GvHD prophylaxis' : 'Fully matched or autologous',
-        pin: [-0.75, -0.35, 0.55]
-      },
-      {
-        key: 'cmv', label: 'CMV serostatus', value: (patient.cmv_status ?? '—').split(' (')[0], reference: 'D-/R- lowest risk',
-        status: (patient.cmv_status ?? '').includes('High') ? 'watch' : 'normal',
-        note: (patient.cmv_status ?? '').includes('High') ? 'Letermovir prophylaxis and weekly PCR' : 'Standard CMV monitoring',
-        pin: [0.15, -0.7, -0.7]
-      }
-    ]
-  };
-}
-
-export function organProfile(organ: OrganType, patient: Patient, progress: PatientProgress | null): OrganProfile {
-  switch (organ) {
-    case 'heart': return heart(patient);
-    case 'liver': return liver(patient);
-    case 'stem': return stem(patient);
-    case 'marrow':
-    default: return marrow(patient, progress);
-  }
-}
+export const ORGAN_LABELS: Record<OrganType, string> = {
+  heart: 'Heart',
+  liver: 'Liver',
+  marrow: 'Bone marrow',
+  stem: 'Stem-cell graft'
+};
 
 export const STATUS_LABEL: Record<MetricStatus, string> = {
   normal: 'In range',
   watch: 'Watch',
-  alert: 'Act now'
+  alert: 'Act now',
+  missing: 'No data'
 };
+
+type Grade = (v: number) => { status: Exclude<MetricStatus, 'missing'>; note: string };
+
+interface MetricSpec {
+  key: ObservationKey;
+  label?: string;
+  reference: string;
+  grade: Grade;
+  pin: [number, number, number];
+}
+
+function fromReading(spec: MetricSpec, reading: LatestReading | undefined): OrganMetric {
+  const type = OBSERVATION_TYPES[spec.key];
+  const base = { key: spec.key, label: spec.label ?? type.label, unit: type.unit, reference: spec.reference, pin: spec.pin };
+  if (!reading) return { ...base, value: '—', status: 'missing', note: 'No reading recorded yet. Use Record lab result on the recovery tracker.' };
+  const { status, note } = spec.grade(reading.value);
+  const value = reading.value.toLocaleString('en-US', { minimumFractionDigits: type.digits, maximumFractionDigits: type.digits });
+  return { ...base, value, status, note: `${note} (Day ${reading.day >= 0 ? '+' : ''}${reading.day}).` };
+}
+
+// Thresholds follow standard post-HSCT monitoring criteria named in each reference.
+const MARROW: MetricSpec[] = [
+  {
+    key: 'anc', label: 'Neutrophils (ANC)', reference: '≥ 500 cells/µL', pin: [0.2, 0.85, 0.5],
+    grade: v => v < 100 ? { status: 'alert', note: 'Profound neutropenia: neutropenic precautions' }
+      : v < 500 ? { status: 'watch', note: 'Below the engraftment threshold' }
+      : { status: 'normal', note: 'At or above the engraftment threshold' }
+  },
+  {
+    key: 'plt', label: 'Platelets', reference: '≥ 20,000 /µL unsupported', pin: [-0.6, 0.1, 0.7],
+    grade: v => v < 10000 ? { status: 'alert', note: 'Below the prophylactic transfusion trigger' }
+      : v < 20000 ? { status: 'watch', note: 'Below the platelet engraftment threshold' }
+      : { status: 'normal', note: 'Above the platelet engraftment threshold' }
+  },
+  {
+    key: 'hb', reference: '≥ 8.0 g/dL', pin: [0.55, -0.55, 0.55],
+    grade: v => v < 7 ? { status: 'alert', note: 'Below the red-cell transfusion trigger' }
+      : v < 8 ? { status: 'watch', note: 'Approaching the transfusion trigger' }
+      : { status: 'normal', note: 'Above the transfusion trigger' }
+  },
+  {
+    key: 'chimerism', reference: '≥ 95% full donor', pin: [-0.1, -0.9, -0.4],
+    grade: v => v < 90 ? { status: 'alert', note: 'Mixed chimerism: risk of graft loss or relapse' }
+      : v < 95 ? { status: 'watch', note: 'Mixed chimerism: repeat testing advised' }
+      : { status: 'normal', note: 'Full donor haematopoiesis' }
+  }
+];
+
+const HEART: MetricSpec[] = [
+  {
+    key: 'lvef', reference: '≥ 55%', pin: [0.5, 0.05, 0.85],
+    grade: v => v < 40 ? { status: 'alert', note: 'Reduced ejection fraction' }
+      : v < 55 ? { status: 'watch', note: 'Below the normal range' }
+      : { status: 'normal', note: 'Normal systolic function' }
+  },
+  {
+    key: 'troponin', reference: '< 14 ng/L', pin: [-0.35, -0.75, 0.6],
+    grade: v => v >= 52 ? { status: 'alert', note: 'Marked rise: myocardial injury likely' }
+      : v >= 14 ? { status: 'watch', note: 'Above the 99th percentile upper limit' }
+      : { status: 'normal', note: 'No myocardial injury signal' }
+  },
+  {
+    key: 'ntprobnp', reference: '< 125 pg/mL', pin: [-0.2, 0.9, 0.35],
+    grade: v => v >= 900 ? { status: 'alert', note: 'Markedly raised: assess for heart failure (cut-offs are age-dependent)' }
+      : v >= 125 ? { status: 'watch', note: 'Raised: ventricular strain or fluid load' }
+      : { status: 'normal', note: 'No ventricular strain' }
+  },
+  {
+    key: 'qtc', reference: '< 470 ms', pin: [0.7, -0.4, -0.5],
+    grade: v => v >= 500 ? { status: 'alert', note: 'High arrhythmia risk: review QT-prolonging drugs' }
+      : v >= 470 ? { status: 'watch', note: 'Prolonged: relevant with azole prophylaxis' }
+      : { status: 'normal', note: 'Normal corrected QT' }
+  }
+];
+
+const LIVER: MetricSpec[] = [
+  {
+    key: 'bilirubin', reference: '< 1.2 mg/dL (VOD criterion ≥ 2.0)', pin: [0.55, 0.35, 0.75],
+    grade: v => v >= 2 ? { status: 'alert', note: 'Meets the bilirubin criterion for VOD/SOS (EBMT)' }
+      : v >= 1.2 ? { status: 'watch', note: 'Raised, below the VOD/SOS criterion' }
+      : { status: 'normal', note: 'Within normal range' }
+  },
+  {
+    key: 'alt', reference: '< 40 U/L', pin: [0.1, -0.6, 0.8],
+    grade: v => v >= 200 ? { status: 'alert', note: 'Marked hepatocellular injury' }
+      : v >= 40 ? { status: 'watch', note: 'Raised transaminase' }
+      : { status: 'normal', note: 'Within normal range' }
+  },
+  {
+    key: 'ast', reference: '< 40 U/L', pin: [-0.1, -0.3, -0.95],
+    grade: v => v >= 200 ? { status: 'alert', note: 'Marked hepatocellular injury' }
+      : v >= 40 ? { status: 'watch', note: 'Raised transaminase' }
+      : { status: 'normal', note: 'Within normal range' }
+  }
+];
+
+/** Weight gain against the pre-transplant body mass recorded at intake (EBMT VOD/SOS criterion: > 5%). */
+function weightGain(patient: Patient, reading: LatestReading | undefined): OrganMetric {
+  const base = { key: 'weight_gain', label: 'Weight gain vs baseline', unit: '%', reference: '< 5% (VOD criterion)', pin: [-0.75, 0.2, 0.55] as [number, number, number] };
+  const baseline = Number(patient.pretransplant?.recipient_body_mass);
+  if (!baseline) return { ...base, value: '—', status: 'missing', note: 'Needs the pre-transplant body mass from intake.' };
+  if (!reading) return { ...base, value: '—', status: 'missing', note: `No body weight recorded yet (baseline ${baseline} kg).` };
+  const pct = ((reading.value - baseline) / baseline) * 100;
+  const status = pct > 5 ? 'alert' : pct > 2.5 ? 'watch' : 'normal';
+  const note = pct > 5 ? 'Exceeds the VOD/SOS weight-gain criterion' : pct > 2.5 ? 'Rising: check fluid balance' : 'No significant fluid retention';
+  return { ...base, value: `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}`, status, note: `${note} (${reading.value} kg vs ${baseline} kg, Day +${reading.day}).` };
+}
+
+/** The graft is described by the patient's own pre-transplant record, not by lab draws. */
+function graftMetrics(patient: Patient): OrganMetric[] {
+  const p = patient.pretransplant ?? {};
+  const cd34 = Number(p.cd34_dose ?? patient.cell_dose_cd34);
+  const cd3 = p.cd3_dose != null ? Number(p.cd3_dose) : NaN;
+  const hla = String(p.hla_match ?? patient.hla_match ?? '');
+  const missing = (key: string, label: string, reference: string, pin: [number, number, number], unit?: string): OrganMetric =>
+    ({ key, label, unit, reference, pin, value: '—', status: 'missing', note: 'Not recorded at intake.' });
+  return [
+    Number.isFinite(cd34)
+      ? {
+        key: 'cd34', label: 'CD34+ cell dose', value: cd34.toFixed(2), unit: '×10⁶/kg', reference: '≥ 2 minimum, ≥ 4 optimal', pin: [0.1, 0.95, 0.3],
+        status: cd34 < 2 ? 'alert' : cd34 < 4 ? 'watch' : 'normal',
+        note: cd34 < 2 ? 'Below the minimum dose: high risk of delayed engraftment' : cd34 < 4 ? 'Adequate, below the optimal dose' : 'Optimal dose: associated with faster neutrophil recovery'
+      }
+      : missing('cd34', 'CD34+ cell dose', '≥ 2 minimum, ≥ 4 optimal', [0.1, 0.95, 0.3], '×10⁶/kg'),
+    Number.isFinite(cd3)
+      ? { key: 'cd3', label: 'CD3+ cell dose', value: cd3.toFixed(2), unit: '×10⁸/kg', reference: 'Higher T-cell content raises GvHD risk', pin: [0.85, 0.1, 0.5], status: 'normal', note: 'T-cell content of the graft, from the collection report.' }
+      : missing('cd3', 'CD3+ cell dose', 'Higher T-cell content raises GvHD risk', [0.85, 0.1, 0.5], '×10⁸/kg'),
+    hla
+      ? {
+        key: 'hla', label: 'HLA match', value: hla, reference: '10/10 preferred', pin: [-0.75, -0.35, 0.55],
+        status: hla === '10/10' ? 'normal' : 'watch',
+        note: hla === '10/10' ? 'Fully matched at 10 loci' : 'HLA-mismatched donor: higher GvHD and graft-failure risk'
+      }
+      : missing('hla', 'HLA match', '10/10 preferred', [-0.75, -0.35, 0.55]),
+    {
+      key: 'cmv', label: 'CMV serostatus (donor/recipient)', value: patient.cmv_status ?? '—', reference: 'D−/R− lowest risk', pin: [0.15, -0.7, -0.7],
+      status: !patient.cmv_status || patient.cmv_status.includes('?') ? 'missing' : patient.cmv_status.includes('R+') ? 'watch' : 'normal',
+      note: patient.cmv_status?.includes('R+') ? 'Seropositive recipient: CMV reactivation surveillance' : 'Standard CMV monitoring'
+    }
+  ];
+}
+
+export function organProfile(organ: OrganType, patient: Patient, observations: ClinicalObservation[]): OrganProfile {
+  const latest = latestReadings(observations);
+  switch (organ) {
+    case 'heart':
+      return {
+        organ, title: 'Cardiac toxicity surveillance',
+        rationale: 'High-dose cyclophosphamide and prior anthracyclines can cause acute cardiotoxicity in the first weeks after conditioning.',
+        metrics: HEART.map(s => fromReading(s, latest[s.key]))
+      };
+    case 'liver':
+      return {
+        organ, title: 'Hepatic VOD/SOS & liver GvHD',
+        rationale: 'Sinusoidal obstruction syndrome (EBMT criteria: bilirubin ≥ 2 mg/dL plus weight gain, painful hepatomegaly or ascites) and liver GvHD are leading early causes of transplant mortality.',
+        metrics: [...LIVER.map(s => fromReading(s, latest[s.key])), weightGain(patient, latest.weight)]
+      };
+    case 'stem':
+      return {
+        organ, title: 'Stem-cell graft',
+        rationale: 'CD34+ cell dose and HLA compatibility are the strongest pre-transplant predictors of timely engraftment; in the UCI cohort, log CD34+ dose correlates with recovery day at r = −0.49.',
+        metrics: graftMetrics(patient)
+      };
+    case 'marrow':
+    default:
+      return {
+        organ: 'marrow', title: 'Marrow recovery & engraftment',
+        rationale: 'Neutrophil engraftment (ANC ≥ 500/µL for 3 consecutive days) ends the highest-risk window for bacterial and fungal sepsis.',
+        metrics: MARROW.map(s => fromReading(s, latest[s.key]))
+      };
+  }
+}
+
+export const ORGANS: OrganType[] = ['marrow', 'stem', 'heart', 'liver'];
+
+/** Out-of-range lab readings across monitored organs, for alerts and triage. Graft characteristics
+ *  (dose, HLA) are fixed at Day 0 and shown on the organ view rather than raised as alerts. */
+export function abnormalMetrics(patient: Patient, observations: ClinicalObservation[]) {
+  return ORGANS.filter(o => o !== 'stem').flatMap(o => organProfile(o, patient, observations).metrics
+    .filter(m => m.status === 'watch' || m.status === 'alert')
+    .map(m => ({ organ: o, ...m })));
+}

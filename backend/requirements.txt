@@ -13,3 +13,10 @@ httpx>=0.27.0
 joblib>=1.4.0
 qiskit-ibm-runtime>=0.51.0
 
+pydantic-settings>=2.16.2
+lifelines>=0.30.3
+ucimlrepo>=0.0.7
+anthropic>=2.3.0
+# CPU simulator for Windows/macOS. On Linux/WSL install requirements-gpu.txt instead:
+# qiskit-aer-gpu provides the same qiskit_aer module (and still runs on CPU), so the two must not be mixed.
+qiskit-aer>=0.17.0 ; sys_platform != "linux"

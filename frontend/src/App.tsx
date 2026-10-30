@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ShieldAlert, Sparkles } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Topbar, ClinicalAlert } from './components/Topbar';
-import { CallModal, NewPatientModal } from './components/Modals';
+import { NewPatientModal } from './components/Modals';
+import { EmptyWard, ServerOffline } from './components/EmptyStates';
 import { OverviewView } from './views/OverviewView';
 import { DiagnosticIntelligenceView } from './views/DiagnosticIntelligenceView';
 import { PatientProgressView } from './views/PatientProgressView';
@@ -16,12 +17,12 @@ import { QuantumLabView } from './views/QuantumLabView';
 import { HospitalAnalyticsView } from './views/HospitalAnalyticsView';
 import { ROLE_HOME, ROLE_LABELS, TabId, sectionById, sectionsForRole } from './navigation';
 import { useHashRoute, usePersistentState } from './hooks';
-import { COHORT_PATIENTS, COHORT_REFERENCE_DATE } from './data/cohort';
-import { organProfile } from './data/organs';
-import { DatasetProfile, Experiment, Patient, UserRole } from './types';
-import { fetchDemoDataset, fetchExperiment, fetchExperimentsList, fetchPatients, isBackendOnline } from './api';
+import { abnormalMetrics } from './data/organs';
+import { OBSERVATIONS_CHANGED } from './data/observations';
+import { ClinicalObservation, DatasetProfile, Experiment, Patient, UserRole } from './types';
+import { fetchDemoDataset, fetchExperiment, fetchExperimentsList, fetchPatientObservations, fetchPatients, isBackendOnline } from './api';
 
-const RESEARCH_TABS: TabId[] = ['dataset', 'setup', 'monitor', 'results', 'report', 'predict'];
+const RESEARCH_TABS: TabId[] = ['dataset', 'setup', 'monitor', 'results', 'report'];
 
 export function App() {
   const [role, setRole] = usePersistentState<UserRole>('marrowq.role', 'doctor');
@@ -30,24 +31,20 @@ export function App() {
   const sections = useMemo(() => sectionsForRole(role), [role]);
   const [route, navigate] = useHashRoute(ROLE_HOME[role]);
 
-  // ---- Patients ---------------------------------------------------------------
-  const [apiPatients, setApiPatients] = useState<Patient[]>(COHORT_PATIENTS);
-  const [admitted, setAdmitted] = useState<Patient[]>([]);
-  const patients = useMemo(
-    () => [...apiPatients, ...admitted.filter(a => !apiPatients.some(p => p.patient_id === a.patient_id))],
-    [apiPatients, admitted]
-  );
-  const selectedPatient = patients.find(p => p.patient_id === route.patientId) ?? patients[0];
-
-  // ---- Backend + research state -----------------------------------------------
+  // ---- Server + patients ---------------------------------------------------------
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [patients, setPatients] = useState<Patient[] | null>(null);
+  const [observations, setObservations] = useState<Record<string, ClinicalObservation[]>>({});
+  const selectedPatient = patients?.find(p => p.patient_id === route.patientId) ?? patients?.[0] ?? null;
+
+  // ---- Research state --------------------------------------------------------------
   const [dataset, setDataset] = useState<DatasetProfile | null>(null);
   const [isLoadingDemo, setIsLoadingDemo] = useState(false);
   const [currentExperiment, setCurrentExperiment] = useState<Experiment | null>(null);
 
-  // ---- UI state -----------------------------------------------------------------
+  // ---- UI state ----------------------------------------------------------------------
   const [toast, setToast] = useState<string | null>(null);
-  const [showCall, setShowCall] = useState(false);
   const [showAdmit, setShowAdmit] = useState(false);
   const [seenAlerts, setSeenAlerts] = useState<string[]>([]);
 
@@ -57,35 +54,65 @@ export function App() {
     if (activeTab !== route.tab) navigate({ tab: activeTab }, true);
   }, [activeTab, route.tab, navigate]);
 
-  useEffect(() => {
-    isBackendOnline().then(setBackendOnline);
-    fetchPatients().then(setApiPatients);
+  const loadPatients = useCallback(async () => {
+    try {
+      setPatients(await fetchPatients());
+    } catch {
+      setPatients([]);
+    }
+  }, []);
+
+  const connect = useCallback(async () => {
+    setChecking(true);
+    const online = await isBackendOnline();
+    setBackendOnline(online);
+    setChecking(false);
+    if (!online) return;
+    loadPatients();
     fetchExperimentsList()
       .then(list => {
-        const latest = list.find((e: Experiment) => e.status === 'completed');
-        if (latest) return fetchExperiment(latest.experiment_id);
+        const latest = list.find(e => e.status === 'completed');
+        return latest ? fetchExperiment(latest.experiment_id) : undefined;
       })
       .then(exp => { if (exp) setCurrentExperiment(prev => prev ?? exp); })
       .catch(() => undefined);
+  }, [loadPatients]);
+
+  useEffect(() => { connect(); }, [connect]);
+
+  // Latest observations for every ward patient feed the alert list.
+  const loadObservations = useCallback(async (list: Patient[]) => {
+    const entries = await Promise.all(list.map(async p => [p.patient_id, await fetchPatientObservations(p.patient_id).catch(() => [])] as const));
+    setObservations(Object.fromEntries(entries));
   }, []);
+
+  useEffect(() => {
+    if (!patients?.length) return;
+    loadObservations(patients);
+    const refresh = () => loadObservations(patients);
+    window.addEventListener(OBSERVATIONS_CHANGED, refresh);
+    return () => window.removeEventListener(OBSERVATIONS_CHANGED, refresh);
+  }, [patients, loadObservations]);
 
   const loadDemoDataset = useCallback(async () => {
     setIsLoadingDemo(true);
     try {
       setDataset(await fetchDemoDataset());
+    } catch (e) {
+      setToast((e as Error).message);
     } finally {
       setIsLoadingDemo(false);
     }
   }, []);
 
-  // Research views need a dataset; load the synthetic cohort the first time one is opened.
+  // Research views need a dataset; load the UCI cohort the first time one is opened.
   useEffect(() => {
-    if (RESEARCH_TABS.includes(activeTab) && !dataset && !isLoadingDemo) loadDemoDataset();
-  }, [activeTab, dataset, isLoadingDemo, loadDemoDataset]);
+    if (backendOnline && RESEARCH_TABS.includes(activeTab) && !dataset && !isLoadingDemo) loadDemoDataset();
+  }, [backendOnline, activeTab, dataset, isLoadingDemo, loadDemoDataset]);
 
   useEffect(() => {
     if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 3200);
+    const t = window.setTimeout(() => setToast(null), 4200);
     return () => window.clearTimeout(t);
   }, [toast]);
 
@@ -121,35 +148,56 @@ export function App() {
     }
   };
 
-  // Organ readings outside their reference range become clinical alerts.
+  const admitted = async (patient: Patient, warnings: string[]) => {
+    setShowAdmit(false);
+    await loadPatients();
+    go(sectionById(activeTab).patientScoped ? activeTab : 'overview', patient.patient_id);
+    setToast(warnings.length ? `${patient.name} admitted. ${warnings.join(' ')}` : `${patient.name} admitted`);
+  };
+
+  // Recorded readings outside their reference range become clinical alerts.
   const alerts = useMemo<ClinicalAlert[]>(() => {
-    const scope = role === 'patient' ? [selectedPatient] : patients;
+    const scope = role === 'patient' ? (selectedPatient ? [selectedPatient] : []) : patients ?? [];
     return scope.flatMap(p =>
-      organProfile(p.primary_organ_type ?? 'marrow', p, null).metrics
-        .filter(m => m.status !== 'normal' && m.value !== '—')
-        .map(m => ({
-          id: `${p.patient_id}-${m.key}`,
-          tone: m.status === 'alert' ? 'red' as const : 'amber' as const,
-          title: `${p.name}: ${m.label} ${m.value}${m.unit ? ` ${m.unit}` : ''}`,
-          body: m.note,
-          patientId: p.patient_id,
-          tab: 'overview' as TabId
-        }))
+      abnormalMetrics(p, observations[p.patient_id] ?? []).map(m => ({
+        id: `${p.patient_id}-${m.key}-${m.value}`,
+        tone: m.status === 'alert' ? 'red' as const : 'amber' as const,
+        title: `${p.name}: ${m.label} ${m.value}${m.unit ? ` ${m.unit}` : ''}`,
+        body: m.note,
+        patientId: p.patient_id,
+        tab: 'overview' as TabId
+      }))
     );
-  }, [patients, role, selectedPatient]);
+  }, [patients, observations, role, selectedPatient]);
   const unread = alerts.filter(a => !seenAlerts.includes(a.id)).length;
 
   const section = sectionById(activeTab);
   const experimentRunning = currentExperiment?.status === 'running' || currentExperiment?.status === 'created';
 
   const renderView = () => {
+    if (backendOnline === null) return <div className="skeleton" style={{ height: 420 }} />;
+    // The quantum lab is the one view with a genuine offline mode (exact in-browser simulation).
+    if (!backendOnline && activeTab !== 'quantum_lab') return <ServerOffline onRetry={connect} retrying={checking} />;
+    if ((section.patientScoped || activeTab === 'predict') && !selectedPatient && role !== 'researcher') {
+      if (patients === null) return <div className="skeleton" style={{ height: 420 }} />;
+      return (
+        <EmptyWard
+          onAdmit={() => setShowAdmit(true)}
+          onExamplesLoaded={async list => {
+            await loadPatients();
+            go(activeTab, list[0]?.patient_id);
+            setToast(`${list.length} example patients admitted from UCI cohort records`);
+          }}
+        />
+      );
+    }
     switch (activeTab) {
       case 'overview':
-        return <OverviewView patient={selectedPatient} role={role} onNavigate={go} />;
+        return <OverviewView patient={selectedPatient!} role={role} onNavigate={go} />;
       case 'diagnostic':
-        return <DiagnosticIntelligenceView patient={selectedPatient} role={role} />;
+        return <DiagnosticIntelligenceView patient={selectedPatient!} role={role} />;
       case 'progress':
-        return <PatientProgressView patient={selectedPatient} role={role} />;
+        return <PatientProgressView patient={selectedPatient!} role={role} />;
       case 'predict':
         return <PredictionView currentExperiment={currentExperiment} patient={role === 'researcher' ? null : selectedPatient} />;
       case 'dataset':
@@ -165,7 +213,7 @@ export function App() {
       case 'quantum_lab':
         return <QuantumLabView />;
       case 'hospital':
-        return <HospitalAnalyticsView patients={patients} onOpenPatient={(id, tab) => go(tab, id)} />;
+        return <HospitalAnalyticsView patients={patients ?? []} onOpenPatient={(id, tab) => go(tab, id)} onAdmit={() => setShowAdmit(true)} />;
     }
   };
 
@@ -189,7 +237,7 @@ export function App() {
           sections={sections}
           role={role}
           onRoleChange={changeRole}
-          patients={patients}
+          patients={patients ?? []}
           selectedPatient={selectedPatient}
           onSelectPatient={id => navigate({ patientId: id })}
           onNavigate={go}
@@ -199,24 +247,24 @@ export function App() {
           onOpenMobileNav={() => setMobileNavOpen(true)}
           onShare={share}
           onNewPatient={() => setShowAdmit(true)}
-          onCall={() => setShowCall(true)}
         />
 
         <div className="disclaimer-strip" role="note">
           <ShieldAlert size={13} />
-          <span>Research prototype using synthetic demonstration data. Not for clinical decision-making.</span>
+          <span>Research prototype. Models are trained on a public paediatric cohort (UCI, n = 187). Not for clinical decision-making.</span>
         </div>
 
         {/* Patient-scoped views remount per patient so no stale state carries over. */}
-        <main className="content" key={section.patientScoped || activeTab === 'predict' ? `${activeTab}:${selectedPatient.patient_id}` : activeTab}>
+        <main className="content" key={section.patientScoped || activeTab === 'predict' ? `${activeTab}:${selectedPatient?.patient_id ?? 'none'}` : activeTab}>
           {renderView()}
         </main>
 
         <footer className="app-footer">
-          <span>MarrowQ · Quantum-assisted HSCT recovery research platform</span>
+          <span>MarrowQ · HSCT recovery research platform</span>
           <span>
-            Demo cohort as of {new Date(COHORT_REFERENCE_DATE).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} ·{' '}
-            <a href="https://colab.research.google.com/github/Nikhil-r-projects/marrowQ-quanthack-project/blob/main/notebooks/MarrowQ_Quantum_Benchmark.ipynb" target="_blank" rel="noreferrer">Benchmark notebook</a>
+            Cohort data:{' '}
+            <a href="https://archive.ics.uci.edu/dataset/565/bone+marrow+transplant+children" target="_blank" rel="noreferrer">UCI Bone Marrow Transplant: Children</a>
+            {' '}(Sikora et al., CC BY 4.0)
           </span>
         </footer>
       </div>
@@ -228,26 +276,7 @@ export function App() {
         </div>
       )}
 
-      {showCall && (
-        <CallModal
-          onClose={() => setShowCall(false)}
-          contactName={role === 'patient' ? 'Dr. Hanzer Jon' : `${selectedPatient.name}`}
-          contactRole={role === 'patient' ? 'Transplant hematologist' : `${selectedPatient.patient_id} · ${selectedPatient.disease.split(' (')[0]}`}
-        />
-      )}
-
-      {showAdmit && (
-        <NewPatientModal
-          existingIds={patients.map(p => p.patient_id)}
-          onClose={() => setShowAdmit(false)}
-          onAdmit={p => {
-            setAdmitted(a => [...a, p]);
-            setShowAdmit(false);
-            go(sectionById(activeTab).patientScoped ? activeTab : 'overview', p.patient_id);
-            setToast(`${p.name} admitted to the cohort`);
-          }}
-        />
-      )}
+      {showAdmit && <NewPatientModal onClose={() => setShowAdmit(false)} onAdmitted={admitted} />}
     </div>
   );
 }
