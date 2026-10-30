@@ -572,5 +572,30 @@ class IBMQuantumManager:
                 "provenance": provenance
             }
 
+    def execute_kernel_circuit(
+        self,
+        X_train: np.ndarray,
+        X_test: Optional[np.ndarray] = None,
+        backend_name: str = "aer_simulator_statevector",
+        execution_mode: str = "auto_fallback",
+        shots: int = 1000
+    ) -> Dict[str, Any]:
+        """Backwards-compatible wrapper for multi-agent clinical orchestration"""
+        mode = "hardware" if "ibm_" in backend_name.lower() and execution_mode in ["hardware", "hardware_only"] else "simulator"
+        if X_test is None:
+            X_test = X_train
+            
+        res = self.execute_kernel_matrices(
+            X_train=X_train,
+            X_test=X_test,
+            backend_name=backend_name,
+            execution_mode=mode,
+            shots=shots,
+            max_hardware_samples=len(X_train)
+        )
+        res["kernel_matrix"] = res["K_test"].tolist()
+        res["transparency_notice"] = f"Executed on physical hardware '{backend_name}'" if not res["is_simulator"] else "Evaluated on local Qiskit simulator."
+        return res
+
 # Singleton instance
 quantum_manager = IBMQuantumManager()
