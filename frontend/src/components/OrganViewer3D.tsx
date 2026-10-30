@@ -98,20 +98,24 @@ function loadSketchfabApi(): Promise<SketchfabConstructor> {
   return sketchfabScript;
 }
 
-/** Resolves once the Sketchfab viewer reports the model is on screen; rejects on error or timeout. */
-async function startSketchfab(iframe: HTMLIFrameElement, uid: string): Promise<void> {
-  const Sketchfab = await loadSketchfabApi();
-  await new Promise<void>((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error('Sketchfab viewer timed out')), SKETCHFAB_TIMEOUT_MS);
+/** Resolves once the Sketchfab viewer reports the model is on screen; rejects on error or timeout.
+ *  The timeout covers the script download too: during an outage that request can hang indefinitely. */
+function startSketchfab(iframe: HTMLIFrameElement, uid: string): Promise<void> {
+  const viewer = loadSketchfabApi().then(Sketchfab => new Promise<void>((resolve, reject) => {
     new Sketchfab('1.12.1', iframe).init(uid, {
       ...SKETCHFAB_OPTIONS,
       success: (api: SketchfabApi) => {
         api.start();
-        api.addEventListener('viewerready', () => { window.clearTimeout(timer); resolve(); });
+        api.addEventListener('viewerready', () => resolve());
       },
-      error: () => { window.clearTimeout(timer); reject(new Error('Sketchfab model failed to load')); }
+      error: () => reject(new Error('Sketchfab model failed to load'))
     });
+  }));
+  let timer = 0;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error('Sketchfab viewer timed out')), SKETCHFAB_TIMEOUT_MS);
   });
+  return Promise.race([viewer, timeout]).finally(() => window.clearTimeout(timer));
 }
 
 const TARGET_SIZE = 2.2;

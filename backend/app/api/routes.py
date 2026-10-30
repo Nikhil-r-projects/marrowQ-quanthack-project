@@ -457,7 +457,7 @@ def generate_prediction(req: PredictionRequest):
     )
     
     conf_desc = (
-        f"Model estimated {prob*100:.1f}% probability of: {outcome[0].lower()}."
+        f"Model estimated {prob*100:.1f}% probability of {outcome[0][0].lower() + outcome[0][1:]}."
         if prob is not None else "Binary classification score without calibrated probability."
     )
     
