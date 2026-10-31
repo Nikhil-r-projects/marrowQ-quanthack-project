@@ -330,7 +330,7 @@ features = {
     "q095_tbi_used": tbi_used,
     "q096_tbi_dose_gy": tbi_dose,
     "q097_busulfan_used": busulfan_used,
-    "q098_busulfan_pk_auc": bu_auc,
+    "q098_busulfan_target_auc": bu_auc,
     "q099_cyclophosphamide_used": cy_used,
     "q100_cyclophosphamide_dose": cy_dose,
     "q101_fludarabine_used": fludarabine_used,
@@ -413,7 +413,7 @@ assert len(features) == 156, f"Expected 156 features, got {len(features)}"
 z = (
     + 0.55 * (cd34_dose - 5.5) / 2.0
     + 0.45 * np.where(graft_source == "PBSC", 1.0, -0.6)
-    + 0.40 * np.where(np.isin(hla_match_tier, ["12/12", "10/10"]), 1.0, -0.9)
+    + 0.40 * np.where(hla_match_tier.isin(["12/12", "10/10"]), 1.0, -0.9)
     - 0.35 * (hct_total - 2.0) / 2.0
     - 0.30 * (donor_age - 32.0) / 12.0
     - 0.25 * (age - 45.0) / 18.0
@@ -436,12 +436,13 @@ early_engraftment = (prob >= 0.50).astype(int)
 print(f"Target 'early_engraftment' balance: {np.bincount(early_engraftment)}")
 
 # Assemble DataFrame: patient_id + 156 features + early_engraftment = 158 columns
-all_data = {"patient_id": [f"QPU-PT-{i:04d}" for i in range(1, N + 1)]}
-all_data.update(features)
-all_data["early_engraftment"] = early_engraftment
-df_out = pd.DataFrame(all_data)
+df_out = pd.DataFrame({"patient_id": [f"QPU-PT-{i:04d}" for i in range(1, N + 1)]})
+for col_name, col_data in features.items():
+    df_out[col_name] = col_data
+df_out["early_engraftment"] = early_engraftment
 
 output_path = "MarrowQ_156Qubit_Heron_Precision_Cohort_N750.csv"
 df_out.to_csv(output_path, index=False)
 df_out.to_csv("backend/app/data/MarrowQ_156Qubit_Heron_Precision_Cohort_N750.csv", index=False)
 print(f"Successfully generated {output_path} with shape {df_out.shape}!")
+

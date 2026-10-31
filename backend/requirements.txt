@@ -19,4 +19,4 @@ ucimlrepo>=0.0.7
 anthropic>=2.3.0
 # CPU simulator for Windows/macOS. On Linux/WSL install requirements-gpu.txt instead:
 # qiskit-aer-gpu provides the same qiskit_aer module (and still runs on CPU), so the two must not be mixed.
-qiskit-aer>=0.17.0 ; sys_platform != "linux"
+qiskit-aer>=0.17.0

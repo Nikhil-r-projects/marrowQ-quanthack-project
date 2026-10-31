@@ -9,7 +9,9 @@ import { DEMO_UCI_PROFILE, profileCsvInBrowser, createBrowserExperiment } from '
 
 const browserExperiments = new Map<string, Experiment>();
 
-const API_BASE = '/api';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL
+  ? (import.meta as any).env.VITE_API_BASE_URL.replace(/\/+$/, '')
+  : '/api';
 
 /**
  * Thin client for the MarrowQ FastAPI server. Nothing here invents data: when the server cannot be
