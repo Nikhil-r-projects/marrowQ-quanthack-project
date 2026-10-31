@@ -74,3 +74,4 @@ def test_seed_users_integrity():
     assert admin is not None
     assert admin["role"] == "admin"
     assert verify_password("MarrowQ#Admin2026", admin["password_hash"], admin["salt"]) is True
+

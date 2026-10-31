@@ -47,3 +47,4 @@ def test_genomic_curation_engine():
     assert len(co_occur) >= 2
     pair_names = [f["interaction_pair"] for f in co_occur]
     assert any("NPM1 + FLT3-ITD" in p for p in pair_names)
+

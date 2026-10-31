@@ -168,3 +168,4 @@ class CoxProportionalHazardsModel:
         if admissible == 0:
             return 0.5
         return round(float(concordant / admissible), 4)
+

@@ -107,3 +107,4 @@ All new views—Multi-Architecture Arena, Quantum Kernel Diagnostics, Treatment 
 
 ## 5. Summary
 MarrowQ is complete, robust, scientifically defensible, and ready for presentation to judges, clinical researchers, and technical reviewers.
+

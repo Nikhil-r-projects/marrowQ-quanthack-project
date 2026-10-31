@@ -95,3 +95,4 @@
 - **TRIPOD-AI Compliance:** Models report explicit provenance, confidence intervals, sample sizes, and calibration scores.
 - **Human-in-the-Loop Governance:** Diagnostic classifications and risk scores are marked as clinical decision support suggestions; attending clinician counter-signature is required for all staging, dosing, and conditioning decisions.
 - **Demonstration Provenance:** All synthetic patient data and test cohorts are explicitly labeled with `is_synthetic: true` to prevent real-world clinical confusion.
+

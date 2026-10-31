@@ -67,13 +67,25 @@ def profile_dataset(
             top_counts = df[col].astype(str).value_counts().head(10).to_dict()
             categorical_summaries[col] = {str(k): int(v) for k, v in top_counts.items()}
             
-    # Suggest target
+    # Suggest target (prioritize known outcome markers and exact column names)
     suggested_target = ""
+    priority_outcomes = [
+        "early_engraftment", "neutrophil_recovery", "engraftment", 
+        "engraftment_status", "target_class", "outcome_label", "label", "target"
+    ]
     for col in columns:
         col_lower = col.lower()
-        if any(term in col_lower for term in ["neutrophil_recovery", "engraft", "recovery", "target", "outcome", "label"]):
+        if col_lower in priority_outcomes:
             suggested_target = col
             break
+            
+    if not suggested_target:
+        for col in columns:
+            col_lower = col.lower()
+            if any(term in col_lower for term in ["engraft", "neutrophil_recovery", "recovery_status"]):
+                suggested_target = col
+                break
+                
     if not suggested_target and columns:
         suggested_target = columns[-1]
         

@@ -61,3 +61,4 @@
 2. **Inner Fold Tuning:** All hyperparameters (bandwidth $c$, SVM regularizer $C$, outer kernel $\gamma$, learning rates) are tuned strictly within inner cross-validation folds.
 3. **Out-of-Fold Metrics:** ROC-AUC, Balanced Accuracy, Precision, Recall, F1, Brier Score, and Concordance Index are computed on held-out validation folds with $95\%$ bootstrap confidence intervals ($B = 1000$).
 4. **Label Permutation Testing:** Permutation tests ($n_{\text{perm}} = 100$) ensure that reported AUC values collapse to $0.50$ under randomized labels, confirming absence of data leakage.
+

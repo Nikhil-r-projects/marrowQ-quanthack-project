@@ -92,3 +92,4 @@ def test_non_hla_donor_and_solid_organ():
         donor_blood_group="A"
     )
     assert "POSITIVE" in solid["virtual_crossmatch_status"]
+

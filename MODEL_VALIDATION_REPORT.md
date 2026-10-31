@@ -69,3 +69,4 @@ A clinical risk model with high ROC-AUC can still be dangerous if probabilities 
 1. **Anti-Leakage Verification:** Permutation tests across all models yielded exactly $0.500 \pm 0.02$, confirming zero test-set leakage.
 2. **Quantum Improvement Confirmed:** Moving from unregularized Fidelity Kernels to Projected Quantum Kernels and VQCs raised standalone quantum ROC-AUC from $0.528 \to 0.605$ (+14.6% relative gain).
 3. **Synergistic Hybrid Advantage:** The Hybrid Ensemble achieved the highest PR-AUC (0.904) and lowest Brier score (0.211), proving that quantum projections provide complementary predictive signals when ensembled with classical learners.
+

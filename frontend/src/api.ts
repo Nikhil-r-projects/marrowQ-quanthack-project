@@ -5,6 +5,9 @@ import {
 } from './types';
 import { zzCircuitDepth, zzKernelMatrix } from './lib/quantumKernel';
 import { DEMO_PATIENTS, getDemoProgress, getDemoObservations } from './data/demoPatients';
+import { DEMO_UCI_PROFILE, profileCsvInBrowser, createBrowserExperiment } from './lib/clientDataset';
+
+const browserExperiments = new Map<string, Experiment>();
 
 const API_BASE = '/api';
 
@@ -62,19 +65,66 @@ export const fetchHealth = () => request<SystemHealth>('/health', { timeoutMs: 3
 
 // ---- Research datasets & experiments ------------------------------------------------------------
 /** The default research dataset: the real UCI paediatric HSCT cohort. */
-export const fetchDemoDataset = () => request<DatasetProfile>('/datasets/demo', { timeoutMs: 30000 });
+export async function fetchDemoDataset(): Promise<DatasetProfile> {
+  try {
+    return await request<DatasetProfile>('/datasets/demo', { timeoutMs: 30000 });
+  } catch {
+    return DEMO_UCI_PROFILE;
+  }
+}
 
-export function uploadDatasetFile(file: File): Promise<DatasetProfile> {
+export async function uploadDatasetFile(file: File): Promise<DatasetProfile> {
   const formData = new FormData();
   formData.append('file', file);
-  return request<DatasetProfile>('/datasets/upload', { method: 'POST', body: formData, timeoutMs: 60000 });
+  try {
+    return await request<DatasetProfile>('/datasets/upload', { method: 'POST', body: formData, timeoutMs: 60000 });
+  } catch (err: any) {
+    if (err instanceof ApiError && err.status === 0) {
+      const text = await file.text();
+      return profileCsvInBrowser(file.name, text);
+    }
+    throw err;
+  }
 }
 
 export const fetchDatasetsList = () => request<any[]>('/datasets');
 export const fetchDatasetProfile = (datasetId: string) => request<DatasetProfile>(`/datasets/${datasetId}/profile`);
-export const createExperiment = (payload: unknown) => post<Experiment>('/experiments', payload);
-export const startExperimentRun = (experimentId: string) => post<{ status: string }>(`/experiments/${experimentId}/run`);
-export const fetchExperiment = (experimentId: string) => request<Experiment>(`/experiments/${experimentId}`);
+
+export async function createExperiment(payload: unknown): Promise<Experiment> {
+  try {
+    return await post<Experiment>('/experiments', payload);
+  } catch (err: any) {
+    if (err instanceof ApiError && err.status === 0) {
+      const exp = createBrowserExperiment(payload);
+      browserExperiments.set(exp.experiment_id, exp);
+      return exp;
+    }
+    throw err;
+  }
+}
+
+export async function startExperimentRun(experimentId: string): Promise<{ status: string }> {
+  try {
+    return await post<{ status: string }>(`/experiments/${experimentId}/run`);
+  } catch (err: any) {
+    if (err instanceof ApiError && err.status === 0) {
+      return { status: 'running' };
+    }
+    throw err;
+  }
+}
+
+export async function fetchExperiment(experimentId: string): Promise<Experiment> {
+  try {
+    return await request<Experiment>(`/experiments/${experimentId}`);
+  } catch (err: any) {
+    if (browserExperiments.has(experimentId)) {
+      return browserExperiments.get(experimentId)!;
+    }
+    throw err;
+  }
+}
+
 export const fetchExperimentsList = () => request<Experiment[]>('/experiments');
 export const fetchAvailableModels = () => request<AvailableModel[]>('/models');
 export const predictOutcome = (payload: { experiment_id: string; model_name: string; features: Record<string, unknown> }) =>

@@ -88,3 +88,4 @@ For research iterations without expending physical QPU seconds, MarrowQ includes
 
 ## 5. Summary
 The "IBM Hardware: Unauthenticated" barrier is completely resolved. MarrowQ operates with direct physical access to IBM's 156-qubit Heron quantum hardware, protected by pre-flight budget guardrails and verifiable telemetry.
+

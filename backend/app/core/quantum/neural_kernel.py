@@ -181,3 +181,4 @@ class NeuralQuantumKernel:
             "iterations": int(res.nfev),
             "optimized_parameters": [round(float(p), 4) for p in self.params],
         }
+

@@ -147,3 +147,4 @@ class VariationalQuantumClassifier:
             "train_accuracy": round(train_acc, 4),
             "iterations": int(res.nfev),
         }
+

@@ -34,3 +34,4 @@
 5. **Survival & Progress Layer:** Implement genuine Cox Proportional Hazards and Kaplan-Meier estimators for time-to-engraftment, relapse, and survival; build unified patient timeline.
 6. **Quantum Research Engine:** Overhaul quantum pipeline with Projected Quantum Kernels, Trainable Neural Quantum Kernels, and Biologically Informed Encodings.
 7. **Security Layer:** Enforce JWT authentication on all endpoints and log clinical data access events to SQLite.
+

@@ -121,3 +121,4 @@ We compare it to:
 
 ## 5. Summary Conclusion
 MarrowQ delivers an honest, mathematically sound, and empirically verified quantum machine-learning suite. We do not claim synthetic quantum supremacy; rather, we provide the first rigorous, leakage-free benchmark showing where quantum representations add orthogonal value to precision clinical decision support.
+

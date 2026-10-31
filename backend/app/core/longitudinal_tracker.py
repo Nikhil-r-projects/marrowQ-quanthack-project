@@ -140,3 +140,4 @@ class LongitudinalTracker:
             "clinical_alerts": alerts,
             "observations_tracked_count": len(days),
         }
+

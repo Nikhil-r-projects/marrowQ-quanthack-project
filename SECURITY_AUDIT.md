@@ -66,3 +66,4 @@ def require_role(allowed_roles: List[str]):
 - Every clinical milestone, conditioning recommendation, and lab observation records the author or countersigning physician (`verified_by` and timestamp).
 - Demonstration datasets and synthetic patients explicitly carry `is_synthetic: true` to prevent data conflation in real-world environments.
 - Zero client-side trust: all risk calculations, survival estimations, and drug contraindications are recomputed and validated on the backend.
+

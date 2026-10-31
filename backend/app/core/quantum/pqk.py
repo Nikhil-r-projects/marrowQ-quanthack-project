@@ -172,3 +172,4 @@ class ProjectedQuantumKernel:
             Z2 = self.encode_and_measure_observables(X2)
             dists_sq = np.sum((Z1[:, np.newaxis, :] - Z2[np.newaxis, :, :]) ** 2, axis=-1)
             return np.exp(-g * dists_sq)
+

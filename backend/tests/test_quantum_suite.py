@@ -112,3 +112,4 @@ def test_kernel_diagnostics():
     assert "off_diagonal_variance" in diag
     assert "heatmap" in diag
     assert len(diag["heatmap"]) == 10
+

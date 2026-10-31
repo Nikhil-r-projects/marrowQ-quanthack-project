@@ -138,3 +138,4 @@ This audit assesses the state of the MarrowQ precision medicine platform and qua
 | **Patient Progress** | Partial | `PatientProgressView.tsx` | Build unified chronological timeline & role-tailored viewports |
 | **Quantum ML Engine** | Needs Scientific Overhaul | `kernel_engine.py`, `qsvm_cv.py` | Implement PQK, NQK, VQC, Hybrid, kernel diagnostics & multi-endpoints |
 | **Security & RBAC** | Partial | `auth.py`, `auth_routes.py` | Enforce route-level JWT auth & create clinical audit logging table |
+

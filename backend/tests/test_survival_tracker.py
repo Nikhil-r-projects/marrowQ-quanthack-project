@@ -84,3 +84,4 @@ def test_unified_patient_timeline():
     # Check strict chronological order
     days = [e["day_relative"] for e in events]
     assert days == sorted(days)
+

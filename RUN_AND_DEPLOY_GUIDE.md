@@ -118,3 +118,4 @@ MarrowQ seeds canonical role accounts on database initialization (`marrowq.db`):
 | `/api/treatment/compare` | `POST` | Doctor | HCT-CI score, 2-yr NRM, MAC vs RIC eligibility |
 | `/api/patient/{id}/timeline` | `GET` | All | Unified Day -45 to Day +100 clinical journey |
 | `/api/survival/longitudinal-track` | `POST` | Doctor | Daily draws vs graft-source calibrated sigmoid kinetics |
+

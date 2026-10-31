@@ -272,3 +272,4 @@ class GenomicCurationEngine:
             })
 
         return findings
+

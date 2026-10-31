@@ -120,3 +120,4 @@ flowchart TD
 1. **No False Supremacy Claims:** Acknowledge that on small tabular datasets, classical tree ensembles (Random Forest, XGBoost) and regularized logistic regression represent the gold standard.
 2. **Targeted Research Metric:** Demonstrate that a properly tuned Projected Quantum Kernel (PQK) or Neural Quantum Kernel (NQK) improves over the baseline $0.55$ fidelity kernel towards parity ($\ge 0.70$ ROC-AUC) on the held-out test cohort.
 3. **Information Complementarity:** Evaluate whether the hybrid quantum-classical ensemble extracts orthogonal residual information that improves the overall Brier calibration score or concordance index.
+
