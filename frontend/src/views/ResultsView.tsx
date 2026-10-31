@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CalibrationPlot } from '../components/CalibrationPlot';
 import { BarChart3, FileText, Info, Timer } from 'lucide-react';
 import { Experiment } from '../types';
 import { TabId } from '../navigation';
@@ -21,7 +22,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ experiment, onNavigate
       <div className="card empty-state">
         <BarChart3 size={34} />
         <h3>No results yet</h3>
-        <p>{experiment?.status === 'running' ? 'The current run is still in progress.' : 'Run a benchmark to compare classical and quantum models on held-out patients.'}</p>
+        <p>{experiment?.status === 'running' ? 'The current run is still in progress.' : 'Run a benchmark to compare classical and quantum models with cross-validation.'}</p>
         <button className="btn btn-primary" onClick={() => onNavigate(experiment?.status === 'running' ? 'monitor' : 'setup')}>
           {experiment?.status === 'running' ? 'Open run monitor' : 'Configure benchmark'}
         </button>
@@ -148,6 +149,19 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ experiment, onNavigate
           </p>
         </section>
 
+        {active.calibration && active.calibration.length > 1 && (
+          <section className="card">
+            <div className="card-header">
+              <div>
+                <div className="card-title">Calibration</div>
+                <div className="card-subtitle">{active.display_name} · out-of-fold, quantile bins · Brier {active.brier_score?.toFixed(3) ?? '—'}{active.brier_ci ? ` (${active.brier_ci[0].toFixed(2)}–${active.brier_ci[1].toFixed(2)})` : ''}</div>
+              </div>
+            </div>
+            <CalibrationPlot bins={active.calibration} />
+            <p className="tiny faint" style={{ marginTop: '0.6rem', textAlign: 'center' }}>Points on the dotted diagonal mean predicted probabilities match observed rates.</p>
+          </section>
+        )}
+
         <section className="card">
           <div className="card-header">
             <div>
@@ -172,8 +186,11 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ experiment, onNavigate
       <div className="alert-banner alert-info">
         <Info size={16} />
         <div>
-          <strong>How to read this.</strong> The matched classical RBF SVM sees exactly the same two PCA features as the 2-qubit quantum model, so the difference between them isolates the quantum feature map.
-          On this data the classical kernel is both more accurate and thousands of times faster. Quantum advantage is treated as a hypothesis to test, not an assumption.
+          <strong>How to read this.</strong> The matched classical RBF SVM sees exactly the same PCA features as the quantum model, so the difference between them isolates the quantum feature map.
+          {quantum?.roc_auc != null && matched?.roc_auc != null
+            ? ` In this run the quantum kernel scored ROC-AUC ${quantum.roc_auc.toFixed(3)} against ${matched.roc_auc.toFixed(3)} for the matched classical kernel${overhead ? `, and took ${overhead >= 10 ? Math.round(overhead).toLocaleString() : overhead.toFixed(1)}× as long to train` : ''}.`
+            : ''}
+          {' '}Quantum advantage is treated as a hypothesis to test, not an assumption.
         </div>
       </div>
     </div>

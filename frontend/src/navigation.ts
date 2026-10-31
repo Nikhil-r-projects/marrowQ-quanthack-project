@@ -31,7 +31,7 @@ export interface Section {
 
 export const SECTIONS: Section[] = [
   { id: 'overview', label: 'Patient Overview', description: '3D organ view and organ-specific monitoring', group: 'Clinical care', icon: HeartPulse, roles: ['doctor', 'patient', 'hospital_admin'], patientScoped: true },
-  { id: 'diagnostic', label: 'Clinical Review', description: '8-agent model consensus and evidence', group: 'Clinical care', icon: BrainCircuit, roles: ['doctor', 'patient', 'hospital_admin'], patientScoped: true },
+  { id: 'diagnostic', label: 'Clinical Review', description: 'Trained-model review, forecast and sign-off', group: 'Clinical care', icon: BrainCircuit, roles: ['doctor', 'patient', 'hospital_admin'], patientScoped: true },
   { id: 'progress', label: 'Recovery Tracker', description: 'ANC and platelet trajectory with milestones', group: 'Clinical care', icon: ChartLine, roles: ['doctor', 'patient', 'hospital_admin'], patientScoped: true },
   { id: 'predict', label: 'Engraftment Predictor', description: 'Compare donor and graft options before transplant', group: 'Pre-transplant', icon: Target, roles: ['doctor', 'researcher'] },
   { id: 'dataset', label: 'Datasets', description: 'Cohort upload, profiling and leakage audit', group: 'Research', icon: Database, roles: ['researcher'] },

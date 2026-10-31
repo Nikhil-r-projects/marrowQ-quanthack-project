@@ -125,7 +125,11 @@ export const DatasetView: React.FC<DatasetViewProps> = ({ dataset, onDatasetLoad
                 return (
                   <div key={cls} style={{ marginBottom: '0.9rem' }}>
                     <div className="row between small" style={{ marginBottom: '0.3rem' }}>
-                      <span>{cls === '1' ? 'Engrafted by Day +28' : 'Delayed engraftment or graft failure'}</span>
+                      <span>{dataset.suggested_target === 'early_engraftment'
+                        ? (cls === '1' ? 'Engrafted by Day +14' : 'Engrafted after Day +14 or not at all')
+                        : dataset.suggested_target === 'neutrophil_recovery_day28'
+                          ? (cls === '1' ? 'Engrafted by Day +28' : 'Delayed engraftment or graft failure')
+                          : `${dataset.suggested_target} = ${cls}`}</span>
                       <strong className="tnum">{count} · {share.toFixed(1)}%</strong>
                     </div>
                     <div className="progress-bar-bg"><div className="progress-bar-fill" style={{ width: `${share}%`, background: cls === '1' ? 'var(--accent)' : 'var(--text-3)' }} /></div>

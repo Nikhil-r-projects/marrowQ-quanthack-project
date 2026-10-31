@@ -36,7 +36,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ dataset, onExperimentStart
       <div className="card empty-state">
         <Database size={34} />
         <h3>No dataset loaded</h3>
-        <p>Load the synthetic cohort or upload a research extract before configuring a benchmark.</p>
+        <p>Load the UCI cohort or upload a research extract before configuring a benchmark.</p>
         <button className="btn btn-primary" onClick={() => onNavigate('dataset')}>Go to datasets</button>
       </div>
     );
