@@ -1,0 +1,188 @@
+patient_id,recipient_age,recipient_sex,recipient_body_mass,recipient_abo,recipient_rh,recipient_cmv,disease,malignant,high_risk,second_transplant,donor_age,donor_abo,donor_cmv,abo_mismatched,female_to_male,hla_match,hla_antigen_differences,hla_allele_differences,stem_cell_source,cd34_dose,cd3_dose,cd34_cd3_ratio,early_engraftment
+UCI-001,9.6,Male,35.0,A,Positive,Positive,ALL,1,1,0,22.8,A,Positive,0.0,0,10/10,0.0,0.0,Peripheral blood,7.2,5.38,1.33876,0
+UCI-002,4.0,Male,20.6,B,Positive,Negative,ALL,1,0,0,23.3,B,Negative,0.0,0,10/10,0.0,0.0,Bone marrow,4.5,0.41,11.078295,0
+UCI-003,6.6,Male,23.4,B,Positive,Positive,ALL,1,0,0,26.4,B,Negative,0.0,0,10/10,0.0,0.0,Bone marrow,7.94,0.42,19.01323,0
+UCI-004,18.1,Female,50.0,AB,Positive,Negative,AML,1,0,0,39.7,A,Positive,1.0,0,10/10,0.0,0.0,Bone marrow,4.25,0.14,29.481647,0
+UCI-005,1.3,Female,9.0,AB,Negative,Positive,Chronic leukaemia,1,1,0,33.4,A,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,51.85,13.05,3.972255,1
+UCI-006,8.9,Male,40.0,O,Positive,Positive,Chronic leukaemia,1,1,1,27.4,AB,,1.0,0,10/10,0.0,0.0,Bone marrow,3.27,0.39,8.412758,0
+UCI-007,14.4,Female,51.0,A,Negative,,AML,1,0,0,34.5,O,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,17.78,7.39,2.406248,0
+UCI-008,18.2,Male,56.0,A,Positive,Negative,Non-malignant,0,0,0,21.4,O,Positive,1.0,0,7/10,1.0,2.0,Bone marrow,6.41,,,0
+UCI-009,7.9,Male,20.5,O,Positive,Positive,Non-malignant,0,0,0,32.6,AB,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,23.54,6.24,3.772555,0
+UCI-010,4.7,Male,16.5,O,Positive,Positive,Non-malignant,0,0,0,28.8,A,Negative,1.0,1,9/10,0.0,1.0,Peripheral blood,7.69,7.43,1.035244,0
+UCI-011,1.9,Female,10.5,B,Positive,Negative,Chronic leukaemia,1,1,0,29.7,O,Positive,1.0,0,9/10,0.0,1.0,Peripheral blood,17.66,1.49,11.883664,1
+UCI-012,13.4,Female,47.0,A,Positive,Negative,Chronic leukaemia,1,1,0,36.8,A,Negative,0.0,0,8/10,1.0,1.0,Peripheral blood,14.46,6.45,2.242442,1
+UCI-013,5.1,Male,18.1,A,Positive,Negative,ALL,1,0,0,40.9,O,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,15.42,5.64,2.734654,1
+UCI-014,11.5,Male,42.0,A,Positive,Positive,Lymphoma,1,1,0,30.6,O,Negative,1.0,0,10/10,0.0,0.0,Bone marrow,3.14,0.85,3.713956,0
+UCI-015,17.8,Male,55.0,A,Positive,Negative,AML,1,1,0,30.7,A,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,8.03,3.55,2.26309,0
+UCI-016,13.5,Male,30.0,B,Positive,Positive,Chronic leukaemia,1,1,0,41.2,O,Positive,1.0,0,9/10,1.0,0.0,Bone marrow,4.79,0.4,12.028841,0
+UCI-017,17.9,Male,97.8,O,Positive,Negative,Chronic leukaemia,1,0,0,40.2,AB,Positive,1.0,0,9/10,0.0,1.0,Peripheral blood,5.45,3.42,1.595133,1
+UCI-018,4.7,Female,20.5,O,Positive,Negative,Chronic leukaemia,1,0,0,40.8,AB,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,20.72,5.64,3.676416,1
+UCI-019,0.6,Female,6.0,A,Positive,,ALL,1,0,0,43.4,O,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,22.97,16.31,1.408646,0
+UCI-020,17.7,Male,64.0,O,Positive,Positive,ALL,1,0,0,31.7,A,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,8.84,5.16,1.711795,0
+UCI-021,14.7,Male,62.0,A,Positive,Positive,ALL,1,1,1,43.6,O,Positive,1.0,1,9/10,1.0,0.0,Peripheral blood,0.82,2.22,0.36872,0
+UCI-022,9.7,Male,43.2,AB,Positive,Positive,Non-malignant,0,0,0,42.4,B,Negative,1.0,0,9/10,0.0,1.0,Peripheral blood,6.34,5.15,1.231287,0
+UCI-023,13.9,Female,31.0,A,Positive,Positive,Chronic leukaemia,1,0,0,31.5,A,Positive,0.0,0,10/10,0.0,0.0,Peripheral blood,27.0,7.08,3.81488,0
+UCI-024,10.9,Male,39.3,B,Positive,Positive,Non-malignant,0,0,0,24.8,A,Positive,1.0,0,9/10,1.0,0.0,Peripheral blood,20.45,3.54,5.781319,1
+UCI-025,6.7,Female,23.8,B,Positive,Negative,ALL,1,0,0,30.5,B,Negative,0.0,0,10/10,0.0,0.0,Bone marrow,2.87,0.21,13.890231,0
+UCI-026,8.5,Male,26.8,O,Positive,Negative,Non-malignant,0,0,0,20.6,AB,Negative,1.0,1,10/10,0.0,0.0,Peripheral blood,12.95,7.74,1.672532,1
+UCI-027,0.7,Male,6.4,B,Positive,Negative,Non-malignant,0,1,1,41.0,B,Negative,0.0,1,10/10,0.0,0.0,Bone marrow,5.91,3.3,1.788507,0
+UCI-028,4.7,Male,17.0,B,Positive,,ALL,1,0,0,40.0,A,Negative,1.0,0,7/10,1.0,2.0,Peripheral blood,11.27,3.48,3.242425,0
+UCI-029,2.8,Male,14.3,O,Positive,Positive,Chronic leukaemia,1,1,0,33.1,A,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,23.21,11.59,2.001808,1
+UCI-030,8.4,Female,38.3,A,Positive,Positive,ALL,1,0,0,39.2,A,Positive,0.0,0,10/10,0.0,0.0,Peripheral blood,5.86,3.17,1.849607,0
+UCI-031,8.6,Female,20.0,B,Positive,,ALL,1,0,0,24.7,A,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,9.78,4.11,2.380569,1
+UCI-032,4.6,Male,23.0,A,Positive,Negative,ALL,1,0,0,24.4,A,Positive,0.0,0,10/10,0.0,0.0,Peripheral blood,9.81,5.81,1.687395,1
+UCI-033,3.1,Male,15.0,B,Positive,Positive,ALL,1,0,0,39.0,O,Negative,1.0,1,9/10,0.0,1.0,Bone marrow,6.45,0.4,16.186239,1
+UCI-034,10.9,Male,49.6,O,Positive,Positive,Non-malignant,0,0,0,23.4,B,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,12.58,3.6,3.49847,0
+UCI-035,1.7,Male,10.0,A,Positive,Positive,Chronic leukaemia,1,1,0,39.4,A,Positive,0.0,0,9/10,1.0,0.0,Peripheral blood,5.37,1.93,2.778202,0
+UCI-036,1.6,Female,11.25,A,Negative,Negative,AML,1,1,1,21.0,A,Positive,0.0,0,10/10,0.0,0.0,Peripheral blood,9.97,5.41,1.841206,1
+UCI-037,16.6,Male,63.0,B,Positive,Positive,Non-malignant,0,0,0,49.9,O,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,15.28,1.74,8.784289,0
+UCI-038,2.2,Female,10.5,B,Positive,Positive,Chronic leukaemia,1,1,0,43.5,O,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,22.02,8.06,2.733138,0
+UCI-039,2.1,Female,15.0,O,Positive,Positive,AML,1,0,0,40.5,O,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,19.59,3.36,5.837647,1
+UCI-040,13.3,Female,43.5,O,Positive,Negative,AML,1,0,0,21.4,A,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,8.73,3.94,2.215047,1
+UCI-041,13.8,Male,48.0,O,Positive,Negative,ALL,1,0,0,34.3,O,Positive,0.0,1,9/10,1.0,0.0,Peripheral blood,5.81,8.39,0.692898,0
+UCI-042,3.1,Male,15.0,B,Positive,Negative,ALL,1,0,0,20.5,A,Negative,1.0,0,10/10,0.0,0.0,Bone marrow,2.29,0.98,2.335954,0
+UCI-043,4.1,Male,15.3,A,Positive,Negative,AML,1,0,0,44.4,O,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,31.57,6.54,4.824785,1
+UCI-044,9.9,Male,29.0,B,Positive,,Non-malignant,0,0,0,20.4,O,Positive,1.0,0,10/10,0.0,0.0,Bone marrow,5.33,5.75,0.927108,0
+UCI-045,11.4,Male,41.4,A,Negative,Negative,AML,1,0,0,31.5,O,Negative,1.0,1,10/10,0.0,0.0,Peripheral blood,12.94,1.83,7.060927,1
+UCI-046,13.4,Female,76.0,O,Positive,Negative,ALL,1,0,0,38.8,O,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,10.3,1.71,6.022997,1
+UCI-047,11.3,Male,34.1,A,Positive,Positive,Chronic leukaemia,1,1,0,28.8,O,Negative,1.0,1,9/10,0.0,1.0,Bone marrow,3.35,0.74,4.517296,0
+UCI-048,12.1,Female,60.4,B,Positive,Positive,Non-malignant,0,0,0,36.9,B,Positive,0.0,0,10/10,0.0,0.0,Peripheral blood,12.2,1.66,7.369445,1
+UCI-049,8.5,Female,30.0,A,Positive,Positive,ALL,1,1,1,29.8,O,Negative,1.0,0,8/10,2.0,0.0,Bone marrow,2.68,0.73,3.650173,1
+UCI-050,15.1,Female,48.8,A,Positive,Positive,ALL,1,1,0,28.8,A,Positive,0.0,0,10/10,0.0,0.0,Bone marrow,1.93,0.59,3.280961,0
+UCI-051,8.3,Female,38.5,O,Positive,Negative,ALL,1,0,0,30.3,O,Positive,0.0,0,10/10,0.0,0.0,Peripheral blood,2.26,0.4,5.69203,0
+UCI-052,6.9,Male,28.5,O,Negative,Positive,ALL,1,0,0,33.1,O,Negative,0.0,0,8/10,1.0,1.0,Peripheral blood,16.65,4.15,4.011209,1
+UCI-053,4.9,Male,7.5,A,Positive,Positive,Non-malignant,0,0,0,39.6,B,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,16.02,11.85,1.351711,1
+UCI-054,5.0,Male,19.5,A,Positive,Negative,Non-malignant,0,0,0,39.6,A,Negative,0.0,0,8/10,0.0,2.0,Peripheral blood,16.46,8.71,1.890822,1
+UCI-055,6.5,Female,23.0,AB,Negative,Positive,Non-malignant,0,0,0,34.2,A,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,16.2,8.63,1.876834,0
+UCI-056,1.8,Male,8.15,O,Positive,Positive,Non-malignant,0,0,0,31.2,AB,Positive,1.0,0,8/10,1.0,1.0,Peripheral blood,57.78,5.24,11.017048,1
+UCI-057,3.4,Male,10.0,O,Negative,Positive,Non-malignant,0,1,1,30.4,AB,Positive,1.0,0,7/10,1.0,2.0,Peripheral blood,21.74,7.32,2.969988,1
+UCI-058,2.3,Male,14.0,O,Positive,Positive,Chronic leukaemia,1,1,0,24.4,A,Positive,1.0,0,9/10,1.0,0.0,Peripheral blood,9.17,8.94,1.025586,0
+UCI-059,7.9,Female,37.0,O,Positive,Positive,Non-malignant,0,0,0,37.3,B,Positive,1.0,0,10/10,0.0,0.0,Bone marrow,1.7,0.13,12.958576,0
+UCI-060,2.8,Female,13.0,B,Positive,Positive,ALL,1,0,0,30.2,O,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,38.32,12.23,3.133461,1
+UCI-061,12.6,Male,51.0,B,Positive,Negative,ALL,1,1,1,35.1,A,Negative,1.0,0,9/10,0.0,1.0,Peripheral blood,20.44,3.55,5.761517,1
+UCI-062,4.5,Male,15.0,O,Positive,Negative,Non-malignant,0,1,1,29.2,A,Negative,1.0,1,10/10,0.0,0.0,Bone marrow,6.66,0.99,6.739936,1
+UCI-063,15.6,Male,68.0,A,Positive,Negative,ALL,1,0,0,44.4,B,Positive,1.0,0,9/10,1.0,0.0,Bone marrow,0.79,0.13,6.157698,0
+UCI-064,18.4,Female,47.0,B,Positive,Positive,AML,1,1,1,55.4,O,Positive,1.0,0,10/10,0.0,0.0,Bone marrow,1.85,0.13,14.130301,0
+UCI-065,14.0,Male,52.0,B,Negative,Negative,Chronic leukaemia,1,0,0,43.7,O,Positive,1.0,0,10/10,0.0,0.0,Bone marrow,1.99,0.29,6.750632,0
+UCI-066,14.2,Female,61.0,A,Positive,Positive,ALL,1,0,0,45.9,O,Negative,1.0,0,9/10,1.0,0.0,Bone marrow,2.34,0.05,47.869839,0
+UCI-067,12.7,Male,54.9,O,Positive,Positive,Chronic leukaemia,1,1,0,22.6,A,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,10.78,3.47,3.10536,0
+UCI-068,11.5,Female,30.0,A,Positive,Positive,Chronic leukaemia,1,1,0,47.1,A,Positive,0.0,0,8/10,1.0,1.0,Peripheral blood,24.34,8.75,2.780611,0
+UCI-069,3.9,Male,11.9,A,Positive,Positive,Non-malignant,0,0,0,26.2,A,Negative,0.0,0,9/10,0.0,1.0,Peripheral blood,24.09,16.07,1.498879,1
+UCI-070,14.8,Male,49.0,A,Positive,Positive,AML,1,1,1,24.5,O,Negative,1.0,0,9/10,0.0,1.0,Peripheral blood,8.91,4.78,1.865411,1
+UCI-071,12.2,Female,30.8,B,Positive,Positive,ALL,1,0,0,35.3,A,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,9.89,3.38,2.927597,0
+UCI-072,11.8,Male,45.5,O,Positive,Negative,ALL,1,0,0,31.7,AB,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,10.44,4.26,2.449389,1
+UCI-073,11.3,Female,46.7,A,Positive,Positive,Non-malignant,0,0,0,26.7,O,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,8.82,4.94,1.786075,0
+UCI-074,13.5,Female,47.0,O,Positive,Negative,Lymphoma,1,1,0,39.6,A,Negative,1.0,0,9/10,1.0,0.0,Bone marrow,3.65,0.29,12.479226,0
+UCI-075,13.5,Female,58.0,O,Positive,Positive,Chronic leukaemia,1,0,0,41.5,AB,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,14.12,1.24,11.405197,1
+UCI-076,17.8,Male,56.5,A,Positive,,AML,1,0,0,42.3,O,Negative,1.0,1,9/10,1.0,0.0,Bone marrow,1.91,0.15,12.36598,0
+UCI-077,3.8,Female,16.5,O,Positive,Positive,Chronic leukaemia,1,1,0,41.4,A,Positive,1.0,0,9/10,1.0,0.0,Bone marrow,8.58,0.77,11.123182,0
+UCI-078,6.5,Female,16.0,A,Positive,Negative,Chronic leukaemia,1,1,0,30.0,O,Negative,1.0,0,7/10,0.0,3.0,Peripheral blood,43.96,7.32,6.002989,1
+UCI-079,7.4,Male,26.5,O,Positive,Positive,ALL,1,0,0,21.3,B,Negative,1.0,0,10/10,0.0,0.0,Bone marrow,3.53,0.84,4.184092,0
+UCI-080,5.5,Male,28.0,B,Negative,Positive,Chronic leukaemia,1,1,0,21.8,A,Positive,1.0,0,9/10,1.0,0.0,Peripheral blood,11.68,5.8,2.014498,0
+UCI-081,9.2,Male,26.0,B,Negative,Positive,ALL,1,0,0,30.0,A,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,11.34,5.4,2.098238,0
+UCI-082,14.6,Male,37.5,B,Negative,Positive,Lymphoma,1,0,0,22.1,A,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,7.91,,,0
+UCI-083,14.1,Male,44.3,A,Positive,Positive,Lymphoma,1,1,1,37.0,A,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,10.12,3.7,2.734269,0
+UCI-084,12.1,Male,43.0,A,Positive,Positive,Lymphoma,1,1,0,33.6,A,Positive,0.0,0,9/10,1.0,0.0,Peripheral blood,9.47,2.14,4.420206,1
+UCI-085,15.5,Female,61.3,A,Positive,Positive,AML,1,0,0,35.6,A,Negative,0.0,0,9/10,1.0,0.0,Bone marrow,1.9,0.36,5.276616,0
+UCI-086,3.9,Female,14.1,A,Positive,Positive,Non-malignant,0,0,0,40.1,A,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,16.0,10.06,1.589775,1
+UCI-087,11.2,Male,34.0,A,Positive,Negative,Chronic leukaemia,1,0,0,33.8,B,Negative,1.0,1,10/10,0.0,0.0,Bone marrow,1.38,,,0
+UCI-088,20.2,Male,62.5,AB,Negative,Negative,AML,1,1,0,32.4,A,Negative,1.0,0,8/10,2.0,0.0,Peripheral blood,9.11,3.39,2.687529,0
+UCI-089,1.7,Male,11.2,A,Positive,Positive,ALL,1,0,0,25.2,O,Negative,1.0,1,10/10,0.0,0.0,Peripheral blood,12.09,6.59,1.833687,0
+UCI-090,18.2,Female,72.5,A,Positive,Positive,ALL,1,0,0,28.3,B,Negative,1.0,0,9/10,1.0,0.0,Bone marrow,1.31,0.09,14.642869,0
+UCI-091,8.2,Female,24.5,B,Negative,Negative,Non-malignant,0,0,0,40.4,O,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,17.45,5.09,3.430293,0
+UCI-092,15.4,Male,70.0,B,Positive,Negative,AML,1,0,0,22.0,O,Negative,1.0,1,10/10,0.0,0.0,Bone marrow,1.58,0.25,6.34585,0
+UCI-093,5.0,Female,,O,Positive,Negative,ALL,1,0,0,30.8,O,Negative,0.0,0,9/10,1.0,0.0,Peripheral blood,34.1,,,1
+UCI-094,7.6,Female,34.0,A,Negative,,Non-malignant,0,0,0,22.4,O,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,11.65,1.68,6.928599,0
+UCI-095,9.4,Female,22.6,A,Negative,Negative,Chronic leukaemia,1,1,0,52.5,AB,Positive,1.0,0,9/10,1.0,0.0,Peripheral blood,17.59,7.35,2.394072,1
+UCI-096,14.0,Male,54.1,O,Positive,Negative,ALL,1,1,0,21.1,O,Negative,0.0,1,10/10,0.0,0.0,Peripheral blood,5.08,7.16,0.709805,0
+UCI-097,15.3,Male,51.1,A,Positive,Negative,Chronic leukaemia,1,1,0,19.4,O,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,7.2,5.27,1.365785,1
+UCI-098,7.2,Male,24.3,A,Positive,Negative,Lymphoma,1,0,0,30.2,A,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,17.12,7.32,2.337369,0
+UCI-099,5.7,Male,23.0,A,Positive,Negative,Chronic leukaemia,1,1,0,49.2,O,Negative,1.0,1,8/10,2.0,0.0,Peripheral blood,6.9,4.97,1.38917,0
+UCI-100,6.1,Female,19.0,A,Positive,Negative,Chronic leukaemia,1,0,0,41.9,A,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,17.02,2.33,7.305471,1
+UCI-101,11.5,Male,33.0,O,Positive,Negative,AML,1,1,1,27.7,O,Positive,0.0,0,10/10,0.0,0.0,Peripheral blood,14.87,5.83,2.552321,1
+UCI-102,3.2,Male,17.2,A,Positive,Positive,Non-malignant,0,0,0,40.3,B,Positive,1.0,1,10/10,0.0,0.0,Peripheral blood,21.59,7.93,2.722087,0
+UCI-103,18.3,Female,,O,Positive,Positive,ALL,1,1,0,40.2,O,Negative,0.0,0,9/10,1.0,0.0,Peripheral blood,9.28,,,1
+UCI-104,9.5,Female,23.0,O,Positive,,Lymphoma,1,1,1,33.9,A,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,36.34,4.83,7.517388,1
+UCI-105,17.3,Male,73.0,O,Positive,Negative,Chronic leukaemia,1,0,0,25.7,O,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,7.1,2.84,2.498917,1
+UCI-106,3.1,Female,15.3,A,Positive,Positive,AML,1,0,0,28.7,B,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,2.81,13.77,0.204132,0
+UCI-107,16.5,Female,55.2,A,Positive,Positive,Chronic leukaemia,1,0,0,30.6,O,Negative,1.0,0,8/10,2.0,0.0,Peripheral blood,6.36,2.45,2.59522,1
+UCI-108,7.7,Female,18.6,A,Positive,Negative,ALL,1,0,0,35.8,O,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,9.38,5.07,1.848795,0
+UCI-109,18.7,Male,52.7,O,Positive,Negative,AML,1,1,1,42.0,A,Negative,1.0,1,8/10,1.0,1.0,Peripheral blood,5.37,3.32,1.6173,1
+UCI-110,5.6,Male,24.3,A,Positive,Positive,Non-malignant,0,0,0,39.2,O,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,18.59,6.35,2.929081,1
+UCI-111,7.7,Male,19.5,B,Positive,Positive,ALL,1,1,0,38.8,A,Negative,1.0,0,8/10,1.0,1.0,Bone marrow,1.28,0.2,6.537721,0
+UCI-112,9.0,Male,25.2,A,Positive,Negative,Chronic leukaemia,1,0,0,22.5,O,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,11.26,2.97,3.787339,1
+UCI-113,5.4,Female,19.6,A,Positive,,Chronic leukaemia,1,1,0,28.3,O,Positive,1.0,0,9/10,0.0,1.0,Peripheral blood,15.51,13.27,1.168705,0
+UCI-114,7.3,Male,25.0,B,Negative,Negative,Chronic leukaemia,1,0,0,28.7,A,Positive,1.0,0,8/10,1.0,1.0,Peripheral blood,20.0,8.03,2.491794,1
+UCI-115,17.8,Female,90.0,O,Positive,Negative,Chronic leukaemia,1,1,0,37.3,O,Positive,0.0,0,8/10,2.0,0.0,Peripheral blood,7.0,4.72,1.483826,1
+UCI-116,8.1,Female,26.9,B,Positive,Negative,Non-malignant,0,0,0,35.8,O,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,17.3,2.22,7.805782,1
+UCI-117,7.1,Male,32.0,B,Positive,Negative,ALL,1,0,0,26.7,O,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,14.74,6.02,2.449323,1
+UCI-118,6.7,Female,17.6,O,Positive,Positive,ALL,1,0,0,43.1,B,Negative,1.0,0,10/10,0.0,0.0,Bone marrow,4.27,0.04,99.56097,0
+UCI-119,12.7,Female,37.0,A,Positive,Positive,Chronic leukaemia,1,0,0,21.4,O,Positive,1.0,0,9/10,0.0,1.0,Peripheral blood,7.78,4.46,1.744246,0
+UCI-120,4.5,Female,19.0,O,Positive,Positive,Non-malignant,0,0,0,25.3,A,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,24.7,4.9,5.045842,1
+UCI-121,17.5,Male,65.0,B,Negative,Negative,ALL,1,0,0,33.6,B,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,7.97,5.11,1.558548,0
+UCI-122,1.3,Male,9.6,A,Positive,Negative,Chronic leukaemia,1,1,0,33.9,A,Negative,0.0,0,9/10,1.0,0.0,Peripheral blood,10.75,10.56,1.018042,0
+UCI-123,1.3,Female,10.5,B,Positive,Negative,Chronic leukaemia,1,0,0,24.3,O,Negative,1.0,0,10/10,0.0,0.0,Bone marrow,4.37,0.97,4.489022,0
+UCI-124,16.7,Male,50.6,A,Positive,Negative,Chronic leukaemia,1,0,0,52.0,A,Negative,0.0,1,10/10,0.0,0.0,Peripheral blood,4.44,2.4,1.851411,1
+UCI-125,15.1,Female,60.0,A,Positive,Negative,Chronic leukaemia,1,0,0,29.2,O,Negative,1.0,0,9/10,0.0,1.0,Peripheral blood,7.45,1.77,4.2187,1
+UCI-126,20.1,Male,54.5,AB,Negative,Positive,ALL,1,0,0,36.4,O,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,10.14,1.96,5.164562,0
+UCI-127,17.8,Female,51.3,O,Positive,Negative,AML,1,1,1,37.4,A,Negative,1.0,0,8/10,2.0,0.0,Bone marrow,10.85,10.14,1.070314,1
+UCI-128,2.3,Male,12.0,A,Positive,Positive,ALL,1,0,0,22.5,O,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,20.41,15.9,1.283387,1
+UCI-129,11.6,Male,33.0,A,,Positive,ALL,1,0,0,47.4,O,Positive,1.0,1,8/10,1.0,1.0,Peripheral blood,6.28,5.8,1.082899,0
+UCI-130,17.7,Male,59.0,,,,ALL,1,1,0,40.3,O,Negative,,1,10/10,0.0,0.0,Peripheral blood,4.49,1.0,4.468419,0
+UCI-131,7.7,Female,20.8,A,Positive,Negative,ALL,1,0,0,42.7,O,Positive,1.0,0,9/10,1.0,0.0,Peripheral blood,15.47,11.49,1.346764,0
+UCI-132,17.9,Female,42.4,O,Positive,Positive,Non-malignant,0,0,0,22.9,A,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,9.73,3.25,2.997231,0
+UCI-133,2.0,Female,12.0,A,Positive,Positive,ALL,1,0,0,40.9,A,Positive,0.0,0,9/10,1.0,0.0,Peripheral blood,19.3,10.49,1.839537,0
+UCI-134,17.4,Male,65.0,O,Negative,Negative,Chronic leukaemia,1,0,0,35.6,A,Negative,1.0,0,9/10,0.0,1.0,Peripheral blood,12.04,3.19,3.774746,0
+UCI-135,16.0,Male,44.5,B,Positive,Positive,AML,1,1,0,22.4,O,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,14.66,6.92,2.118673,1
+UCI-136,9.0,Female,33.0,O,Positive,Negative,ALL,1,0,0,34.0,O,Negative,0.0,0,8/10,1.0,1.0,Peripheral blood,8.34,3.08,2.703806,0
+UCI-137,14.7,Male,62.0,B,Positive,Negative,ALL,1,0,0,34.6,O,Positive,1.0,0,10/10,0.0,0.0,Bone marrow,2.88,0.05,56.065024,0
+UCI-138,18.8,Male,103.4,O,Positive,,Lymphoma,1,1,0,46.0,B,Positive,1.0,0,8/10,2.0,0.0,Peripheral blood,1.64,0.17,9.456741,0
+UCI-139,16.0,Male,71.0,A,Positive,Negative,Chronic leukaemia,1,1,0,38.2,O,Negative,1.0,0,9/10,0.0,1.0,Bone marrow,5.25,0.27,19.210978,1
+UCI-140,18.9,Male,70.0,B,Positive,Positive,ALL,1,0,0,51.0,B,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,4.77,4.59,1.038752,1
+UCI-141,16.6,Female,58.9,O,Positive,Positive,ALL,1,0,0,36.8,O,Negative,0.0,0,10/10,0.0,0.0,Bone marrow,3.5,0.47,7.423372,0
+UCI-142,3.3,Female,13.0,O,Positive,Positive,AML,1,1,0,43.7,O,Negative,0.0,0,8/10,1.0,1.0,Peripheral blood,44.0,12.23,3.597279,1
+UCI-143,5.2,Female,20.9,B,Positive,Negative,ALL,1,0,0,43.1,O,Positive,1.0,0,9/10,1.0,0.0,Peripheral blood,6.78,8.48,0.799458,0
+UCI-144,6.0,Male,17.3,B,Negative,Negative,ALL,1,0,0,46.5,O,Negative,1.0,1,9/10,1.0,0.0,Peripheral blood,17.61,6.25,2.818993,0
+UCI-145,3.4,Male,14.8,O,Negative,Positive,Chronic leukaemia,1,0,0,30.3,A,Negative,1.0,0,9/10,1.0,0.0,Bone marrow,10.96,1.03,10.611083,0
+UCI-146,17.0,Female,62.0,A,Positive,Positive,AML,1,1,0,39.6,B,Negative,1.0,0,8/10,1.0,1.0,Peripheral blood,12.36,1.97,6.258729,0
+UCI-147,6.8,Male,23.0,A,Positive,Positive,ALL,1,1,0,20.4,B,Negative,1.0,1,9/10,1.0,0.0,Peripheral blood,9.72,6.3,1.543305,1
+UCI-148,18.2,Female,54.6,A,Positive,,AML,1,0,0,25.8,A,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,6.55,2.14,3.065758,0
+UCI-149,13.7,Male,35.5,A,Positive,Positive,Chronic leukaemia,1,1,0,40.4,O,Positive,1.0,1,9/10,1.0,0.0,Peripheral blood,2.25,4.94,0.455355,0
+UCI-150,5.1,Male,17.5,O,Positive,,ALL,1,1,1,39.0,AB,,1.0,0,10/10,0.0,0.0,Peripheral blood,48.63,13.01,3.737477,1
+UCI-151,18.3,Male,62.0,A,Positive,,Chronic leukaemia,1,1,0,23.1,AB,Negative,1.0,1,10/10,0.0,0.0,Bone marrow,1.88,0.24,7.910679,0
+UCI-152,14.0,Male,58.0,A,Positive,Positive,ALL,1,0,0,43.3,A,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,9.86,2.85,3.465003,0
+UCI-153,13.0,Female,43.0,AB,Positive,Positive,Chronic leukaemia,1,0,0,19.7,O,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,6.62,2.75,2.40947,0
+UCI-154,13.5,Male,65.0,B,Positive,Positive,ALL,1,0,0,35.4,A,Negative,1.0,1,9/10,1.0,0.0,Peripheral blood,8.63,7.15,1.2068,1
+UCI-155,12.2,Female,44.1,B,Positive,Positive,ALL,1,0,0,25.5,B,Negative,0.0,0,9/10,1.0,0.0,Bone marrow,3.53,0.49,7.243234,0
+UCI-156,10.0,Male,55.0,B,Positive,Positive,ALL,1,0,0,29.6,B,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,9.37,3.75,2.496128,0
+UCI-157,15.5,Male,71.0,B,Positive,Positive,AML,1,1,0,45.1,O,Negative,1.0,0,8/10,1.0,1.0,Peripheral blood,1.22,1.45,0.843646,1
+UCI-158,12.9,Male,40.3,A,Positive,Positive,AML,1,1,1,19.5,A,Negative,0.0,0,9/10,0.0,1.0,Peripheral blood,4.22,1.42,2.965539,0
+UCI-159,3.0,Male,13.0,A,Negative,Positive,Chronic leukaemia,1,0,0,40.4,A,Positive,0.0,0,9/10,1.0,0.0,Peripheral blood,39.07,6.42,6.081859,1
+UCI-160,11.5,Female,36.0,A,Positive,Positive,Chronic leukaemia,1,0,0,31.0,AB,Negative,1.0,0,10/10,0.0,0.0,Bone marrow,3.16,0.24,12.984467,0
+UCI-161,14.1,Male,49.0,A,Positive,Positive,AML,1,0,0,29.3,A,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,5.01,2.05,2.446267,1
+UCI-162,8.5,Male,24.0,AB,Negative,Positive,ALL,1,0,0,30.4,O,Negative,1.0,1,9/10,1.0,0.0,Peripheral blood,12.52,9.27,1.350554,1
+UCI-163,5.0,Male,25.4,A,Positive,Positive,ALL,1,0,0,24.6,B,Negative,1.0,0,7/10,1.0,2.0,Peripheral blood,10.0,4.09,2.443228,1
+UCI-164,13.4,Male,38.4,B,Positive,Positive,ALL,1,1,1,41.6,B,Negative,0.0,0,10/10,0.0,0.0,Peripheral blood,8.98,7.6,1.181537,0
+UCI-165,6.4,Male,18.3,B,Positive,Negative,ALL,1,0,0,23.6,B,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,12.17,6.56,1.854875,0
+UCI-166,4.2,Female,18.0,A,Positive,Positive,ALL,1,1,0,29.1,B,Positive,1.0,0,9/10,0.0,1.0,Bone marrow,4.54,0.37,12.272474,0
+UCI-167,4.4,Male,16.0,B,Positive,Positive,Non-malignant,0,1,1,22.3,O,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,21.99,11.71,1.878043,0
+UCI-168,9.6,Male,36.0,B,Positive,Positive,ALL,1,0,0,18.6,A,Positive,1.0,0,9/10,1.0,0.0,Peripheral blood,12.03,3.86,3.120205,1
+UCI-169,12.5,Female,35.9,B,Positive,Positive,AML,1,0,0,24.2,AB,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,3.28,10.61,0.309048,0
+UCI-170,9.7,Female,44.3,A,Positive,Positive,AML,1,1,1,35.9,O,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,10.89,4.86,2.241175,1
+UCI-171,11.2,Male,30.5,O,Negative,Negative,AML,1,0,0,29.9,A,Negative,1.0,1,8/10,1.0,1.0,Peripheral blood,15.12,5.16,2.929514,1
+UCI-172,3.6,Female,17.0,AB,Positive,Negative,ALL,1,1,0,35.4,A,Positive,1.0,0,9/10,1.0,0.0,Peripheral blood,32.73,8.06,4.061324,1
+UCI-173,2.9,Female,11.2,A,Positive,Negative,AML,1,1,0,28.1,AB,Negative,1.0,0,8/10,1.0,1.0,Peripheral blood,10.38,5.02,2.069057,1
+UCI-174,17.8,Male,50.8,AB,Positive,Negative,AML,1,1,1,41.5,B,Positive,1.0,1,10/10,0.0,0.0,Peripheral blood,6.87,5.65,1.214932,0
+UCI-175,16.1,Male,57.0,B,Positive,Negative,ALL,1,0,0,40.9,A,Positive,1.0,1,9/10,1.0,0.0,Peripheral blood,11.283,2.76,4.094514,0
+UCI-176,3.4,Female,24.0,B,Positive,Positive,ALL,1,0,0,36.7,A,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,7.47,8.85,0.843967,0
+UCI-177,4.3,Male,14.0,AB,Positive,Negative,Non-malignant,0,0,0,42.4,O,Negative,1.0,1,10/10,0.0,0.0,Peripheral blood,36.65,20.02,1.830242,0
+UCI-178,12.7,Female,49.0,B,Positive,Positive,ALL,1,0,0,34.2,O,Negative,1.0,0,9/10,0.0,1.0,Peripheral blood,11.45,6.85,1.671314,1
+UCI-179,8.8,Male,24.0,A,Negative,Positive,AML,1,1,0,37.1,A,Negative,0.0,0,9/10,0.0,1.0,Peripheral blood,14.43,6.54,2.205359,1
+UCI-180,7.5,Male,28.0,AB,Negative,Negative,ALL,1,0,0,30.0,A,Negative,1.0,1,9/10,1.0,0.0,Bone marrow,8.11,0.5,16.32616,0
+UCI-181,4.8,Male,25.0,B,Positive,Negative,ALL,1,0,0,30.9,A,Positive,1.0,1,8/10,0.0,2.0,Peripheral blood,7.87,7.81,1.007599,1
+UCI-182,8.8,Male,33.0,A,Positive,Positive,AML,1,1,0,37.6,O,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,12.58,5.19,2.426122,0
+UCI-183,12.9,Male,44.0,A,Negative,Positive,Lymphoma,1,1,1,37.6,A,Positive,0.0,0,10/10,0.0,0.0,Peripheral blood,11.08,4.39,2.52275,0
+UCI-184,13.9,Female,44.5,O,Positive,Positive,AML,1,1,0,22.9,A,Negative,1.0,0,10/10,0.0,0.0,Peripheral blood,4.64,4.47,1.038858,1
+UCI-185,10.4,Female,33.0,B,Positive,Positive,Non-malignant,0,0,0,27.3,A,Positive,1.0,0,10/10,0.0,0.0,Peripheral blood,7.73,4.73,1.635559,0
+UCI-186,8.0,Male,24.0,O,Positive,Negative,Chronic leukaemia,1,0,0,27.8,A,Negative,1.0,0,9/10,1.0,0.0,Peripheral blood,15.41,1.91,8.07777,1
+UCI-187,9.5,Male,37.0,AB,Positive,Negative,Non-malignant,0,1,1,55.6,A,Positive,1.0,0,10/10,,,Peripheral blood,9.91,10.45,0.948135,0

@@ -1,0 +1,125 @@
+{
+  "patient_profile": {
+    "patient_id": "PT-2026-DEMO",
+    "name": "Alexandria Morgan",
+    "age": 52,
+    "gender": "Female",
+    "primary_diagnosis": "Acute Myeloid Leukemia (AML)",
+    "karnofsky_performance_status": 80,
+    "ecog_performance_status": 1
+  },
+  "laboratory_complete_blood_count": {
+    "hemoglobin_g_dl": 8.4,
+    "platelets_per_microliter": 28000,
+    "white_blood_cells_k_microliter": 2.1,
+    "absolute_neutrophil_count_per_microliter": 380,
+    "absolute_lymphocyte_count_per_microliter": 1200,
+    "serum_creatinine_mg_dl": 1.1,
+    "total_bilirubin_mg_dl": 1.2,
+    "ast_u_l": 28,
+    "alt_u_l": 32,
+    "inr": 1.05
+  },
+  "bone_marrow_pathology_and_vision": {
+    "aspirate_blasts_percentage": 34.5,
+    "cellularity_percentage": 75,
+    "myeloid_to_erythroid_ratio": 4.5,
+    "nuclear_to_cytoplasmic_ratio": 0.82,
+    "cytogenetics_karyotype": "46,XX,t(8;21)(q22;q22.1)",
+    "morphology_notes": "Hypercellular marrow heavily infiltrated with immature myeloblasts containing Auer rods. Dysplastic megakaryocytes noted."
+  },
+  "genomic_variants_ngs": [
+    {
+      "gene_symbol": "RUNX1-RUNX1T1",
+      "variant_type": "Chromosomal Translocation",
+      "hgvs_notation": "t(8;21)(q22;q22.1)",
+      "variant_allele_frequency_vaf": 0.48,
+      "clinical_significance": "Pathogenic (ELN 2022 Favorable Risk Defining)",
+      "evidence_source": "ClinVar / WHO 2022"
+    },
+    {
+      "gene_symbol": "KIT",
+      "variant_type": "Missense SNV",
+      "hgvs_notation": "c.2447A>T (p.Asp816Val)",
+      "variant_allele_frequency_vaf": 0.18,
+      "clinical_significance": "Pathogenic (Adverse modifier in core-binding factor AML)",
+      "evidence_source": "COSMIC: COSV55042813"
+    },
+    {
+      "gene_symbol": "FLT3",
+      "variant_type": "Internal Tandem Duplication (ITD)",
+      "status": "NEGATIVE"
+    },
+    {
+      "gene_symbol": "TP53",
+      "variant_type": "Exon 5-8 Sequencing",
+      "status": "WILD-TYPE (NEGATIVE)"
+    }
+  ],
+  "flow_cytometry_immunophenotype": {
+    "gating_strategy": "CD45 dim vs SSC blast gating",
+    "cd34_positive_percentage": 92.4,
+    "cd117_positive_percentage": 88.6,
+    "cd33_positive_percentage": 94.1,
+    "cd13_positive_percentage": 76.5,
+    "cd38_positive_percentage": 89.0,
+    "hla_dr_positive_percentage": 84.2,
+    "lymphoid_markers_cd3_cd19": "NEGATIVE",
+    "measurable_residual_disease_mrd_sensitivity": "0.01% (10^-4)",
+    "interpretation": "Myeloblast immunophenotype confirming Myeloid Lineage AML"
+  },
+  "organ_function_and_hct_ci": {
+    "cardiac_lvef_percentage": 58,
+    "pulmonary_dlco_percentage": 74,
+    "renal_egfr_ml_min": 78,
+    "comorbidities": [
+      "Mild Hepatic Impairment",
+      "Prior Systemic Infection (resolved fungal pneumonia)"
+    ],
+    "sorror_hct_ci_score": 2,
+    "predicted_two_year_nrm_percentage": 18.5,
+    "recommended_conditioning": "Reduced-Intensity Conditioning (RIC) - Fludarabine 30mg/m2 + Busulfan 6.4mg/kg"
+  },
+  "pharmacogenomics_cpic_panel": {
+    "TPMT": "Intermediate Metabolizer (IM: *1/*3A) - 30-50% dose reduction recommended for thiopurines",
+    "NUDT15": "Normal Metabolizer (NM: *1/*1)",
+    "CYP2C19": "Poor Metabolizer (PM: *2/*2) - High voriconazole plasma concentrations; switch to isavuconazole or posaconazole",
+    "DPYD": "Normal Metabolizer (NM: *1/*1) - Standard fluoropyrimidine clearance",
+    "UGT1A1": "Normal Metabolizer (NM: *1/*1)",
+    "CYP2D6": "Normal Metabolizer (NM: *1/*1)",
+    "CYP2C9_VKORC1": "CYP2C9*1/*3, VKORC1 -1639G>A (Intermediate sensitivity warfarin starting dose 3mg)",
+    "SLCO1B1": "Normal transporter function (NM: *1/*1)",
+    "HLA_B": "HLA-B*57:01 NEGATIVE (Low risk for abacavir hypersensitivity)"
+  },
+  "transplant_donor_matching_12_allele": {
+    "recipient_hla": {
+      "A": ["02:01", "24:02"],
+      "B": ["07:02", "44:02"],
+      "C": ["07:02", "05:01"],
+      "DRB1": ["15:01", "04:01"],
+      "DQB1": ["06:02", "03:02"],
+      "DPB1": ["04:01", "02:01"]
+    },
+    "selected_donor_hla": {
+      "donor_id": "DONOR-MUD-991",
+      "donor_type": "10/10 Matched Unrelated Donor (MUD)",
+      "donor_age": 24,
+      "donor_sex": "Male",
+      "donor_cmv": "Positive",
+      "donor_abo": "A Positive (Identical)",
+      "A": ["02:01", "24:02"],
+      "B": ["07:02", "44:02"],
+      "C": ["07:02", "05:01"],
+      "DRB1": ["15:01", "04:01"],
+      "DQB1": ["06:02", "03:02"],
+      "DPB1": ["04:01", "04:02"]
+    },
+    "match_grade": "10/10 High-Resolution Match (Permissive DPB1 T-cell epitope mismatch)",
+    "donor_specific_antibodies_dsa": {
+      "anti_hla_antibodies_detected": false,
+      "max_mfi": 620,
+      "virtual_crossmatch": "NEGATIVE (Low risk of hyperacute rejection or primary graft failure)"
+    }
+  }
+}
+
