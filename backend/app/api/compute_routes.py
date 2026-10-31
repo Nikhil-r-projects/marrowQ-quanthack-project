@@ -15,11 +15,24 @@ class JobSubmitRequest(BaseModel):
     payload: Dict[str, Any] = Field(default_factory=dict)
 
 
+class GPUSimulateRequest(BaseModel):
+    n_patients: int = 24
+    n_qubits: int = 4
+    bandwidth: float = 1.0
+    reps: int = 1
+
+
 @router.post("/jobs", status_code=202)
 def submit_job(req: JobSubmitRequest):
     if req.kind not in HANDLERS:
         raise HTTPException(status_code=400, detail=f"Unknown job kind '{req.kind}'. Supported: {', '.join(HANDLERS)}")
     return jobs.enqueue_job(req.kind, req.payload)
+
+
+@router.post("/gpu-simulate", status_code=202)
+def gpu_simulate(req: GPUSimulateRequest):
+    """Submits a genuine GPU quantum-kernel evaluation on real UCI patients to the background worker."""
+    return jobs.enqueue_job("gpu_simulate", req.model_dump())
 
 
 @router.get("/jobs")
