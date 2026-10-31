@@ -43,6 +43,23 @@ export interface ModelMetric {
   status: 'completed' | 'failed';
   error_message?: string;
   extra_info?: Record<string, any>;
+  roc_auc_ci?: [number, number] | null;
+  balanced_accuracy_ci?: [number, number] | null;
+  brier_ci?: [number, number] | null;
+  roc_auc_repeat_sd?: number | null;
+  calibration?: { predicted: number; observed: number; n: number }[] | null;
+  best_params?: Record<string, unknown> | null;
+  /** Present when metrics are out-of-fold from repeated cross-validation. */
+  evaluation?: string | null;
+}
+
+export interface EngraftmentCurve {
+  days: number[];
+  probability_engrafted: number[];
+  median_day: number;
+  probability_by_day: Record<string, number>;
+  model: { name: string; c_index_cv: number; n: number; events: number; cohort_median_day: number };
+  warnings: string[];
 }
 
 export interface Experiment {

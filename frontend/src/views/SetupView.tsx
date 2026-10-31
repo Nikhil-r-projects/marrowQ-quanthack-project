@@ -13,8 +13,9 @@ interface SetupViewProps {
 const CLASSICAL = [
   { key: 'runDummy', label: 'Majority-class baseline', hint: 'Floor every model must beat' },
   { key: 'runLogistic', label: 'Logistic regression (L2)', hint: 'Interpretable clinical reference' },
-  { key: 'runRandomForest', label: 'Random forest', hint: '100 trees, depth 6' },
-  { key: 'runRbfSvm', label: 'RBF SVM', hint: 'Full features, plus a matched 2-D comparator' }
+  { key: 'runRandomForest', label: 'Random forest', hint: '200 trees, tuned depth' },
+  { key: 'runGradientBoosting', label: 'Gradient boosting', hint: 'Histogram boosting, tuned' },
+  { key: 'runRbfSvm', label: 'RBF SVM', hint: 'Tuned C and gamma, calibrated' }
 ] as const;
 
 export const SetupView: React.FC<SetupViewProps> = ({ dataset, onExperimentStarted, onNavigate }) => {
@@ -23,7 +24,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ dataset, onExperimentStart
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>(dataset?.suggested_features || []);
   const [testSize, setTestSize] = useState(0.25);
   const [randomSeed, setRandomSeed] = useState(42);
-  const [models, setModels] = useState({ runDummy: true, runLogistic: true, runRandomForest: true, runRbfSvm: true, runQuantumSvm: true });
+  const [models, setModels] = useState({ runDummy: true, runLogistic: true, runRandomForest: true, runGradientBoosting: true, runRbfSvm: true, runQuantumSvm: true });
   const [quantumQubits, setQuantumQubits] = useState(2);
   const [quantumReps, setQuantumReps] = useState(1);
   const [quantumMaxSamples, setQuantumMaxSamples] = useState(80);
@@ -61,6 +62,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ dataset, onExperimentStart
         run_logistic: models.runLogistic,
         run_random_forest: models.runRandomForest,
         run_rbf_svm: models.runRbfSvm,
+        run_gradient_boosting: models.runGradientBoosting,
         run_quantum_svm: models.runQuantumSvm,
         quantum_qubits: quantumQubits,
         quantum_reps: quantumReps,
@@ -80,7 +82,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ dataset, onExperimentStart
         <div>
           <div className="eyebrow"><SlidersHorizontal size={13} /> Research · step 2 of 4</div>
           <h2>Configure benchmark</h2>
-          <p>Classical baselines and the quantum-kernel SVM are trained on the same leakage-safe split. Preprocessing is fitted on the training partition only.</p>
+          <p>Classical models are scored by 5×5 repeated cross-validation with nested tuning, so every patient is predicted by a model that never saw them. Preprocessing is fitted inside each training fold.</p>
         </div>
         <div className="actions">
           <button className="btn btn-primary btn-lg" onClick={handleRun} disabled={isSubmitting || selectedFeatures.length === 0}>
@@ -121,7 +123,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ dataset, onExperimentStart
 
           <div className="grid-2" style={{ marginTop: '1rem', gap: '1rem' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label" htmlFor="test-size">Held-out test set · {(testSize * 100).toFixed(0)}%</label>
+              <label className="form-label" htmlFor="test-size">Quantum-model test set · {(testSize * 100).toFixed(0)}%</label>
               <input id="test-size" type="range" className="form-slider" min={0.1} max={0.4} step={0.05} value={testSize} onChange={e => setTestSize(parseFloat(e.target.value))} />
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>

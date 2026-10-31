@@ -151,7 +151,8 @@ def test_api_demo_dataset_and_experiment_lifecycle():
         "run_quantum_svm": True,
         "quantum_qubits": 2,
         "quantum_reps": 1,
-        "quantum_max_samples": 40
+        "quantum_max_samples": 40,
+        "cv_repeats": 1
     }
     exp_res = client.post("/api/experiments", json=create_payload)
     assert exp_res.status_code == 200
@@ -191,7 +192,8 @@ def test_api_demo_dataset_and_experiment_lifecycle():
     rep_res = client.get(f"/api/reports/{exp_id}")
     assert rep_res.status_code == 200
     rep_data = rep_res.json()
-    assert "MarrowQ Experiment Research Report" in rep_data["markdown_report"]
+    assert "MarrowQ experiment report" in rep_data["markdown_report"]
+    assert "Day +14" in rep_data["markdown_report"] and "95% CI" in rep_data["markdown_report"]
 
 def test_invalid_experiment_and_model_ids():
     # Non-existent experiment
@@ -287,13 +289,13 @@ def test_quantum_backends_and_status():
     assert res_status.status_code == 200
     status_data = res_status.json()
     assert status_data["has_ibm_runtime_installed"] is True
-    assert "aer_simulator_statevector" in status_data["default_backend"]
+    assert status_data["is_connected_to_hardware"] is False
 
     res_backends = client.get("/api/quantum/backends")
     assert res_backends.status_code == 200
     backends = res_backends.json()
-    # Without IBM credentials only the local simulators may be listed, never a static hardware catalogue.
-    assert not any(b["is_hardware"] for b in backends)
+    # Without IBM credentials, hardware may only appear as needing configuration, never as online.
+    assert not any(b["is_hardware"] and b["status"] == "ONLINE" for b in backends)
     assert any(b["backend_name"] == "aer_simulator_statevector" for b in backends)
 
 def test_multi_agent_orchestrator(ward_patient):

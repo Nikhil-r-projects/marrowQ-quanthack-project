@@ -59,7 +59,7 @@ def test_demo_dataset_is_the_real_cohort_with_dictionary_roles():
     profile = client.get("/api/datasets/demo").json()
     assert profile["dataset_id"] == uci_bmt.DATASET_ID and profile["data_mode"] == "research"
     assert profile["suggested_target"] == "early_engraftment"
-    assert set(profile["suggested_features"]) == set(uci_bmt.PRE_TRANSPLANT_FEATURES)
+    assert set(profile["suggested_features"]) == set(uci_bmt.CORE_FEATURES) <= set(uci_bmt.PRE_TRANSPLANT_FEATURES)
     assert any(w.startswith("anc_recovery_day") for w in profile["potential_leakage_warnings"])
 
 
@@ -139,3 +139,26 @@ def test_clinical_review_refuses_to_invent_missing_counts():
     report = client.post("/api/agents/orchestrate", json={"patient_id": patient["patient_id"]}).json()["reports"]
     assert "260" in report["patient_friendly_summary"] and "31,000" in report["patient_friendly_summary"]
     assert "420" not in report["patient_friendly_summary"]
+
+
+def test_cross_validated_benchmark_reports_out_of_fold_metrics_with_cis(cohort):
+    from app.core.benchmark import run_cross_validated_benchmark
+    metrics, finals, summary = run_cross_validated_benchmark(
+        cohort, "early_engraftment", uci_bmt.CORE_FEATURES, ["dummy", "logistic_regression", "random_forest"], n_repeats=1)
+    lr = metrics["logistic_regression"]
+    assert lr["test_sample_count"] == 187 and lr["roc_auc"] > 0.6
+    lo, hi = lr["roc_auc_ci"]
+    assert lo < lr["roc_auc"] < hi
+    assert metrics["dummy"]["roc_auc"] < 0.6
+    assert "ensemble" in metrics and set(finals) >= {"logistic_regression", "ensemble"}
+    assert finals["ensemble"].predict_proba(cohort[uci_bmt.CORE_FEATURES].head(3)).shape == (3, 2)
+
+
+def test_engraftment_curve_is_monotone_and_responds_to_graft():
+    base = {**VALID_INTAKE}
+    good = client.post("/api/engraftment-curve", json={**base, "cd34_dose": 20, "stem_cell_source": "Peripheral blood"}).json()
+    poor = client.post("/api/engraftment-curve", json={**base, "cd34_dose": 2, "stem_cell_source": "Bone marrow"}).json()
+    curve = good["probability_engrafted"]
+    assert all(b >= a for a, b in zip(curve, curve[1:])) and curve[0] < 0.01
+    assert good["median_day"] < poor["median_day"]
+    assert good["model"]["c_index_cv"] > 0.6

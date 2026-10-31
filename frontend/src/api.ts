@@ -1,7 +1,7 @@
 import {
   DatasetProfile, Experiment, PredictionResult, SystemHealth, AvailableModel,
   Patient, ClinicalObservation, PatientProgress, QuantumBackend, QuantumStatus,
-  QuantumJob, OrchestrationResult, HospitalOverview, CohortOverview, QuantumExperimentResult
+  QuantumJob, OrchestrationResult, HospitalOverview, CohortOverview, QuantumExperimentResult, EngraftmentCurve
 } from './types';
 import { zzCircuitDepth, zzKernelMatrix } from './lib/quantumKernel';
 
@@ -82,6 +82,7 @@ export const fetchReport = (experimentId: string) => request<{ experiment_id: st
 
 // ---- Cohort & patients ---------------------------------------------------------------------------
 export const fetchCohort = () => request<CohortOverview>('/cohort');
+export const fetchEngraftmentCurve = (pretransplant: Record<string, string | number>) => post<EngraftmentCurve>('/engraftment-curve', pretransplant);
 export const fetchPatients = () => request<Patient[]>('/patients');
 export const fetchPatientObservations = (patientId: string) => request<ClinicalObservation[]>(`/patients/${patientId}/observations`);
 export const addPatientObservation = (patientId: string, obs: Omit<ClinicalObservation, 'id' | 'recorded_by' | 'status'>) =>

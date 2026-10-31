@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.core import patients as patient_service
+from app.core import survival
 from app.core.database import delete_patient, get_patient, log_audit_event, save_patient
 from app.core.datasets import uci_bmt
 from app.schemas import ExamplePatientsRequest, PatientCreateRequest
@@ -59,3 +60,14 @@ def discharge_patient(patient_id: str):
     delete_patient(patient_id)
     log_audit_event("PATIENT_REMOVED", patient_id, "CLINICIAN", {})
     return {"status": "removed", "patient_id": patient_id}
+
+
+@router.post("/engraftment-curve")
+def get_engraftment_curve(pretransplant: dict):
+    """P(neutrophil engraftment by day d) from the log-logistic AFT model trained on the UCI cohort."""
+    clean, errors, warnings = uci_bmt.validate_pretransplant(pretransplant, patient_service.cohort())
+    # Missing values are imputed for a what-if curve; anything else invalid is rejected.
+    blocking = [e for e in errors if "is required" not in e]
+    if blocking:
+        raise HTTPException(status_code=422, detail={"errors": blocking, "warnings": warnings})
+    return {**survival.engraftment_curve(clean), "warnings": warnings}

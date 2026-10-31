@@ -32,6 +32,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ experiment, onNavigate
   const active = metrics[selected] ?? metrics[keys[0]];
   const entries = Object.entries(metrics);
   const scored = entries.filter(([k, m]) => m.roc_auc != null && k !== 'dummy');
+  const cvMetric = entries.map(([, m]) => m).find(m => m.evaluation);
   const best = scored.reduce((a, b) => ((b[1].roc_auc ?? 0) > (a[1].roc_auc ?? 0) ? b : a), scored[0]);
   const quantum = metrics.quantum_kernel_svm;
   const matched = metrics.matched_rbf_svm;
@@ -51,7 +52,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ experiment, onNavigate
         <div>
           <div className="eyebrow"><BarChart3 size={13} /> Research · step 4 of 4</div>
           <h2>Benchmark results</h2>
-          <p>Held-out evaluation on {experiment.test_sample_count ?? '—'} patients · {experiment.data_mode === 'synthetic' ? 'synthetic demonstration data' : 'research extract'} · experiment <code>{experiment.experiment_id}</code></p>
+          <p>{cvMetric ? `Out-of-fold evaluation on all ${cvMetric.test_sample_count} patients (${cvMetric.evaluation})` : `Held-out evaluation on ${experiment.test_sample_count ?? '—'} patients`} · {experiment.data_mode === 'synthetic' ? 'synthetic demonstration data' : 'research data'} · experiment <code>{experiment.experiment_id}</code></p>
         </div>
         <div className="actions">
           <button className="btn btn-secondary" onClick={() => onNavigate('report')}><FileText size={14} /> Research report</button>
@@ -61,7 +62,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ experiment, onNavigate
       <div className="grid-4">
         <div className="card kpi">
           <span className="kpi-label">Best ROC-AUC</span>
-          <span className="kpi-value">{best?.[1].roc_auc?.toFixed(3) ?? '—'}</span>
+          <span className="kpi-value">{best?.[1].roc_auc?.toFixed(3) ?? '—'}{best?.[1].roc_auc_ci && <small>95% CI {best[1].roc_auc_ci[0].toFixed(2)}–{best[1].roc_auc_ci[1].toFixed(2)}</small>}</span>
           <span className="kpi-foot">{best?.[1].display_name}</span>
         </div>
         <div className="card kpi">
@@ -113,7 +114,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({ experiment, onNavigate
                   <td className="num">{pct(m.precision)}</td>
                   <td className="num">{pct(m.recall)}</td>
                   <td className="num">{m.f1_score.toFixed(3)}</td>
-                  <td className="num">{m.roc_auc != null ? m.roc_auc.toFixed(3) : '—'}</td>
+                  <td className="num">{m.roc_auc != null ? m.roc_auc.toFixed(3) : '—'}{m.roc_auc_ci && <div className="tiny faint">{m.roc_auc_ci[0].toFixed(2)}–{m.roc_auc_ci[1].toFixed(2)}</div>}</td>
                   <td className="num">{m.brier_score != null ? m.brier_score.toFixed(3) : '—'}</td>
                   <td className="num">{secs(m.training_time_seconds)}</td>
                 </tr>

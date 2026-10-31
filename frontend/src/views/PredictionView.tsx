@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, ShieldAlert, Sparkles, Target, Trash2, TriangleAlert, Trophy } from 'lucide-react';
-import { AvailableModel, CohortOverview, CohortVariable, Experiment, Patient, PredictionResult } from '../types';
-import { fetchAvailableModels, fetchCohort, predictOutcome } from '../api';
+import { AvailableModel, CohortOverview, CohortVariable, EngraftmentCurve, Experiment, Patient, PredictionResult } from '../types';
+import { fetchAvailableModels, fetchCohort, fetchEngraftmentCurve, predictOutcome } from '../api';
+import { EngraftmentCurves } from '../components/EngraftmentCurves';
 
 interface PredictionViewProps {
   currentExperiment: Experiment | null;
@@ -35,6 +36,7 @@ export const PredictionView: React.FC<PredictionViewProps> = ({ currentExperimen
     ];
   });
   const [results, setResults] = useState<Record<number, PredictionResult>>({});
+  const [curves, setCurves] = useState<Record<number, EngraftmentCurve>>({});
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -60,8 +62,8 @@ export const PredictionView: React.FC<PredictionViewProps> = ({ currentExperimen
   const expModels = models.filter(m => m.experiment_id === expId && m.model_key !== 'dummy');
   const activeModel = expModels.find(m => m.model_key === modelKey);
 
-  const setR = (k: string, v: string) => { setRecipient(r => ({ ...r, [k]: v })); setResults({}); };
-  const setO = (id: number, patch: Partial<GraftOption>) => { setOptions(os => os.map(o => (o.id === id ? { ...o, ...patch } : o))); setResults({}); };
+  const setR = (k: string, v: string) => { setRecipient(r => ({ ...r, [k]: v })); setResults({}); setCurves({}); };
+  const setO = (id: number, patch: Partial<GraftOption>) => { setOptions(os => os.map(o => (o.id === id ? { ...o, ...patch } : o))); setResults({}); setCurves({}); };
 
   const toFeatures = (values: Values) => Object.fromEntries(
     Object.entries(values).filter(([, v]) => v !== '').map(([k, v]) => [k, dictionary.get(k)?.kind === 'categorical' ? v : Number(v)])
@@ -73,10 +75,15 @@ export const PredictionView: React.FC<PredictionViewProps> = ({ currentExperimen
     setError(null);
     try {
       const entries = await Promise.all(options.map(async o => {
-        const res = await predictOutcome({ experiment_id: expId, model_name: modelKey, features: { ...toFeatures(recipient), ...toFeatures(o.values) } });
-        return [o.id, res] as const;
+        const features = { ...toFeatures(recipient), ...toFeatures(o.values) };
+        const [res, curve] = await Promise.all([
+          predictOutcome({ experiment_id: expId, model_name: modelKey, features }),
+          fetchEngraftmentCurve(features as Record<string, string | number>)
+        ]);
+        return [o.id, res, curve] as const;
       }));
-      setResults(Object.fromEntries(entries));
+      setResults(Object.fromEntries(entries.map(([id, r]) => [id, r])));
+      setCurves(Object.fromEntries(entries.map(([id, , c]) => [id, c])));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -196,7 +203,10 @@ export const PredictionView: React.FC<PredictionViewProps> = ({ currentExperimen
                       <div className="prob-fill" style={{ width: `${(r!.probability ?? 0) * 100}%` }} />
                       <span className="prob-threshold" />
                     </div>
-                    <div className="tiny faint" style={{ marginTop: '0.25rem' }}>{r!.model_confidence_description}</div>
+                    <div className="tiny faint" style={{ marginTop: '0.25rem' }}>
+                      {r!.model_confidence_description}
+                      {curves[o.id] && ` Expected recovery: median Day +${curves[o.id].median_day}.`}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -210,6 +220,38 @@ export const PredictionView: React.FC<PredictionViewProps> = ({ currentExperimen
           )}
         </section>
       </div>
+
+      {Object.keys(curves).length > 0 && (() => {
+        const series = options.filter(o => curves[o.id]).map(o => ({ id: o.id, name: o.name, curve: curves[o.id] }));
+        const model = series[0].curve.model;
+        return (
+          <section className="card">
+            <div className="card-header">
+              <div>
+                <div className="card-title">Time to neutrophil engraftment</div>
+                <div className="card-subtitle">
+                  Probability of ANC &gt; 500/µL by each day · {model.name} model, cross-validated C-index {model.c_index_cv.toFixed(2)} (n = {model.n})
+                </div>
+              </div>
+            </div>
+            <EngraftmentCurves series={series} />
+            <div className="table-responsive" style={{ marginTop: '0.75rem' }}>
+              <table className="data-table">
+                <thead><tr><th>Option</th><th className="num">Median day</th><th className="num">By Day +14</th><th className="num">By Day +21</th><th className="num">By Day +28</th></tr></thead>
+                <tbody>
+                  {series.map((sr, i) => (
+                    <tr key={sr.id}>
+                      <td><span className="row" style={{ gap: '0.5rem' }}><i className="swatch" style={{ background: `var(--series-${i % 4})` }} />{sr.name}</span></td>
+                      <td className="num">+{sr.curve.median_day}</td>
+                      {[14, 21, 28].map(d => <td key={d} className="num">{(sr.curve.probability_by_day[d] * 100).toFixed(0)}%</td>)}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      })()}
 
       <section className="card">
         <div className="card-header">

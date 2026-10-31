@@ -988,3 +988,12 @@ img, svg, canvas { display: block; }
   cursor: not-allowed;
 }
 
+
+/* Categorical series (fixed order; identity also carried by direct labels) */
+:root { --series-0: #2f4fc4; --series-1: #b5541c; --series-2: #008f94; --series-3: #7a4cb8; }
+[data-theme='dark'] { --series-0: #6f8cf0; --series-1: #c9733e; --series-2: #1fa8ad; --series-3: #9078e0; }
+.series-line { stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.series-0 .series-line { stroke: var(--series-0); } .series-1 .series-line { stroke: var(--series-1); }
+.series-2 .series-line { stroke: var(--series-2); } .series-3 .series-line { stroke: var(--series-3); }
+.series-label { fill: var(--text); }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }

@@ -17,9 +17,7 @@ from app.schemas import (
 from app.core.synthetic import generate_hsct_synthetic_dataset
 from app.core.profiler import profile_dataset
 from app.core.pipeline import prepare_train_test_split
-from app.core.classical import (
-    train_dummy_model, train_logistic_regression, train_random_forest, train_rbf_svm
-)
+from app.core.benchmark import run_cross_validated_benchmark
 from app.core.quantum import (
     train_quantum_kernel_svm, simulate_quantum_circuit_and_state,
     run_quantum_pipeline_experiment, QISKIT_AVAILABLE, QISKIT_VERSION
@@ -205,30 +203,22 @@ def execute_experiment_pipeline(experiment_id: str, req_data: Dict[str, Any]):
         
         metrics: Dict[str, Any] = {}
         
-        # Classical training
+        # Classical models: repeated nested cross-validation over every row; reported metrics are out-of-fold.
         record["current_stage"] = "training_classical_models"
         save_experiment_record(record)
-        
-        if req_data.get("run_dummy", True):
-            clf, m = train_dummy_model(X_train_trans, y_train, X_test_trans, y_test, random_state=record["random_state"])
-            joblib.dump(clf, os.path.join(exp_artifact_dir, "model_dummy.joblib"))
-            metrics["dummy"] = m.model_dump()
-            
-        if req_data.get("run_logistic", True):
-            clf, m = train_logistic_regression(X_train_trans, y_train, X_test_trans, y_test, random_state=record["random_state"])
-            joblib.dump(clf, os.path.join(exp_artifact_dir, "model_logistic.joblib"))
-            metrics["logistic_regression"] = m.model_dump()
-            
-        if req_data.get("run_random_forest", True):
-            clf, m = train_random_forest(X_train_trans, y_train, X_test_trans, y_test, random_state=record["random_state"])
-            joblib.dump(clf, os.path.join(exp_artifact_dir, "model_random_forest.joblib"))
-            metrics["random_forest"] = m.model_dump()
-            
-        if req_data.get("run_rbf_svm", True):
-            clf, m = train_rbf_svm(X_train_trans, y_train, X_test_trans, y_test, random_state=record["random_state"])
-            joblib.dump(clf, os.path.join(exp_artifact_dir, "model_rbf_svm.joblib"))
-            metrics["rbf_svm"] = m.model_dump()
-            
+        wanted = [key for key, flag in (
+            ("dummy", "run_dummy"), ("logistic_regression", "run_logistic"), ("random_forest", "run_random_forest"),
+            ("gradient_boosting", "run_gradient_boosting"), ("rbf_svm", "run_rbf_svm"),
+        ) if req_data.get(flag, True)]
+        if wanted:
+            cv_metrics, finals, cv_summary = run_cross_validated_benchmark(
+                df, target_col, feature_cols, wanted, seed=record["random_state"], n_repeats=int(req_data.get("cv_repeats", 5))
+            )
+            for key, pipe in finals.items():
+                joblib.dump(pipe, os.path.join(exp_artifact_dir, f"pipeline_{key}.joblib"))
+            metrics.update(cv_metrics)
+            record["config"] = {**(record.get("config") or {}), "evaluation": cv_summary}
+
         # Quantum training
         if req_data.get("run_quantum_svm", True):
             record["current_stage"] = "computing_quantum_kernel"
@@ -404,7 +394,13 @@ def generate_prediction(req: PredictionRequest):
     prob = None
     pred = 0
     
-    if req.model_name in ["dummy", "logistic_regression", "random_forest", "rbf_svm"]:
+    pipeline_path = os.path.join(artifact_dir, f"pipeline_{req.model_name}.joblib")
+    if os.path.exists(pipeline_path):
+        # Cross-validated experiments store preprocessing + model as one fitted pipeline.
+        pipe = joblib.load(pipeline_path)
+        prob = float(pipe.predict_proba(input_df)[0][1])
+        pred = int(prob >= 0.5)
+    elif req.model_name in ["dummy", "logistic_regression", "random_forest", "rbf_svm"]:
         m_file = {
             "dummy": "model_dummy.joblib",
             "logistic_regression": "model_logistic.joblib",
@@ -734,7 +730,7 @@ def get_hospital_operational_overview():
         },
         "quantum_service_health": {
             "backends_available": len(backends),
-            "hardware_backends_available": sum(1 for b in backends if b.get("is_hardware")),
+            "hardware_backends_available": sum(1 for b in backends if b.get("is_hardware") and b.get("status") == "ONLINE"),
             "total_quantum_jobs_executed": len(list_quantum_jobs()),
             "default_backend": "aer_simulator_statevector",
             "ibm_connected": bool(status.get("is_connected_to_hardware")),
