@@ -114,3 +114,4 @@ flowchart TD
    - For $n$-qubit quantum feature maps ($ZZFeatureMap$), feature vectors $x = [x_1, \dots, x_n]$ are min-max normalized and scaled strictly into the phase rotation domain $[0, 2\pi]$:
      $$x_j^{\text{quantum}} = 2\pi \cdot \frac{x_j - x_j^{\min}}{x_j^{\max} - x_j^{\min}}$$
    - Prevents phase wrap-around ambiguities and preserves non-linear fidelity in Hilbert space.
+

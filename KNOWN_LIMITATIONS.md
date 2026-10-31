@@ -43,3 +43,4 @@ MarrowQ operates under an absolute technical and ethical protocol of transparenc
 1. **Zero Fabricated External Data:** The platform will never fabricate connections to external donor registries (NMDP, Be The Match, DATRI) or restricted clinical databases (CIBMTR research files) without verified API credentials and signed Data Use Agreements.
 2. **Zero Fabricated QPU Execution:** Real hardware execution requires authenticated IBM Quantum Platform credentials and available quantum execution seconds. The system will never fabricate QPU execution times, job IDs, or superconducting telemetry.
 3. **Zero Fabricated Patient Outcomes:** Synthetic test patients are permanently marked with explicit demonstration tags (`data_mode: "synthetic"`). Real clinical patient files remain strictly segregated.
+

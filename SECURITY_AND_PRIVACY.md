@@ -82,3 +82,4 @@ To enable clinical researchers and external machine learning pipelines to analyz
 * **In Transit:** TLS 1.3 mandatory with strong cipher suites (`TLS_AES_256_GCM_SHA384`, `TLS_CHACHA20_POLY1305_SHA256`). HSTS enabled with `max-age=31536000`.
 * **At Rest:** Database files and disk volumes encrypted with AES-256 (CBC or XTS mode). Sensitive database columns (patient direct names, phone numbers) use field-level envelope encryption via AES-GCM.
 * **Audit Trail:** Immutable, append-only `audit_events` table capturing actor, timestamp, IP address, action, and target entity for every clinical query.
+

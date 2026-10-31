@@ -39,3 +39,4 @@ def test_platelet_engraftment_transfusion_independence():
     # Transfusion independence satisfied -> First day is Day 18
     assert plt_day_remote == 18
     assert meta_remote["plt_confirmed_streak"] == [18, 19, 20]
+

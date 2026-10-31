@@ -48,3 +48,4 @@ def test_dsa_high_mfi_contraindication():
     assert dsa_res["status"] == "POSITIVE"
     assert dsa_res["risk_tier"] == "HIGH_RISK_CONTRAINDICATION"
     assert dsa_res["max_mfi"] == 6500.0
+

@@ -124,6 +124,8 @@ export interface Patient {
   conditioning: string;
   cell_dose_cd34?: number;
   chimerism_donor_pct?: number;
+  current_anc?: number;
+  current_plt?: number;
   cmv_status?: string;
   hla_match?: string;
   status: string;

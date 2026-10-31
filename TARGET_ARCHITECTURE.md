@@ -142,3 +142,4 @@ graph TB
 * **Data Protection Compliance:**
   - **India DPDP Act (2023):** Purpose limitation, verifiable consent, patient data de-identification, and right of data correction.
   - **HIPAA / GDPR:** AES-256 encryption at rest for sensitive health identifiers; TLS 1.3 in transit; comprehensive audit logging in `audit_events`.
+

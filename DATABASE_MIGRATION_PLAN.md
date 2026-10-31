@@ -200,3 +200,4 @@ CREATE TABLE IF NOT EXISTS pharmacogenomic_alerts (
     created_at TEXT NOT NULL
 );
 ```
+

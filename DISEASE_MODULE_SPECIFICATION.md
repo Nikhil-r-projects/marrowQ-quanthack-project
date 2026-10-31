@@ -138,3 +138,4 @@ class BaseDiseaseModule(ABC):
 * **Nephrology (CKD & AKI):** KDIGO 2024 guidelines, eGFR trajectory modelling (CKD-EPI 2021), proteinuria (UACR), and renal replacement therapy timing.
 * **Hepatology (Fibrosis & Cirrhosis):** MELD-Na score, Child-Pugh class, transient elastography (FibroScan kPa), and hepatocellular carcinoma surveillance.
 * **Cardiology:** ACC/AHA cardiovascular risk, anthracycline cardiotoxicity monitoring via global longitudinal strain (GLS), and heart failure biomarker tracking (NT-proBNP).
+

@@ -326,3 +326,33 @@ export async function fetchComputeJob(jobId: string): Promise<any> {
   }
   return await res.json();
 }
+
+// ---- Multimodal Biological Data, Disease Intelligence, PGx & HLA ----
+
+export const fetchBiologicalProfile = (patientId: string) =>
+  request<any>(`/v2/biological/patient/${patientId}/profile`);
+
+export const evaluateAML = (payload: { blast_percentage: number; mutations?: string[]; cytogenetics?: string; age?: number }) =>
+  post<any>('/v2/diseases/aml', payload);
+
+export const evaluateMDS = (payload: { bone_marrow_blast_pct: number; hemoglobin: number; platelets: number; anc: number; cytogenetics_category?: string; mutations?: string[] }) =>
+  post<any>('/v2/diseases/mds', payload);
+
+export const evaluateSAA = (payload: { cellularity_pct: number; anc: number; platelets: number; reticulocytes: number }) =>
+  post<any>('/v2/diseases/aplastic-anemia', payload);
+
+export const evaluateKidney = (payload: { serum_creatinine: number; age?: number; sex?: string; baseline_creatinine?: number }) =>
+  post<any>('/v2/diseases/nephrology', payload);
+
+export const evaluateLiver = (payload: { total_bilirubin: number; serum_creatinine: number; inr: number; serum_sodium?: number; ast?: number; alt?: number; platelets?: number; age?: number }) =>
+  post<any>('/v2/diseases/hepatology', payload);
+
+export const evaluateCardio = (payload: { age: number; total_cholesterol: number; hdl: number; systolic_bp: number; is_smoker?: boolean; has_diabetes?: boolean; is_female?: boolean }) =>
+  post<any>('/v2/diseases/cardiology', payload);
+
+export const evaluatePGx = (payload: { genotypes: Record<string, string>; intended_medications?: string[] }) =>
+  post<any>('/v2/pgx/evaluate', payload);
+
+export const evaluateHLA = (payload: any) =>
+  post<any>('/v2/hla/evaluate', payload);
+

@@ -177,3 +177,4 @@ Under FDA CDSS Guidance (2022) and EU MDR Annex VIII (Rule 11):
 1. **Non-Autonomous Role:** MarrowQ outputs are strictly **draft decision-support syntheses**. The software does not diagnose, prescribe, titrate medication, or authorise transplantation.
 2. **Transparent Basis for Recommendations:** Every recommendation must expose the underlying evidence factor, registry reference, and confidence interval.
 3. **Mandatory Clinician Verification:** All model suggestions remain in `PENDING_REVIEW` until an authorised physician reviews and signs off on the record.
+

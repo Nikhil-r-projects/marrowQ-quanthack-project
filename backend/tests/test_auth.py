@@ -45,3 +45,4 @@ def test_seed_default_users():
     assert res is not None
     assert res["role"] == "researcher"
     assert verify_password("MarrowQ#Research2026", res["password_hash"], res["salt"]) is True
+

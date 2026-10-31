@@ -78,3 +78,4 @@ Every deployed model artifact must be registered in the `model_registry` table w
   "clinical_clearance": "RESTRICTED_DECISION_SUPPORT_ONLY"
 }
 ```
+

@@ -76,3 +76,4 @@ flowchart LR
   - `aer_simulator_statevector` (Exact numerical simulation)
   - `heron_noisy_simulation` (Thermal relaxation + readout error model)
   - `ibm_fez` (Genuine physical superconducting transmon QPU)
+

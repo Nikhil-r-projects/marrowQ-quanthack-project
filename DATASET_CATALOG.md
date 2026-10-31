@@ -60,3 +60,4 @@ flowchart TD
    - `ingestion_timestamp_utc`
    - `data_mode`: `"clinical"` | `"cohort_example"` | `"synthetic"`
    - `anonymization_method`: `"safe_harbor"` | `"expert_determination"` | `"synthetic_simulation"`
+
