@@ -3,9 +3,9 @@ from fastapi import APIRouter, HTTPException
 
 from app.core import patients as patient_service
 from app.core import survival
-from app.core.database import delete_patient, get_patient, log_audit_event, save_patient
+from app.core.database import delete_patient, get_patient, list_prediction_runs, log_audit_event, review_prediction_run, save_patient
 from app.core.datasets import uci_bmt
-from app.schemas import ExamplePatientsRequest, PatientCreateRequest
+from app.schemas import ExamplePatientsRequest, PatientCreateRequest, ReviewDecisionRequest
 
 router = APIRouter(prefix="/api", tags=["cohort"])
 
@@ -71,3 +71,28 @@ def get_engraftment_curve(pretransplant: dict):
     if blocking:
         raise HTTPException(status_code=422, detail={"errors": blocking, "warnings": warnings})
     return {**survival.engraftment_curve(clean), "warnings": warnings}
+
+
+@router.post("/predictions/{prediction_id}/review")
+def sign_off_review(prediction_id: str, req: ReviewDecisionRequest):
+    """Haematologist sign-off of a clinical review draft (audited)."""
+    run = next((r for r in list_prediction_runs() if r["prediction_id"] == prediction_id), None)
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"Review '{prediction_id}' not found.")
+    if run["clinician_review_status"] != "PENDING_REVIEW":
+        raise HTTPException(status_code=409, detail=f"Review already {run['clinician_review_status'].lower()}.")
+    status = "APPROVED" if req.decision == "approve" else "REJECTED"
+    review_prediction_run(prediction_id, status, req.reviewer.strip(), (req.notes or "").strip() or None)
+    log_audit_event(f"REVIEW_{status}", run["patient_id"], "CLINICIAN", {"prediction_id": prediction_id, "reviewer": req.reviewer, "notes": req.notes})
+    return {"prediction_id": prediction_id, "status": status}
+
+
+@router.get("/patients/{patient_id}/approved-summary")
+def latest_approved_summary(patient_id: str):
+    """Most recent signed-off review; the patient view only ever shows approved text."""
+    run = next((r for r in list_prediction_runs(patient_id) if r["clinician_review_status"] == "APPROVED"), None)
+    if run is None:
+        return {"available": False}
+    reports = (run["predictions"] or {}).get("reports") or {}
+    return {"available": True, "prediction_id": run["prediction_id"], "reviewed_by": run["reviewed_by"],
+            "created_at": run["created_at"], "patient_summary": reports.get("patient_friendly_summary") or reports.get("patient_summary")}

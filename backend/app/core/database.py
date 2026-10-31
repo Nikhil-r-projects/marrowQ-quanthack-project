@@ -526,6 +526,15 @@ def list_prediction_runs(patient_id: Optional[str] = None, db_path: str = DB_PAT
         })
     return results
 
+def review_prediction_run(prediction_id: str, decision: str, reviewer: str, notes: Optional[str], db_path: str = DB_PATH) -> bool:
+    """Record a clinician's sign-off: decision is APPROVED or REJECTED."""
+    with get_connection(db_path) as conn:
+        return conn.execute(
+            "UPDATE prediction_runs SET clinician_review_status = ?, reviewed_by = ?, review_notes = ? WHERE prediction_id = ?",
+            (decision, reviewer, notes, prediction_id),
+        ).rowcount > 0
+
+
 # Rows that earlier versions seeded with invented patients, labs, an approved prediction and a
 # hardware job that never ran. Removed on start-up so no fabricated record survives an upgrade.
 _LEGACY_SEED_PATIENTS = ("PT-9042-BMT", "PT-8104-BMT", "PT-4421-BMT")

@@ -107,6 +107,10 @@ export const runAgentOrchestration = (params: { patient: Patient; current_labs?:
 };
 
 export const fetchHospitalOverview = () => request<HospitalOverview>('/hospital/overview');
+export const signOffReview = (predictionId: string, body: { decision: 'approve' | 'reject'; reviewer: string; notes?: string }) =>
+  post<{ status: string }>(`/predictions/${predictionId}/review`, body);
+export const fetchApprovedSummary = (patientId: string) =>
+  request<{ available: boolean; patient_summary?: string; reviewed_by?: string; created_at?: string }>(`/patients/${patientId}/approved-summary`);
 
 // ---- Quantum ----------------------------------------------------------------------------------------
 export async function fetchQuantumStatus(): Promise<QuantumStatus & { backend_online: boolean }> {

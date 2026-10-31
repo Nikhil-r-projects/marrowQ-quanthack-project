@@ -316,6 +316,17 @@ export interface AgentTrailItem {
   timestamp: string;
 }
 
+export interface ReviewModelScore {
+  key: string;
+  display_name: string;
+  probability: number;
+  predicted_engraftment: boolean;
+  roc_auc_cv: number | null;
+  roc_auc_ci: [number, number] | null;
+  evaluation: string;
+  experimental: boolean;
+}
+
 export interface OrchestrationResult {
   task_id: string;
   prediction_id: string;
@@ -324,24 +335,21 @@ export interface OrchestrationResult {
   duration_ms: number;
   validation_status: string;
   disagreement_detected: boolean;
-  models_comparison: {
-    logistic_regression: any;
-    random_forest: any;
-    classical_rbf_svm: any;
-    quantum_kernel_svm: any;
+  experiment_id: string | null;
+  models: ReviewModelScore[];
+  model_note?: string | null;
+  decision_threshold?: number | null;
+  target: string;
+  agreement: { status: string; label: string; mean_probability?: number; variance?: number; models_in_agreement?: boolean; warnings: string[] };
+  engraftment_time: {
+    forecast: PatientProgress['forecast'];
+    engrafted: boolean;
+    aft_median_day: number | null;
+    aft_probability_by_day: Record<string, number> | null;
   };
-  evidence: Array<{
-    factor: string;
-    observation: string;
-    clinical_impact: string;
-    reference_registry: string;
-  }>;
-  trajectory_summary?: any;
-  reports: {
-    physician_technical_report: string;
-    patient_friendly_summary: string;
-    generated_at: string;
-  };
+  evidence: Array<{ factor: string; observation: string; clinical_impact: string; reference_registry: string }>;
+  reports: { physician_report: string; patient_summary: string; author: string; note: string; generated_at: string };
+  review_status: 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED';
   agent_trail: AgentTrailItem[];
 }
 

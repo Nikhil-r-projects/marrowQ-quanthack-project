@@ -29,6 +29,7 @@ from app.core.database import (
 from app.core.reporter import generate_markdown_report
 from app.core.settings import get_settings
 from app.core.datasets import uci_bmt
+from app.core import inference
 
 router = APIRouter(prefix="/api")
 
@@ -372,76 +373,14 @@ def generate_prediction(req: PredictionRequest):
     if not artifact_dir or not os.path.exists(artifact_dir):
         raise HTTPException(status_code=404, detail="Model artifact directory not found.")
         
-    preprocessor_path = os.path.join(artifact_dir, "preprocessor.joblib")
-    if not os.path.exists(preprocessor_path):
-        raise HTTPException(status_code=404, detail="Fitted preprocessor artifact not found.")
-        
-    preprocessor = joblib.load(preprocessor_path)
-    
-    features = dict(req.features)
-    if exp["dataset_id"] == uci_bmt.DATASET_ID:
-        # Same derivations as intake (malignant flag, ABO mismatch, dose ratio, allele differences).
-        features = uci_bmt.derive_fields(features)
-    # Align to the trained feature list; anything not supplied is imputed by the fitted preprocessor.
-    input_df = pd.DataFrame([features]).reindex(columns=exp["selected_features"])
-    
-    # Preprocess
     try:
-        X_trans = preprocessor.transform(input_df)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Input validation/transformation error: {str(e)}")
-        
-    prob = None
-    pred = 0
-    
-    pipeline_path = os.path.join(artifact_dir, f"pipeline_{req.model_name}.joblib")
-    if os.path.exists(pipeline_path):
-        # Cross-validated experiments store preprocessing + model as one fitted pipeline.
-        pipe = joblib.load(pipeline_path)
-        prob = float(pipe.predict_proba(input_df)[0][1])
-        pred = int(prob >= 0.5)
-    elif req.model_name in ["dummy", "logistic_regression", "random_forest", "rbf_svm"]:
-        m_file = {
-            "dummy": "model_dummy.joblib",
-            "logistic_regression": "model_logistic.joblib",
-            "random_forest": "model_random_forest.joblib",
-            "rbf_svm": "model_rbf_svm.joblib"
-        }[req.model_name]
-        
-        m_path = os.path.join(artifact_dir, m_file)
-        if not os.path.exists(m_path):
-            raise HTTPException(status_code=404, detail=f"Model artifact '{m_file}' not found.")
-        model = joblib.load(m_path)
-        pred = int(model.predict(X_trans)[0])
-        if hasattr(model, "predict_proba"):
-            try:
-                prob = float(model.predict_proba(X_trans)[0][1])
-            except Exception:
-                prob = None
-                
-    elif req.model_name == "quantum_kernel_svm":
-        q_path = os.path.join(artifact_dir, "model_quantum.joblib")
-        if not os.path.exists(q_path):
-            raise HTTPException(status_code=404, detail="Quantum model artifact not found.")
-        q_bundle = joblib.load(q_path)
-        pca = q_bundle["pca"]
-        scaler = q_bundle["scaler"]
-        svc = q_bundle["svc"]
-        kernel = q_bundle["kernel"]
-        X_tr_q = q_bundle["X_tr_q"]
-        
-        X_q_reduced = pca.transform(X_trans)
-        X_q = scaler.transform(X_q_reduced)
-        K_infer = kernel.evaluate(x_vec=X_q, y_vec=X_tr_q)
-        pred = int(svc.predict(K_infer)[0])
-        if hasattr(svc, "predict_proba"):
-            try:
-                prob = float(svc.predict_proba(K_infer)[0][1])
-            except Exception:
-                prob = None
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown model name '{req.model_name}'.")
-        
+        prob = inference.score(exp, req.model_name, req.features)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"{exc}. Re-run the benchmark to train it.")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Input validation/transformation error: {exc}")
+    pred = int(prob >= 0.5)
+
     outcome = TARGET_DESCRIPTIONS.get(exp["target_column"], (f"{exp['target_column']} = 1", f"{exp['target_column']} = 0"))
     label_str = outcome[0] if pred == 1 else outcome[1]
     

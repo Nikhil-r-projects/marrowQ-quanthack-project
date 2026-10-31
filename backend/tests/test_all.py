@@ -299,24 +299,17 @@ def test_quantum_backends_and_status():
     assert not any(b["is_hardware"] and b["status"] == "ONLINE" for b in backends)
     assert any(b["backend_name"] == "aer_simulator_statevector" for b in backends)
 
-def test_multi_agent_orchestrator(ward_patient):
-    payload = {
-        "patient_id": ward_patient["patient_id"],
-        "current_labs": {"anc": 420.0, "platelets": 18500.0},
-        "quantum_backend": "aer_simulator_statevector",
-        "execution_mode": "auto_fallback"
-    }
+def test_clinical_review_pipeline(ward_patient):
+    payload = {"patient_id": ward_patient["patient_id"], "current_labs": {"anc": 420.0, "platelets": 18500.0}}
     res = client.post("/api/agents/orchestrate", json=payload)
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "COMPLETED"
-    assert "models_comparison" in data
-    assert "quantum_kernel_svm" in data["models_comparison"]
-    assert "agent_trail" in data
-    assert len(data["agent_trail"]) == 8 # All 8 specialized agents
-    assert "reports" in data
-    assert "physician_technical_report" in data["reports"]
-    assert "patient_friendly_summary" in data["reports"]
+    assert [s["agent_id"] for s in data["agent_trail"]] == ["data_quality", "model_scoring", "engraftment_time", "agreement", "evidence", "report"]
+    assert data["engraftment_time"]["forecast"]["particles"] >= 10000
+    assert set(data["reports"]) >= {"physician_report", "patient_summary", "author"}
+    assert data["review_status"] == "PENDING_REVIEW"
+
 
 def test_hospital_operational_overview():
     res = client.get("/api/hospital/overview")

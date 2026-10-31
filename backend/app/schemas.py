@@ -183,3 +183,9 @@ class QuantumExperimentRunRequest(BaseModel):
     dataset_id: Optional[str] = Field(default="cibmtr_hsct_200features", description="Source dataset")
     confirm_hardware: Optional[bool] = Field(default=False, description="Explicit user confirmation for real quantum hardware execution")
 
+
+
+class ReviewDecisionRequest(BaseModel):
+    decision: str = Field(pattern="^(approve|reject)$")
+    reviewer: str = Field(min_length=2, max_length=80)
+    notes: Optional[str] = Field(default=None, max_length=1000)

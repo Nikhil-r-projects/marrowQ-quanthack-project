@@ -137,8 +137,8 @@ def test_clinical_review_refuses_to_invent_missing_counts():
             "patient_id": patient["patient_id"], "day_post_tx": 9, "recorded_date": "2026-10-31",
             "metric_type": metric, "value": value, "unit": unit})
     report = client.post("/api/agents/orchestrate", json={"patient_id": patient["patient_id"]}).json()["reports"]
-    assert "260" in report["patient_friendly_summary"] and "31,000" in report["patient_friendly_summary"]
-    assert "420" not in report["patient_friendly_summary"]
+    assert "260" in report["patient_summary"] and "31,000" in report["patient_summary"]
+    assert "420" not in report["patient_summary"]
 
 
 def test_cross_validated_benchmark_reports_out_of_fold_metrics_with_cis(cohort):
