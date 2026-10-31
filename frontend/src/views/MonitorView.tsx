@@ -1,7 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowRight, CheckCircle2, CircleAlert, Clock, Gauge, Info, LoaderCircle } from 'lucide-react';
 import { Experiment } from '../types';
-import { fetchExperiment } from '../api';
+import { ComputeJob, fetchExperiment, fetchJob, fetchWorkers } from '../api';
 import { TabId } from '../navigation';
 
 interface MonitorViewProps {
@@ -11,10 +11,11 @@ interface MonitorViewProps {
 }
 
 const STAGES = [
-  { id: 'validating_and_splitting', label: 'Validate & split', detail: 'Leakage screen, stratified train/test split' },
-  { id: 'training_classical_models', label: 'Classical baselines', detail: 'Baseline, logistic regression, random forest, RBF SVM' },
+  { id: 'waiting_for_worker', label: 'Queued', detail: 'Waiting for the compute worker' },
+  { id: 'validating_and_splitting', label: 'Validate', detail: 'Leakage screen and quantum-model split' },
+  { id: 'training_classical_models', label: 'Classical models', detail: 'Repeated nested cross-validation on all patients' },
   { id: 'computing_quantum_kernel', label: 'Quantum kernel', detail: 'Fidelity Gram matrix and precomputed-kernel SVM' },
-  { id: 'completed', label: 'Evaluate & save', detail: 'Held-out metrics, artifacts, report' }
+  { id: 'completed', label: 'Evaluate & save', detail: 'Out-of-fold metrics, artifacts, report' }
 ];
 
 const stageIndex = (stage: string) => {
@@ -26,17 +27,24 @@ export const MonitorView: React.FC<MonitorViewProps> = ({ currentExperiment, onE
   const id = currentExperiment?.experiment_id;
   const status = currentExperiment?.status;
 
+  const jobId = currentExperiment?.config?.job_id as string | undefined;
+  const [job, setJob] = useState<ComputeJob | null>(null);
+  const [workerOnline, setWorkerOnline] = useState<boolean | null>(null);
+
   useEffect(() => {
     if (!id || status === 'completed' || status === 'failed') return;
-    const timer = window.setInterval(async () => {
+    const poll = async () => {
       try {
         onExperimentUpdated(await fetchExperiment(id));
+        if (jobId) setJob(await fetchJob(jobId));
+        setWorkerOnline((await fetchWorkers()).online);
       } catch (e) {
         console.error('Failed to poll experiment status', e);
       }
-    }, 1500);
+    };
+    const timer = window.setInterval(poll, 1500);
     return () => window.clearInterval(timer);
-  }, [id, status, onExperimentUpdated]);
+  }, [id, status, jobId, onExperimentUpdated]);
 
   if (!currentExperiment) {
     return (
@@ -54,8 +62,7 @@ export const MonitorView: React.FC<MonitorViewProps> = ({ currentExperiment, onE
   const isFailed = exp.status === 'failed';
   const isRunning = !isDone && !isFailed;
   const current = isDone ? STAGES.length : stageIndex(exp.current_stage);
-  const pct = isDone ? 100 : Math.max(8, (current / STAGES.length) * 100 + 8);
-  const offlineReplay = exp.config?.offline_replay_of;
+  const pct = isDone ? 100 : job && job.status === 'running' ? Math.max(5, job.progress * 100) : Math.max(5, (current / STAGES.length) * 100);
 
   return (
     <div className="stack">
@@ -73,10 +80,10 @@ export const MonitorView: React.FC<MonitorViewProps> = ({ currentExperiment, onE
         </div>
       </div>
 
-      {offlineReplay && (
-        <div className="alert-banner alert-info">
+      {exp.status === 'queued' && workerOnline === false && (
+        <div className="alert-banner alert-warn">
           <Info size={16} />
-          <div>The backend is offline, so no models were trained in this run. It replays the stored reference benchmark (<code>{offlineReplay}</code>) to demonstrate the workflow.</div>
+          <div>The run is queued, but no compute worker is online. Start it in WSL from <code>backend/</code> with <code>python -m app.worker</code>; the run begins automatically.</div>
         </div>
       )}
 
@@ -112,9 +119,9 @@ export const MonitorView: React.FC<MonitorViewProps> = ({ currentExperiment, onE
           <div><span className="log-info">[info]</span> Experiment {exp.experiment_id} initialised</div>
           <div><span className="log-info">[info]</span> Dataset {exp.dataset_id} · test size {exp.test_size} · seed {exp.random_state}</div>
           <div><span className="log-info">[info]</span> Features ({exp.selected_features.length}): {exp.selected_features.join(', ')}</div>
-          <div><span className="log-info">[info]</span> Imputer, scaler and encoder fitted on the training partition only</div>
+          <div><span className="log-info">[info]</span> Preprocessing fitted inside each training fold only</div>
           {exp.train_sample_count != null && <div><span className="log-info">[info]</span> N_train = {exp.train_sample_count}, N_test = {exp.test_sample_count}</div>}
-          {isRunning && <div><span className="log-info">[info]</span> Stage: {STAGES[current]?.label ?? exp.current_stage}…</div>}
+          {isRunning && <div><span className="log-info">[info]</span> {job?.progress_message ?? `Stage: ${STAGES[current]?.label ?? exp.current_stage}`}…</div>}
           {Object.entries(exp.metrics).map(([k, m]) => (
             <div key={k}><span className="log-done">[done]</span> {m.display_name}: accuracy {(m.accuracy * 100).toFixed(1)}%, AUC {m.roc_auc != null ? m.roc_auc.toFixed(3) : '—'}, {m.training_time_seconds.toFixed(3)}s</div>
           ))}

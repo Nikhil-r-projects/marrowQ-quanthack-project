@@ -155,7 +155,7 @@ def get_dataset_profile(dataset_id: str):
         raise HTTPException(status_code=404, detail="Dataset not found.")
     return meta["profile"]
 
-def execute_experiment_pipeline(experiment_id: str, req_data: Dict[str, Any]):
+def execute_experiment_pipeline(experiment_id: str, req_data: Dict[str, Any], progress=None):
     """Background worker executing the complete ML training pipeline."""
     t_start = time.perf_counter()
     record = get_experiment_record(experiment_id)
@@ -213,7 +213,8 @@ def execute_experiment_pipeline(experiment_id: str, req_data: Dict[str, Any]):
         ) if req_data.get(flag, True)]
         if wanted:
             cv_metrics, finals, cv_summary = run_cross_validated_benchmark(
-                df, target_col, feature_cols, wanted, seed=record["random_state"], n_repeats=int(req_data.get("cv_repeats", 5))
+                df, target_col, feature_cols, wanted, seed=record["random_state"], n_repeats=int(req_data.get("cv_repeats", 5)),
+                progress=(lambda f, m: progress(0.05 + 0.75 * f, m)) if progress else None,
             )
             for key, pipe in finals.items():
                 joblib.dump(pipe, os.path.join(exp_artifact_dir, f"pipeline_{key}.joblib"))
@@ -294,18 +295,21 @@ def create_experiment(req: ExperimentCreateRequest):
     return ExperimentResponse(**record)
 
 @router.post("/experiments/{experiment_id}/run")
-def run_experiment(experiment_id: str, background_tasks: BackgroundTasks):
+def run_experiment(experiment_id: str):
     record = get_experiment_record(experiment_id)
     if not record:
         raise HTTPException(status_code=404, detail="Experiment not found.")
-    if record["status"] == "running":
-        return {"message": "Experiment already running.", "experiment_id": experiment_id}
+    if record["status"] in ("running", "queued"):
+        return {"message": f"Experiment already {record['status']}.", "experiment_id": experiment_id, "status": record["status"]}
         
-    config = record.get("config", {})
-    # Run synchronously or in background
-    # Running synchronously or via background task:
-    background_tasks.add_task(execute_experiment_pipeline, experiment_id, config)
-    return {"message": "Experiment started.", "experiment_id": experiment_id, "status": "running"}
+    # Benchmarks run in the compute worker (CPU cores for cross-validation, GPU for quantum kernels).
+    from app.core.jobs import enqueue_job
+    job = enqueue_job("benchmark", {"experiment_id": experiment_id})
+    record["status"] = "queued"
+    record["current_stage"] = "waiting_for_worker"
+    record["config"] = {**(record.get("config") or {}), "job_id": job["job_id"]}
+    save_experiment_record(record)
+    return {"message": "Experiment queued for the compute worker.", "experiment_id": experiment_id, "status": "queued", "job_id": job["job_id"]}
 
 @router.get("/experiments", response_model=List[Dict[str, Any]])
 def get_experiments():

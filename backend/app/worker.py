@@ -39,10 +39,25 @@ def _calibrate_biology(payload: Dict[str, Any], progress: Progress) -> Dict[str,
     return result
 
 
+def _benchmark(payload: Dict[str, Any], progress: Progress) -> Dict[str, Any]:
+    from app.api.routes import execute_experiment_pipeline
+    from app.core.database import get_experiment_record
+
+    record = get_experiment_record(payload["experiment_id"])
+    if record is None:
+        raise ValueError(f"Experiment {payload['experiment_id']} not found")
+    execute_experiment_pipeline(record["experiment_id"], record.get("config") or {}, progress)
+    final = get_experiment_record(record["experiment_id"])
+    if final["status"] == "failed":
+        raise RuntimeError(final.get("error_message") or "Benchmark failed")
+    return {"experiment_id": final["experiment_id"], "status": final["status"]}
+
+
 # Job kinds this worker executes; later chunks register simulation and quantum handlers here.
 HANDLERS: Dict[str, Handler] = {
     "gpu_benchmark": _gpu_benchmark,
     "calibrate_biology": _calibrate_biology,
+    "benchmark": _benchmark,
 }
 
 

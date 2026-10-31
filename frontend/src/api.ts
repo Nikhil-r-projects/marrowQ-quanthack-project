@@ -107,6 +107,10 @@ export const runAgentOrchestration = (params: { patient: Patient; current_labs?:
 };
 
 export const fetchHospitalOverview = () => request<HospitalOverview>('/hospital/overview');
+
+export interface ComputeJob { job_id: string; kind: string; status: 'queued' | 'running' | 'succeeded' | 'failed'; progress: number; progress_message: string | null; error: string | null }
+export const fetchJob = (jobId: string) => request<ComputeJob>(`/compute/jobs/${jobId}`);
+export const fetchWorkers = () => request<{ online: boolean; workers: { worker_id: string; capabilities: Record<string, unknown> }[] }>('/compute/workers');
 export const signOffReview = (predictionId: string, body: { decision: 'approve' | 'reject'; reviewer: string; notes?: string }) =>
   post<{ status: string }>(`/predictions/${predictionId}/review`, body);
 export const fetchApprovedSummary = (patientId: string) =>

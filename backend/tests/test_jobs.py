@@ -77,3 +77,14 @@ def test_compute_api():
     workers = client.get("/api/compute/workers").json()
     assert workers["online"] is True
     assert any(w["worker_id"] == "w-api" for w in workers["workers"])
+
+
+def test_experiment_run_is_queued_for_the_worker():
+    client.get("/api/datasets/demo")
+    exp = client.post("/api/experiments", json={"dataset_id": "uci_bmt_children", "target_column": "early_engraftment",
+                                                "selected_features": ["cd34_dose", "recipient_age"]}).json()
+    res = client.post(f"/api/experiments/{exp['experiment_id']}/run").json()
+    assert res["status"] == "queued"
+    job = jobs.get_job(res["job_id"])
+    assert job["kind"] == "benchmark" and job["payload"]["experiment_id"] == exp["experiment_id"]
+    assert client.get(f"/api/experiments/{exp['experiment_id']}").json()["status"] == "queued"

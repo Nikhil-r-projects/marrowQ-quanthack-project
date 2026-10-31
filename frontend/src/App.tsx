@@ -172,7 +172,7 @@ export function App() {
   const unread = alerts.filter(a => !seenAlerts.includes(a.id)).length;
 
   const section = sectionById(activeTab);
-  const experimentRunning = currentExperiment?.status === 'running' || currentExperiment?.status === 'created';
+  const experimentRunning = ['running', 'created', 'queued'].includes(currentExperiment?.status ?? '');
 
   const renderView = () => {
     if (backendOnline === null) return <div className="skeleton" style={{ height: 420 }} />;
