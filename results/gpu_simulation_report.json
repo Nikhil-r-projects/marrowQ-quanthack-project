@@ -1,0 +1,248 @@
+{
+  "generated_at": "2026-10-31T00:53:13+00:00",
+  "device": {
+    "python": "3.12.3",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "cupy_gpu": true,
+    "gpu": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+    "gpu_memory_gb": 6.44,
+    "gpu_memory_free_gb": 5.4,
+    "cuda_runtime": 12090,
+    "cupy": "14.2.0"
+  },
+  "granulopoiesis_kernel": [
+    {
+      "particles": 1000,
+      "gpu_seconds": 0.0007,
+      "particles_per_second": 1355997,
+      "median_engraftment_day": 16.0,
+      "cpu_fp64_seconds": 0.097,
+      "speedup_vs_cpu": 131.5,
+      "max_relative_error_vs_fp64": 1.7829850893503277e-06
+    },
+    {
+      "particles": 10000,
+      "gpu_seconds": 0.0012,
+      "particles_per_second": 8107696,
+      "median_engraftment_day": 16.0,
+      "cpu_fp64_seconds": 0.657,
+      "speedup_vs_cpu": 532.7,
+      "max_relative_error_vs_fp64": 1.8261301599532043e-06
+    },
+    {
+      "particles": 100000,
+      "gpu_seconds": 0.0078,
+      "particles_per_second": 12753347,
+      "median_engraftment_day": 16.0
+    },
+    {
+      "particles": 1000000,
+      "gpu_seconds": 0.0576,
+      "particles_per_second": 17357535,
+      "median_engraftment_day": 16.0
+    }
+  ],
+  "calibration": {
+    "saved_fit": {
+      "holdout_validation": {
+        "n": 38,
+        "coverage_80": 0.789,
+        "coverage_95": 0.921,
+        "median_abs_error_days": 2.0,
+        "baseline_median_abs_error_days": 2.0
+      },
+      "fit_seconds": 193.1,
+      "device": "GPU (CuPy)",
+      "n_patients": 187,
+      "neg_log_likelihood": 432.86
+    },
+    "recheck_on_holdout_with_full_fit_params": {
+      "n": 38,
+      "coverage_80": 0.842,
+      "coverage_95": 0.947,
+      "median_abs_error_days": 1.5,
+      "baseline_median_abs_error_days": 2.0
+    },
+    "seconds": 0.023
+  },
+  "patient_forecasts": [
+    {
+      "observed_recovery_day": 13.0,
+      "forecast_median_day": 15.0,
+      "interval_80": [
+        12.0,
+        18.0
+      ],
+      "p_by_day": {
+        "14": 0.4768,
+        "21": 0.9936,
+        "28": 1.0
+      },
+      "particles": 20000,
+      "device": "GPU (CUDA)",
+      "seconds": 0.112
+    },
+    {
+      "observed_recovery_day": 23.0,
+      "forecast_median_day": 16.0,
+      "interval_80": [
+        13.0,
+        20.0
+      ],
+      "p_by_day": {
+        "14": 0.2171,
+        "21": 0.9534,
+        "28": 0.9993
+      },
+      "particles": 20000,
+      "device": "GPU (CUDA)",
+      "seconds": 0.066
+    },
+    {
+      "observed_recovery_day": 18.0,
+      "forecast_median_day": 17.0,
+      "interval_80": [
+        14.0,
+        21.0
+      ],
+      "p_by_day": {
+        "14": 0.1686,
+        "21": 0.9324,
+        "28": 0.999
+      },
+      "particles": 20000,
+      "device": "GPU (CUDA)",
+      "seconds": 0.066
+    },
+    {
+      "observed_recovery_day": 16.0,
+      "forecast_median_day": 15.0,
+      "interval_80": [
+        13.0,
+        19.0
+      ],
+      "p_by_day": {
+        "14": 0.3635,
+        "21": 0.9843,
+        "28": 0.9999
+      },
+      "particles": 20000,
+      "device": "GPU (CUDA)",
+      "seconds": 0.065
+    },
+    {
+      "observed_recovery_day": 14.0,
+      "forecast_median_day": 14.0,
+      "interval_80": [
+        12.0,
+        17.0
+      ],
+      "p_by_day": {
+        "14": 0.5487,
+        "21": 0.9971,
+        "28": 1.0
+      },
+      "particles": 20000,
+      "device": "GPU (CUDA)",
+      "seconds": 0.069
+    },
+    {
+      "observed_recovery_day": 18.0,
+      "forecast_median_day": 14.0,
+      "interval_80": [
+        12.0,
+        17.0
+      ],
+      "p_by_day": {
+        "14": 0.5274,
+        "21": 0.996,
+        "28": 1.0
+      },
+      "particles": 20000,
+      "device": "GPU (CUDA)",
+      "seconds": 0.065
+    },
+    {
+      "observed_recovery_day": 17.0,
+      "forecast_median_day": 14.0,
+      "interval_80": [
+        12.0,
+        17.0
+      ],
+      "p_by_day": {
+        "14": 0.5552,
+        "21": 0.9973,
+        "28": 1.0
+      },
+      "particles": 20000,
+      "device": "GPU (CUDA)",
+      "seconds": 0.063
+    },
+    {
+      "observed_recovery_day": 15.0,
+      "forecast_median_day": 15.0,
+      "interval_80": [
+        12.0,
+        18.0
+      ],
+      "p_by_day": {
+        "14": 0.4601,
+        "21": 0.9924,
+        "28": 1.0
+      },
+      "particles": 20000,
+      "device": "GPU (CUDA)",
+      "seconds": 0.063
+    }
+  ],
+  "qiskit_aer": {
+    "capabilities": {
+      "python": "3.12.3",
+      "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+      "cuda": true,
+      "aer_devices": [
+        "CPU",
+        "GPU"
+      ],
+      "cupy": "14.2.0",
+      "gpu_name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+      "gpu_memory_total_mb": 6144,
+      "gpu_memory_free_mb": 4711,
+      "max_statevector_qubits": 28,
+      "qiskit_aer": "0.18.2"
+    },
+    "statevector": [
+      {
+        "n_qubits": 16,
+        "amplitudes": 65536,
+        "seconds": {
+          "GPU": 0.0086,
+          "CPU": 0.0146
+        },
+        "speedup_gpu_vs_cpu": 1.7,
+        "max_amplitude_difference_gpu_cpu": 2.3633021048361517e-16
+      },
+      {
+        "n_qubits": 20,
+        "amplitudes": 1048576,
+        "seconds": {
+          "GPU": 0.0424,
+          "CPU": 0.1334
+        },
+        "speedup_gpu_vs_cpu": 3.15,
+        "max_amplitude_difference_gpu_cpu": 1.0013427371767394e-16
+      },
+      {
+        "n_qubits": 24,
+        "amplitudes": 16777216,
+        "seconds": {
+          "GPU": 0.8138,
+          "CPU": 1.443
+        },
+        "speedup_gpu_vs_cpu": 1.77,
+        "max_amplitude_difference_gpu_cpu": 5.7470488141014e-17
+      }
+    ]
+  },
+  "total_seconds": 11.7
+}
