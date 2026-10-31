@@ -4,6 +4,7 @@ import { Sidebar } from './components/Sidebar';
 import { Topbar, ClinicalAlert } from './components/Topbar';
 import { NewPatientModal } from './components/Modals';
 import { EmptyWard, ServerOffline } from './components/EmptyStates';
+import { DEMO_PATIENTS } from './data/demoPatients';
 import { OverviewView } from './views/OverviewView';
 import { DiagnosticIntelligenceView } from './views/DiagnosticIntelligenceView';
 import { PatientProgressView } from './views/PatientProgressView';
@@ -177,7 +178,20 @@ export function App() {
   const renderView = () => {
     if (backendOnline === null) return <div className="skeleton" style={{ height: 420 }} />;
     // The quantum lab is the one view with a genuine offline mode (exact in-browser simulation).
-    if (!backendOnline && activeTab !== 'quantum_lab') return <ServerOffline onRetry={connect} retrying={checking} />;
+    if (!backendOnline && activeTab !== 'quantum_lab') {
+      return (
+        <ServerOffline
+          onRetry={connect}
+          retrying={checking}
+          onDemoMode={async () => {
+            setBackendOnline(true);
+            setPatients(DEMO_PATIENTS);
+            go(activeTab, DEMO_PATIENTS[0].patient_id);
+            setToast('Entered Standalone Demonstration Mode (UCI Paediatric Cohort)');
+          }}
+        />
+      );
+    }
     if ((section.patientScoped || activeTab === 'predict') && !selectedPatient && role !== 'researcher') {
       if (patients === null) return <div className="skeleton" style={{ height: 420 }} />;
       return (

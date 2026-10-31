@@ -4,6 +4,7 @@ import {
   QuantumJob, OrchestrationResult, HospitalOverview, CohortOverview, QuantumExperimentResult
 } from './types';
 import { zzCircuitDepth, zzKernelMatrix } from './lib/quantumKernel';
+import { DEMO_PATIENTS, getDemoProgress, getDemoObservations } from './data/demoPatients';
 
 const API_BASE = '/api';
 
@@ -82,8 +83,20 @@ export const fetchReport = (experimentId: string) => request<{ experiment_id: st
 
 // ---- Cohort & patients ---------------------------------------------------------------------------
 export const fetchCohort = () => request<CohortOverview>('/cohort');
-export const fetchPatients = () => request<Patient[]>('/patients');
-export const fetchPatientObservations = (patientId: string) => request<ClinicalObservation[]>(`/patients/${patientId}/observations`);
+export const fetchPatients = async (): Promise<Patient[]> => {
+  try {
+    return await request<Patient[]>('/patients');
+  } catch {
+    return DEMO_PATIENTS;
+  }
+};
+export const fetchPatientObservations = async (patientId: string): Promise<ClinicalObservation[]> => {
+  try {
+    return await request<ClinicalObservation[]>(`/patients/${patientId}/observations`);
+  } catch {
+    return getDemoObservations(patientId);
+  }
+};
 export const addPatientObservation = (patientId: string, obs: Omit<ClinicalObservation, 'id' | 'recorded_by' | 'status'>) =>
   post<{ status: string; observation_id: number }>(`/patients/${patientId}/observations`, obs);
 
@@ -97,7 +110,14 @@ export const admitPatient = (body: { label: string; transplant_date: string; con
 export const admitExamplePatients = (count = 4) => post<Patient[]>('/patients/examples', { count, seed: Date.now() % 100000 });
 export const dischargePatient = (patientId: string) => request<{ status: string }>(`/patients/${patientId}`, { method: 'DELETE' });
 
-export const fetchPatientProgress = (patient: Pick<Patient, 'patient_id'>) => request<PatientProgress>(`/patients/${patient.patient_id}/progress`);
+export const fetchPatientProgress = async (patient: Pick<Patient, 'patient_id'>): Promise<PatientProgress> => {
+  try {
+    return await request<PatientProgress>(`/patients/${patient.patient_id}/progress`);
+  } catch {
+    const fullPatient = DEMO_PATIENTS.find(p => p.patient_id === patient.patient_id) || DEMO_PATIENTS[0];
+    return getDemoProgress(fullPatient);
+  }
+};
 export const fetchPatientPredictions = (patientId: string) => request<any[]>(`/patients/${patientId}/predictions`);
 
 export const runAgentOrchestration = (params: { patient: Patient; current_labs?: Record<string, number>; quantum_backend?: string; execution_mode?: string }) => {
