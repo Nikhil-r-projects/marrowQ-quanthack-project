@@ -28,3 +28,4 @@ git push -f origin gh-pages
 Write-Host "Switching back to $currentBranch..."
 git checkout $currentBranch
 Write-Host "Deployment completed successfully!"
+

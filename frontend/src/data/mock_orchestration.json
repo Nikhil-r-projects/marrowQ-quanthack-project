@@ -1,0 +1,393 @@
+{
+  "task_id": "review-5a59e576",
+  "prediction_id": "PR-MQ-BENCH01-1793426811",
+  "patient_id": "MQ-BENCH01",
+  "status": "COMPLETED",
+  "duration_ms": 5984.9,
+  "validation_status": "VALIDATED_CONSENSUS",
+  "disagreement_detected": false,
+  "experiment_id": "exp_cc663ec2",
+  "models": [
+    {
+      "key": "logistic_regression",
+      "display_name": "Logistic regression (L2)",
+      "probability": 0.3674,
+      "predicted_engraftment": false,
+      "roc_auc_cv": 0.7551,
+      "roc_auc_ci": [
+        0.685,
+        0.819
+      ],
+      "evaluation": "5\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)",
+      "experimental": false
+    },
+    {
+      "key": "random_forest",
+      "display_name": "Random forest",
+      "probability": 0.265,
+      "predicted_engraftment": false,
+      "roc_auc_cv": 0.7348,
+      "roc_auc_ci": [
+        0.6653,
+        0.8012
+      ],
+      "evaluation": "5\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)",
+      "experimental": false
+    },
+    {
+      "key": "gradient_boosting",
+      "display_name": "Gradient boosting",
+      "probability": 0.3074,
+      "predicted_engraftment": false,
+      "roc_auc_cv": 0.7207,
+      "roc_auc_ci": [
+        0.6491,
+        0.7879
+      ],
+      "evaluation": "5\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)",
+      "experimental": false
+    },
+    {
+      "key": "rbf_svm",
+      "display_name": "RBF SVM",
+      "probability": 0.2565,
+      "predicted_engraftment": false,
+      "roc_auc_cv": 0.7351,
+      "roc_auc_ci": [
+        0.6671,
+        0.8001
+      ],
+      "evaluation": "5\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)",
+      "experimental": false
+    },
+    {
+      "key": "ensemble",
+      "display_name": "Soft-voting ensemble (4 models)",
+      "probability": 0.2991,
+      "predicted_engraftment": false,
+      "roc_auc_cv": 0.7474,
+      "roc_auc_ci": [
+        0.6802,
+        0.8103
+      ],
+      "evaluation": "5\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)",
+      "experimental": false
+    },
+    {
+      "key": "quantum_kernel_svm",
+      "display_name": "Quantum-Kernel SVM (2 Qubits, ZZ Map)",
+      "probability": 0.3667,
+      "predicted_engraftment": false,
+      "roc_auc_cv": 0.4389,
+      "roc_auc_ci": null,
+      "evaluation": "single held-out split",
+      "experimental": true
+    }
+  ],
+  "model_note": null,
+  "decision_threshold": 0.417,
+  "target": "neutrophil engraftment by Day +14",
+  "agreement": {
+    "status": "VALIDATED_CONSENSUS",
+    "label": "Models agree",
+    "mean_probability": 0.2991,
+    "variance": 0.0015,
+    "models_in_agreement": true,
+    "warnings": []
+  },
+  "engraftment_time": {
+    "forecast": {
+      "probability_engrafted_by": {
+        "14": 0.2039,
+        "21": 1.0,
+        "28": 1.0
+      },
+      "median_engraftment_day": 15.0,
+      "engraftment_day_80": [
+        14.0,
+        15.0
+      ],
+      "delayed_engraftment_risk": false,
+      "draws_used": 21,
+      "effective_sample_size": 1515.5,
+      "particles": 20000,
+      "device": "GPU (CUDA)",
+      "calibration": {
+        "n_patients": 187,
+        "holdout_coverage_80": 0.789,
+        "holdout_coverage_95": 0.921
+      },
+      "measurement_sd": 0.35
+    },
+    "engrafted": true,
+    "aft_median_day": 16.2,
+    "aft_probability_by_day": {
+      "14": 0.3365,
+      "21": 0.773,
+      "28": 0.9294
+    }
+  },
+  "evidence": [
+    {
+      "factor": "CD34+ cell dose",
+      "observation": "9.2 \u00d710\u2076/kg infused (48th percentile of the cohort)",
+      "clinical_impact": "Cohort recipients at or above this dose recovered neutrophils at a median of Day +14 (n = 98), versus Day +16 below it (n = 89).",
+      "reference_registry": "UCI BMT children cohort (n = 187), computed"
+    },
+    {
+      "factor": "Stem-cell source",
+      "observation": "Peripheral blood",
+      "clinical_impact": "Median neutrophil recovery with this source in the cohort: Day +14 (n = 145).",
+      "reference_registry": "UCI BMT children cohort (n = 187), computed"
+    },
+    {
+      "factor": "HLA match",
+      "observation": "10/10",
+      "clinical_impact": "Median neutrophil recovery for 10/10 transplants in the cohort: Day +15.5 (n = 94).",
+      "reference_registry": "UCI BMT children cohort (n = 187), computed"
+    },
+    {
+      "factor": "Neutrophil count",
+      "observation": "1,850 cells/\u03bcL on Day +21; +310 since Day +20",
+      "clinical_impact": "At or above the 500/\u03bcL engraftment threshold.",
+      "reference_registry": "Patient record \u00b7 EBMT neutrophil engraftment definition"
+    },
+    {
+      "factor": "Donor chimerism",
+      "observation": "98.0% donor DNA in peripheral blood",
+      "clinical_impact": "Full donor chimerism (\u2265 95%).",
+      "reference_registry": "Patient record"
+    }
+  ],
+  "reports": {
+    "physician_report": "Day +16 \u00b7 ALL \u00b7 latest ANC 1,850/\u00b5L, platelets 112,000/\u00b5L.\nNeutrophil forecast: median Day +15; P(by Day +14/21/28) 20% / 100% / 100%.\nLogistic regression (L2): 37% for neutrophil engraftment by Day +14 (CV ROC-AUC 0.76).\nRandom forest: 26% for neutrophil engraftment by Day +14 (CV ROC-AUC 0.73).\nGradient boosting: 31% for neutrophil engraftment by Day +14 (CV ROC-AUC 0.72).\nRBF SVM: 26% for neutrophil engraftment by Day +14 (CV ROC-AUC 0.74).\nSoft-voting ensemble (4 models): 30% for neutrophil engraftment by Day +14 (CV ROC-AUC 0.75).\nModel agreement: Models agree.\nDraft for hematologist review. No treatment recommendation is generated.",
+    "patient_summary": "Today is Day +16 after your transplant. Your infection-fighting white cells (neutrophils) have reached the 500 mark doctors look for. Your platelets, which help your blood clot, are at 112,000. Your transplant team reviews every result. Tell your nurse straight away about a temperature of 38 \u00b0C or higher, chills, or unusual bleeding.",
+    "author": "template",
+    "note": "Claude API error 400: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go",
+    "generated_at": "2026-10-31T06:06:51.244480+00:00"
+  },
+  "review_status": "PENDING_REVIEW",
+  "agent_trail": [
+    {
+      "agent_id": "data_quality",
+      "task_id": "review-5a59e576",
+      "status": "SUCCESS",
+      "output_data": {
+        "warnings": [],
+        "errors": []
+      },
+      "warnings": [],
+      "errors": [],
+      "confidence": null,
+      "timestamp": "2026-10-31T06:06:45.272896+00:00"
+    },
+    {
+      "agent_id": "model_scoring",
+      "task_id": "review-5a59e576",
+      "status": "SUCCESS",
+      "output_data": {
+        "experiment_id": "exp_cc663ec2",
+        "models": [
+          {
+            "key": "logistic_regression",
+            "display_name": "Logistic regression (L2)",
+            "probability": 0.3674,
+            "predicted_engraftment": false,
+            "roc_auc_cv": 0.7551,
+            "roc_auc_ci": [
+              0.685,
+              0.819
+            ],
+            "evaluation": "5\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)",
+            "experimental": false
+          },
+          {
+            "key": "random_forest",
+            "display_name": "Random forest",
+            "probability": 0.265,
+            "predicted_engraftment": false,
+            "roc_auc_cv": 0.7348,
+            "roc_auc_ci": [
+              0.6653,
+              0.8012
+            ],
+            "evaluation": "5\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)",
+            "experimental": false
+          },
+          {
+            "key": "gradient_boosting",
+            "display_name": "Gradient boosting",
+            "probability": 0.3074,
+            "predicted_engraftment": false,
+            "roc_auc_cv": 0.7207,
+            "roc_auc_ci": [
+              0.6491,
+              0.7879
+            ],
+            "evaluation": "5\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)",
+            "experimental": false
+          },
+          {
+            "key": "rbf_svm",
+            "display_name": "RBF SVM",
+            "probability": 0.2565,
+            "predicted_engraftment": false,
+            "roc_auc_cv": 0.7351,
+            "roc_auc_ci": [
+              0.6671,
+              0.8001
+            ],
+            "evaluation": "5\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)",
+            "experimental": false
+          },
+          {
+            "key": "ensemble",
+            "display_name": "Soft-voting ensemble (4 models)",
+            "probability": 0.2991,
+            "predicted_engraftment": false,
+            "roc_auc_cv": 0.7474,
+            "roc_auc_ci": [
+              0.6802,
+              0.8103
+            ],
+            "evaluation": "5\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)",
+            "experimental": false
+          },
+          {
+            "key": "quantum_kernel_svm",
+            "display_name": "Quantum-Kernel SVM (2 Qubits, ZZ Map)",
+            "probability": 0.3667,
+            "predicted_engraftment": false,
+            "roc_auc_cv": 0.4389,
+            "roc_auc_ci": null,
+            "evaluation": "single held-out split",
+            "experimental": true
+          }
+        ],
+        "decision_threshold": 0.417,
+        "target": "neutrophil engraftment by Day +14"
+      },
+      "warnings": [],
+      "errors": [],
+      "confidence": null,
+      "timestamp": "2026-10-31T06:06:45.957967+00:00"
+    },
+    {
+      "agent_id": "engraftment_time",
+      "task_id": "review-5a59e576",
+      "status": "SUCCESS",
+      "output_data": {
+        "forecast": {
+          "probability_engrafted_by": {
+            "14": 0.2039,
+            "21": 1.0,
+            "28": 1.0
+          },
+          "median_engraftment_day": 15.0,
+          "engraftment_day_80": [
+            14.0,
+            15.0
+          ],
+          "delayed_engraftment_risk": false,
+          "draws_used": 21,
+          "effective_sample_size": 1515.5,
+          "particles": 20000,
+          "device": "GPU (CUDA)",
+          "calibration": {
+            "n_patients": 187,
+            "holdout_coverage_80": 0.789,
+            "holdout_coverage_95": 0.921
+          },
+          "measurement_sd": 0.35
+        },
+        "engrafted": true,
+        "aft_median_day": 16.2,
+        "aft_probability_by_day": {
+          "14": 0.3365,
+          "21": 0.773,
+          "28": 0.9294
+        }
+      },
+      "warnings": [],
+      "errors": [],
+      "confidence": null,
+      "timestamp": "2026-10-31T06:06:49.260655+00:00"
+    },
+    {
+      "agent_id": "agreement",
+      "task_id": "review-5a59e576",
+      "status": "SUCCESS",
+      "output_data": {
+        "status": "VALIDATED_CONSENSUS",
+        "label": "Models agree",
+        "mean_probability": 0.2991,
+        "variance": 0.0015,
+        "models_in_agreement": true,
+        "warnings": []
+      },
+      "warnings": [],
+      "errors": [],
+      "confidence": null,
+      "timestamp": "2026-10-31T06:06:49.260769+00:00"
+    },
+    {
+      "agent_id": "evidence",
+      "task_id": "review-5a59e576",
+      "status": "SUCCESS",
+      "output_data": {
+        "evidence_items": [
+          {
+            "factor": "CD34+ cell dose",
+            "observation": "9.2 \u00d710\u2076/kg infused (48th percentile of the cohort)",
+            "clinical_impact": "Cohort recipients at or above this dose recovered neutrophils at a median of Day +14 (n = 98), versus Day +16 below it (n = 89).",
+            "reference_registry": "UCI BMT children cohort (n = 187), computed"
+          },
+          {
+            "factor": "Stem-cell source",
+            "observation": "Peripheral blood",
+            "clinical_impact": "Median neutrophil recovery with this source in the cohort: Day +14 (n = 145).",
+            "reference_registry": "UCI BMT children cohort (n = 187), computed"
+          },
+          {
+            "factor": "HLA match",
+            "observation": "10/10",
+            "clinical_impact": "Median neutrophil recovery for 10/10 transplants in the cohort: Day +15.5 (n = 94).",
+            "reference_registry": "UCI BMT children cohort (n = 187), computed"
+          },
+          {
+            "factor": "Neutrophil count",
+            "observation": "1,850 cells/\u03bcL on Day +21; +310 since Day +20",
+            "clinical_impact": "At or above the 500/\u03bcL engraftment threshold.",
+            "reference_registry": "Patient record \u00b7 EBMT neutrophil engraftment definition"
+          },
+          {
+            "factor": "Donor chimerism",
+            "observation": "98.0% donor DNA in peripheral blood",
+            "clinical_impact": "Full donor chimerism (\u2265 95%).",
+            "reference_registry": "Patient record"
+          }
+        ],
+        "limitations": "Associations in a single-centre paediatric cohort (n = 187); they describe that cohort, not causal effects for this patient."
+      },
+      "warnings": [],
+      "errors": [],
+      "confidence": null,
+      "timestamp": "2026-10-31T06:06:49.263130+00:00"
+    },
+    {
+      "agent_id": "report",
+      "task_id": "review-5a59e576",
+      "status": "WARNING",
+      "output_data": {
+        "author": "template",
+        "note": "Claude API error 400: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go"
+      },
+      "warnings": [
+        "Report written from the template (Claude API error 400: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go)."
+      ],
+      "errors": [],
+      "confidence": null,
+      "timestamp": "2026-10-31T06:06:51.244504+00:00"
+    }
+  ]
+}

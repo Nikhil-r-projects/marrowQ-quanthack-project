@@ -53,7 +53,7 @@ def generate_markdown_report(experiment: Dict[str, Any]) -> str:
 Can pre-transplant information predict: {TARGET_DEFINITIONS.get(target, f'`{target}`')}
 
 ## Data
-- Patients analysed: {evaluation.get('n_samples', experiment.get('train_sample_count', 0) + experiment.get('test_sample_count', 0))}; class counts {evaluation.get('class_counts', experiment.get('class_distribution_train', {}))}.
+- Patients analysed: {evaluation.get('n_samples', (experiment.get('train_sample_count') or 0) + (experiment.get('test_sample_count') or 0))}; class counts {evaluation.get('class_counts', experiment.get('class_distribution_train', {}))}.
 - Predictors ({len(features)}): {', '.join(f'`{f}`' for f in features)}.
 
 ## Method
