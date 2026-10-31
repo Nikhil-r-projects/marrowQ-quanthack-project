@@ -58,3 +58,4 @@ def test_biological_db_profile():
     save_specimen(spec)
     prof = get_patient_biological_profile("PT-BIO-01")
     assert len(prof["specimens"]) >= 1
+

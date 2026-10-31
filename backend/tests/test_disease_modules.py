@@ -51,3 +51,4 @@ def test_liver_meld_na_and_fib4():
     assert res["meld_na_score"] >= 20
     assert res["fib_4_index"] > 2.67
     assert "HIGH_FIBROSIS_RISK" in res["fibrosis_risk_interpretation"]
+

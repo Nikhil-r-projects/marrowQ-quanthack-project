@@ -179,3 +179,4 @@ def evaluate_patient_pharmacogenomics(
         "alerts": alerts,
         "governance_notice": "CPIC Level A evidence-backed clinical decision support. Always verify complete metabolic profile."
     }
+

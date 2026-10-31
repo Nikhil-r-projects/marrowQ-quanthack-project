@@ -278,3 +278,4 @@ def get_patient_biological_profile(patient_id: str, db_path: str = DB_PATH) -> D
             "actionable_mutations": [v["gene_symbol"] for v in variants if v["is_actionable"]]
         }
     }
+

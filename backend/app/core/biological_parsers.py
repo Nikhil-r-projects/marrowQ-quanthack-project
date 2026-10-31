@@ -236,3 +236,4 @@ def parse_vcf_content(vcf_text: str, patient_id: str, specimen_id: Optional[str]
         variants.append(variant_record)
 
     return variants
+

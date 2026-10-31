@@ -106,3 +106,4 @@ def assess_cardio(req: CardioEvaluationRequest, user: Dict[str, Any] = Depends(g
         req.age, req.total_cholesterol, req.hdl, req.systolic_bp,
         req.is_smoker, req.has_diabetes, req.is_female
     )
+

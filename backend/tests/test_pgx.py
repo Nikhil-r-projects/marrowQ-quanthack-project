@@ -24,3 +24,4 @@ def test_abacavir_hypersensitivity_contraindication():
     res = evaluate_patient_pharmacogenomics(genotype, intended_medications=["Abacavir"])
     assert len(res["alerts"]) == 1
     assert "CONTRAINDICATED" in res["alerts"][0]["actionable_recommendation"]
+

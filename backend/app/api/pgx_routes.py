@@ -36,3 +36,4 @@ def list_cpic_guidelines(user: Dict[str, Any] = Depends(get_current_user)):
         "guideline_count": len(CPIC_RULES),
         "guidelines": CPIC_RULES
     }
+

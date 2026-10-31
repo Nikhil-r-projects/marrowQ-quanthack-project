@@ -118,3 +118,4 @@ def upload_vcf(req: VCFUploadTextRequest, user: Dict[str, Any] = Depends(require
 def get_patient_profile(patient_id: str, user: Dict[str, Any] = Depends(get_current_user)):
     profile = get_patient_biological_profile(patient_id)
     return profile
+
