@@ -3,6 +3,7 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: './',
   plugins: [react()],
   build: {
     // three.js (~650 kB) is isolated in the lazily loaded OrganViewer3D chunk.

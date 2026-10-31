@@ -30,3 +30,4 @@ foreach ($v in $views) {
 }
 
 Write-Host "All screenshots captured successfully!"
+
