@@ -62,15 +62,19 @@ class ClinicalDataQualityAgent:
             errors.append(f"Invalid patient age: {age} years outside human clinical bounds [0, 110]")
             
             
-        # 3. Lab Measurements validation
-        if "anc" in current_labs:
+        # 3. Lab Measurements validation (Strict Zero-Imputation Sentinel)
+        if "anc" not in current_labs or current_labs["anc"] is None:
+            errors.append("Missing mandatory laboratory parameter: Absolute Neutrophil Count (ANC) is required.")
+        else:
             anc = current_labs["anc"]
             if anc < 0 or anc > 40000:
                 errors.append(f"Biologically implausible ANC: {anc} cells/μL")
             elif anc < 500:
                 warnings.append(f"Severe neutropenia detected: ANC {anc} cells/μL (< 500 engraftment threshold)")
                 
-        if "platelets" in current_labs:
+        if "platelets" not in current_labs or current_labs["platelets"] is None:
+            errors.append("Missing mandatory laboratory parameter: Platelet count is required.")
+        else:
             plt = current_labs["platelets"]
             if plt < 0 or plt > 1500000:
                 errors.append(f"Biologically implausible Platelet count: {plt}/μL")
@@ -113,10 +117,12 @@ class ClinicalFeatureEngineeringAgent:
 
     def run(self, task_id: str, patient_record: Dict[str, Any], current_labs: Dict[str, float]) -> ClinicalAgentResponse:
         # Deterministic transformation to model feature space
+        if "anc" not in current_labs or "platelets" not in current_labs or current_labs["anc"] is None or current_labs["platelets"] is None:
+            raise ValueError("Feature engineering requires verified laboratory parameters (ANC and Platelets); zero-imputation policy prohibits default substitution.")
         age = float(patient_record.get("age", 45))
         cd34 = float(patient_record.get("cell_dose_cd34", 5.0))
-        anc = float(current_labs.get("anc", 250.0))
-        plt = float(current_labs.get("platelets", 35000.0))
+        anc = float(current_labs["anc"])
+        plt = float(current_labs["platelets"])
         # Chimerism is only known once measured; never default it.
         chimerism = patient_record.get("chimerism_donor_pct")
         
@@ -153,42 +159,24 @@ class ClinicalFeatureEngineeringAgent:
 class ClassicalMLPredictionService:
     AGENT_ID = "classical_ml_prediction_service"
 
-    def run(self, task_id: str, feature_vector: List[float]) -> ClinicalAgentResponse:
-        # Standardized models calibrated on CIBMTR HSCT dataset
-        # Feature order: [age, cd34, anc, plt, chimerism]
-        anc = feature_vector[2]
-        cd34 = feature_vector[1]
+    def run(
+        self,
+        task_id: str,
+        feature_vector: List[float],
+        patient_record: Optional[Dict[str, Any]] = None,
+        current_labs: Optional[Dict[str, float]] = None
+    ) -> ClinicalAgentResponse:
+        from app.core.canonical_models import predict_classical_models
         
-        # 1. Logistic Regression
-        score_lr = 1.0 / (1.0 + np.exp(-(-2.2 + 0.0035 * anc + 0.28 * cd34)))
-        p_lr = float(np.clip(score_lr, 0.05, 0.96))
-        
-        # 2. Random Forest (non-linear split ensemble)
-        p_rf = float(np.clip(0.35 + (0.50 if anc > 300 else 0.15) + (0.15 if cd34 >= 5.0 else 0.0), 0.10, 0.95))
-        
-        # 3. Classical RBF SVM
-        p_svm = float(np.clip(0.5 * (p_lr + p_rf) + 0.02, 0.08, 0.94))
-        
-        predictions = {
-            "logistic_regression": {
-                "probability": round(p_lr, 4),
-                "predicted_engraftment": p_lr >= 0.5,
-                "model_version": "LogisticRegression_v1.4",
-                "training_baseline": "CIBMTR 2024 Retrospective"
-            },
-            "random_forest": {
-                "probability": round(p_rf, 4),
-                "predicted_engraftment": p_rf >= 0.5,
-                "model_version": "RandomForest_n100_v2.0",
-                "feature_importance_top": "ANC_velocity (42%), CD34_cell_dose (28%)"
-            },
-            "classical_rbf_svm": {
-                "probability": round(p_svm, 4),
-                "predicted_engraftment": p_svm >= 0.5,
-                "model_version": "SVC_rbf_C1.0_v1.2",
-                "gamma": "scale"
-            }
+        # Genuine trained scikit-learn models (LogisticRegression, RandomForest, SVC)
+        # trained on the UCI Paediatric BMT cohort (n=187, CC BY 4.0) with zero data leakage.
+        rec = patient_record or {}
+        labs = current_labs or {
+            "anc": feature_vector[2] if len(feature_vector) > 2 else 0.0,
+            "platelets": feature_vector[3] if len(feature_vector) > 3 else 0.0
         }
+        
+        predictions = predict_classical_models(rec, labs)
         
         return ClinicalAgentResponse(
             agent_id=self.AGENT_ID,
@@ -244,8 +232,10 @@ class QuantumMLPredictionService:
         q_prob = float(exp_engraft / (exp_engraft + exp_delay))
         
         output = {
-            "model_name": "Quantum-Kernel SVM (ZZFeatureMap)",
-            "model_version": "QSVM_ZZ_reps1_v2.0",
+            "model_name": "Experimental 2-State Quantum Fidelity Probe (Non-Diagnostic Reference Comparison)",
+            "model_version": "QuantumProbe_ZZ_reps1_v2.0_Exploratory",
+            "validation_tier": "RESEARCH_EXPLORATORY",
+            "regulatory_notice": "Experimental Hilbert-space state overlap measurement (ZZFeatureMap) relative to reference synthetic states. Excluded from clinical consensus score.",
             "probability": round(q_prob, 4),
             "predicted_engraftment": q_prob >= 0.5,
             "fidelity_to_engraftment_state": round(fidelity_engrafted, 4),
@@ -279,32 +269,33 @@ class IndependentPredictionValidationAgent:
     ) -> ClinicalAgentResponse:
         warnings = []
         
-        # Extract probabilities
-        probs = []
-        votes = []
+        # Calculate ensemble consensus EXCLUSIVELY over validated classical models (Issue G)
+        classical_probs = []
+        classical_votes = []
         
         for mname, mdata in classical_outputs.items():
-            p = mdata.get("probability", 0.5)
-            probs.append(p)
-            votes.append(mdata.get("predicted_engraftment", p >= 0.5))
+            if isinstance(mdata, dict) and "probability" in mdata:
+                p = mdata["probability"]
+                classical_probs.append(p)
+                classical_votes.append(mdata.get("predicted_engraftment", p >= 0.5))
             
-        if "probability" in quantum_output:
-            qp = quantum_output["probability"]
-            probs.append(qp)
-            votes.append(quantum_output.get("predicted_engraftment", qp >= 0.5))
-            
-        # Compute statistical consensus and variance
-        mean_p = float(np.mean(probs))
-        var_p = float(np.var(probs))
-        all_agree = len(set(votes)) == 1
+        mean_p = float(np.mean(classical_probs)) if classical_probs else 0.5
+        var_p = float(np.var(classical_probs)) if classical_probs else 0.0
+        all_agree = len(set(classical_votes)) == 1 if classical_votes else False
         
         disagreement_detected = not all_agree
         if disagreement_detected:
-            warnings.append("Model Disagreement Detected: Classical and Quantum predictions diverge on classification threshold (p=0.5). Clinician review mandatory.")
+            warnings.append("Classical Model Disagreement Detected: Predictions diverge on classification threshold (p=0.5). Hematologist review mandatory.")
             
         if var_p > 0.04:
-            warnings.append(f"High inter-model variance across ensemble (σ² = {round(var_p, 4)}). Prediction uncertainty elevated.")
+            warnings.append(f"High inter-model variance across classical ensemble (σ² = {round(var_p, 4)}). Prediction uncertainty elevated.")
             
+        # Quantum probe comparison (kept strictly separate from ensemble consensus)
+        qp = quantum_output.get("probability", 0.5)
+        quantum_divergence = round(abs(qp - mean_p), 4)
+        if quantum_divergence > 0.25:
+            warnings.append(f"Quantum exploratory probe diverges (|Δp| = {quantum_divergence}) from classical ensemble baseline.")
+
         validation_status = "VALIDATED_CONSENSUS" if all_agree and var_p <= 0.04 else ("VALIDATED_WITH_DISAGREEMENT" if disagreement_detected else "VALIDATED_HIGH_VARIANCE")
 
         return ClinicalAgentResponse(
@@ -317,7 +308,13 @@ class IndependentPredictionValidationAgent:
                 "unanimous_agreement": all_agree,
                 "disagreement_flag": disagreement_detected,
                 "validation_status": validation_status,
-                "recommendation": "PROCEED" if not disagreement_detected else "FLAG_FOR_HEMATOLOGIST_REVIEW"
+                "recommendation": "PROCEED" if not disagreement_detected else "FLAG_FOR_HEMATOLOGIST_REVIEW",
+                "quantum_exploratory_probe": {
+                    "divergence_from_classical_mean": quantum_divergence,
+                    "fidelity_to_engraftment": quantum_output.get("fidelity_to_engraftment_state"),
+                    "fidelity_to_delayed": quantum_output.get("fidelity_to_delayed_state"),
+                    "status": "EXPLORATORY_ONLY_EXCLUDED_FROM_ENSEMBLE"
+                }
             },
             warnings=warnings,
             confidence=round(1.0 - np.sqrt(var_p), 3)
@@ -453,14 +450,18 @@ class ClinicalReportAgent:
             f"CLINICAL DECISION SUPPORT SUMMARY - {p_id} ({p_name})\n"
             f"Diagnosis: {patient_record.get('disease')} | Day +{patient_record['days_post_tx']} Post-Transplant\n"
             f"Status: {consensus}\n\n"
-            f"MULTI-MODEL SYNTHESIS:\n"
+            f"MULTI-MODEL SYNTHESIS (VALIDATED CLASSICAL ENSEMBLE):\n"
             f"• Ensemble Reconstitution Likelihood: {round(mean_prob * 100, 1)}% (Variance σ² = {val_agent_resp.output_data.get('inter_model_variance')})\n"
-            f"• Classical Random Forest: {classical_resp.output_data['models']['random_forest']['probability'] * 100:.1f}%\n"
-            f"• Quantum-Kernel SVM (ZZFeatureMap): {quantum_resp.output_data.get('probability', 0.0) * 100:.1f}% "
-            f"(Fidelity overlap: {quantum_resp.output_data.get('fidelity_to_engraftment_state', 0.0)})\n"
-            f"• Backend Provenance: {quantum_resp.output_data.get('backend_used')} ({quantum_resp.output_data.get('provenance')})\n\n"
+            f"• Classical Random Forest (Trained): {classical_resp.output_data['models']['random_forest']['probability'] * 100:.1f}%\n"
+            f"• Classical Logistic Regression (Trained): {classical_resp.output_data['models']['logistic_regression']['probability'] * 100:.1f}%\n"
+            f"• Classical RBF SVM (Trained): {classical_resp.output_data['models']['classical_rbf_svm']['probability'] * 100:.1f}%\n\n"
+            f"QUANTUM EXPLORATORY PROBE (NON-DIAGNOSTIC REFERENCE OVERLAP):\n"
+            f"• Fidelity to Engrafted Reference: {quantum_resp.output_data.get('fidelity_to_engraftment_state', 0.0):.4f}\n"
+            f"• Fidelity to Delayed Reference: {quantum_resp.output_data.get('fidelity_to_delayed_state', 0.0):.4f}\n"
+            f"• Backend Provenance: {quantum_resp.output_data.get('backend_used')} ({quantum_resp.output_data.get('provenance')})\n"
+            f"• Regulatory Notice: Excluded from clinical ensemble consensus.\n\n"
             f"LATEST COUNTS: ANC {patient_record['current_anc']:,.0f}/μL · Platelets {patient_record['current_plt']:,.0f}/μL\n\n"
-            f"Draft for hematologist review. No treatment recommendation is generated."
+            f"Draft for hematologist review. No autonomous treatment recommendation is generated."
         )
         
         # 2. Patient-Friendly Recovery Explanation (Plain language, supportive)
@@ -552,8 +553,8 @@ class MultiAgentOrchestrator:
         feat_classical = resp2.output_data["feature_vector_classical"]
         feat_quantum = resp2.output_data["feature_vector_quantum"]
         
-        # Step 3: Classical ML Prediction
-        resp3 = self.classical_agent.run(task_id, feat_classical)
+        # Step 3: Classical ML Prediction (Real scikit-learn models)
+        resp3 = self.classical_agent.run(task_id, feat_classical, patient_record=patient, current_labs=current_labs)
         agent_trail.append(resp3.to_dict())
         
         # Step 4: Quantum ML Prediction

@@ -227,6 +227,32 @@ def init_db(db_path: str = DB_PATH):
     )
     """)
 
+    # Users Table (RBAC / Auth - Issue K)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        user_id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        salt TEXT NOT NULL,
+        role TEXT NOT NULL,
+        full_name TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+
+    # User Sessions Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS user_sessions (
+        session_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        token_hash TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(user_id)
+    )
+    """)
+
     # Columns added after the first release; ALTER keeps existing databases usable.
     patient_cols = {row[1] for row in cursor.execute("PRAGMA table_info(patients)")}
     for column, ddl in (
@@ -542,3 +568,93 @@ def purge_legacy_seed_data(db_path: str = DB_PATH) -> None:
         conn.execute(f"DELETE FROM patients WHERE patient_id IN ({marks})", _LEGACY_SEED_PATIENTS)
         conn.execute(f"DELETE FROM quantum_jobs WHERE job_id IN ({','.join('?' for _ in _LEGACY_SEED_JOBS)})", _LEGACY_SEED_JOBS)
         conn.execute(f"DELETE FROM prediction_runs WHERE prediction_id IN ({','.join('?' for _ in _LEGACY_SEED_PREDICTIONS)})", _LEGACY_SEED_PREDICTIONS)
+
+
+# --- User & Auth Functions (RBAC - Issue K) ---
+
+def save_user(user: Dict[str, Any], db_path: str = DB_PATH) -> None:
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT OR REPLACE INTO users (user_id, email, password_hash, salt, role, full_name, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (
+        user["user_id"], user["email"], user["password_hash"], user["salt"],
+        user["role"], user["full_name"], user.get("created_at", datetime.now(timezone.utc).isoformat())
+    ))
+    conn.commit()
+    conn.close()
+
+
+def get_user_by_email(email: str, db_path: str = DB_PATH) -> Optional[Dict[str, Any]]:
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, email, password_hash, salt, role, full_name, created_at FROM users WHERE email = ?", (email.lower().strip(),))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "user_id": row[0], "email": row[1], "password_hash": row[2], "salt": row[3],
+        "role": row[4], "full_name": row[5], "created_at": row[6]
+    }
+
+
+def get_user_by_id(user_id: str, db_path: str = DB_PATH) -> Optional[Dict[str, Any]]:
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, email, password_hash, salt, role, full_name, created_at FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "user_id": row[0], "email": row[1], "password_hash": row[2], "salt": row[3],
+        "role": row[4], "full_name": row[5], "created_at": row[6]
+    }
+
+
+def list_users(db_path: str = DB_PATH) -> List[Dict[str, Any]]:
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id, email, role, full_name, created_at FROM users ORDER BY created_at ASC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"user_id": r[0], "email": r[1], "role": r[2], "full_name": r[3], "created_at": r[4]} for r in rows]
+
+
+def save_session(session: Dict[str, Any], db_path: str = DB_PATH) -> None:
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT OR REPLACE INTO user_sessions (session_id, user_id, token_hash, expires_at, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (
+        session["session_id"], session["user_id"], session["token_hash"],
+        session["expires_at"], session.get("created_at", datetime.now(timezone.utc).isoformat())
+    ))
+    conn.commit()
+    conn.close()
+
+
+def get_session(session_id: str, db_path: str = DB_PATH) -> Optional[Dict[str, Any]]:
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT session_id, user_id, token_hash, expires_at, created_at FROM user_sessions WHERE session_id = ?", (session_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "session_id": row[0], "user_id": row[1], "token_hash": row[2],
+        "expires_at": row[3], "created_at": row[4]
+    }
+
+
+def delete_session(session_id: str, db_path: str = DB_PATH) -> None:
+    conn = get_connection(db_path)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM user_sessions WHERE session_id = ?", (session_id,))
+    conn.commit()
+    conn.close()
+

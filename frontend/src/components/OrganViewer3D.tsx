@@ -507,6 +507,11 @@ export const OrganViewer3D: React.FC<OrganViewer3DProps> = ({
         />
       )}
 
+      <div className="viewer-disclaimer-badge" role="note" aria-label="Educational Reference Notice">
+        <span className="disclaimer-indicator" />
+        <span className="disclaimer-text"><strong>Educational Reference Anatomy</strong> — Not Patient-Specific Imaging or Pathology</span>
+      </div>
+
       <div className="pin-layer" hidden={isEmbed}>
         {metrics.map(m => (
           <button

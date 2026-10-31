@@ -6,11 +6,14 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes import router
 from app.api.compute_routes import router as compute_router
 from app.api.cohort_routes import router as cohort_router
+from app.api.auth_routes import router as auth_router
 from app.core.database import init_db
+from app.core.auth import seed_default_users
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    seed_default_users()
     yield
 
 app = FastAPI(
@@ -29,10 +32,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include API Router
+# Include API Routers
 app.include_router(router)
 app.include_router(compute_router)
 app.include_router(cohort_router)
+app.include_router(auth_router)
 
 # Serve frontend build if dist folder exists
 repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

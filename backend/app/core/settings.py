@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=REPO_ROOT / ".env", env_file_encoding="utf-8", extra="ignore")
 
     # SQLite lives on the native filesystem: WAL locking is unreliable on Windows drives mounted in WSL.
-    db_path: Path = Field(default=Path.home() / ".marrowq" / "marrowq.db", alias="MARROWQ_DB_PATH")
+    db_path: Path = Field(default=APP_DIR / "data" / "marrowq.db", alias="MARROWQ_DB_PATH")
     data_dir: Path = Field(default=APP_DIR / "data", alias="MARROWQ_DATA_DIR")
     artifacts_dir: Path = Field(default=APP_DIR / "artifacts", alias="MARROWQ_ARTIFACTS_DIR")
 
