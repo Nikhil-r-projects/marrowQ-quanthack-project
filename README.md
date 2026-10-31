@@ -14,7 +14,7 @@
 **Quantum-Assisted Haematopoietic Stem Cell Transplantation (HSCT) Engraftment Prediction & Clinical Intelligence Platform**  
 *GPU-Accelerated Qiskit Aer Statevector Engine · IBM Quantum Heron Hardware Execution · Fused CUDA Granulopoiesis ODE Simulation · Real Paediatric HSCT Cohort Grounding*
 
-[![Live Deployment](https://img.shields.io/badge/Vercel-Live%20Demo-black?style=for-the-badge&logo=vercel&logoColor=white)](https://marrowq.vercel.app)
+[![Live Deployment](https://img.shields.io/badge/GitHub_Pages-Live_Deployment-10b981?style=for-the-badge&logo=vercel&logoColor=white)](https://srimanikanta2006.github.io/marrowQ-quanthack-project/)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Nikhil-r-projects/marrowQ-quanthack-project/blob/main/notebooks/MarrowQ_Quantum_Benchmark.ipynb)
 [![CUDA 12 Acceleration](https://img.shields.io/badge/NVIDIA%20CUDA%2012-RTX%203050%20GPU-76b900?style=for-the-badge&logo=nvidia&logoColor=white)]()
 [![Qiskit 2.x Aer GPU](https://img.shields.io/badge/Qiskit%20Aer%20GPU-0.18.2-6929c4?style=for-the-badge&logo=qiskit&logoColor=white)]()
