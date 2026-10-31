@@ -153,6 +153,7 @@ class PatientCreateRequest(BaseModel):
 class ExamplePatientsRequest(BaseModel):
     count: int = Field(default=4, ge=1, le=8)
     seed: int = 7
+    with_observations: bool = False
 
 class ObservationCreateRequest(BaseModel):
     patient_id: str

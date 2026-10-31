@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { ArrowRight, CheckCircle2, Database, FileSpreadsheet, RefreshCw, ShieldAlert, TriangleAlert, Upload } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Database, FileSpreadsheet, RefreshCw, TriangleAlert, Upload } from 'lucide-react';
 import { DatasetProfile } from '../types';
 import { uploadDatasetFile } from '../api';
 import { TabId } from '../navigation';
@@ -71,7 +71,7 @@ export const DatasetView: React.FC<DatasetViewProps> = ({ dataset, onDatasetLoad
         </label>
 
         <div className="card">
-          <div className="card-title" style={{ marginBottom: '0.6rem' }}><ShieldAlert size={16} /> Data requirements</div>
+          <div className="card-title" style={{ marginBottom: '0.6rem' }}><Database size={16} /> Cohort Protocol & Validation</div>
           <ul className="small muted" style={{ paddingLeft: '1.1rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
             <li><strong style={{ color: 'var(--text)' }}>Pre-transplant features only.</strong> Columns recorded after Day 0 (GvHD, chimerism, infections) leak the outcome and are flagged.</li>
             <li><strong style={{ color: 'var(--text)' }}>Binary target.</strong> For the UCI cohort: <code>early_engraftment</code> (1 = ANC &gt; 500 by Day +14; 42% of recipients). Day +28 is not used because 97% of these children engraft by then.</li>

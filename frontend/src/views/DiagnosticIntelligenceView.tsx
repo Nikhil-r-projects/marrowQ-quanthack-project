@@ -133,12 +133,14 @@ export const DiagnosticIntelligenceView: React.FC<DiagnosticIntelligenceViewProp
           </div>
 
           {warnings.length > 0 && (
-            <div className="alert-banner alert-warn">
-              <AlertTriangle size={16} />
-              <div>
-                <strong>{warnings.length} point{warnings.length === 1 ? '' : 's'} to check</strong>
-                <ul style={{ margin: '0.35rem 0 0 1.1rem' }}>{warnings.map(w => <li key={w}>{w}</li>)}</ul>
+            <div className="card" style={{ padding: '0.85rem 1.15rem', background: 'rgba(255, 255, 255, 0.02)', borderColor: 'var(--border)' }}>
+              <div className="row" style={{ gap: '0.5rem', color: 'var(--text)', fontSize: '0.82rem', fontWeight: 600 }}>
+                <ListChecks size={15} style={{ color: 'var(--primary)' }} />
+                <span>Clinical Review Considerations ({warnings.length})</span>
               </div>
+              <ul className="small muted" style={{ margin: '0.35rem 0 0 1.3rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                {warnings.map(w => <li key={w}>{w}</li>)}
+              </ul>
             </div>
           )}
 

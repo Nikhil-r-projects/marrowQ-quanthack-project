@@ -45,7 +45,7 @@ def admit_patient(req: PatientCreateRequest):
 
 @router.post("/patients/examples", status_code=201)
 def admit_example_patients(req: ExamplePatientsRequest):
-    created = patient_service.create_example_patients(req.count, req.seed)
+    created = patient_service.create_example_patients(req.count, req.seed, with_observations=req.with_observations)
     if not created:
         raise HTTPException(status_code=409, detail="Every cohort record is already in use as an example patient.")
     for p in created:

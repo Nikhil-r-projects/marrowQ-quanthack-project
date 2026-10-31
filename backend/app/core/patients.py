@@ -105,7 +105,9 @@ def example_counts(row: pd.Series, days: int, seed: int) -> List[Dict[str, Any]]
     return out
 
 
-def create_example_patients(count: int, seed: int, today: Optional[date] = None) -> List[Dict[str, Any]]:
+def create_example_patients(
+    count: int, seed: int, today: Optional[date] = None, with_observations: bool = False
+) -> List[Dict[str, Any]]:
     """Admit `count` example patients copied from distinct UCI records not already in use.
 
     Records are drawn alternately from early and late engrafters so the examples span the cohort.
@@ -135,14 +137,15 @@ def create_example_patients(count: int, seed: int, today: Optional[date] = None)
             source_record=row.patient_id,
         )
         save_patient(patient)
-        transplant = date.fromisoformat(patient["transplant_date"])
-        for c in example_counts(row, days_post[i % len(days_post)], seed + i):
-            for metric, value, unit in (("Absolute Neutrophil Count (ANC)", c["anc"], "cells/μL"), ("Platelets", c["plt"], "/μL")):
-                save_clinical_observation({
-                    "patient_id": patient["patient_id"], "day_post_tx": c["day"],
-                    "recorded_date": (transplant + timedelta(days=c["day"])).isoformat(),
-                    "metric_type": metric, "value": value, "unit": unit,
-                    "source": EXAMPLE_LAB_SOURCE, "recorded_by": "MarrowQ example generator",
-                })
+        if with_observations:
+            transplant = date.fromisoformat(patient["transplant_date"])
+            for c in example_counts(row, days_post[i % len(days_post)], seed + i):
+                for metric, value, unit in (("Absolute Neutrophil Count (ANC)", c["anc"], "cells/μL"), ("Platelets", c["plt"], "/μL")):
+                    save_clinical_observation({
+                        "patient_id": patient["patient_id"], "day_post_tx": c["day"],
+                        "recorded_date": (transplant + timedelta(days=c["day"])).isoformat(),
+                        "metric_type": metric, "value": value, "unit": unit,
+                        "source": EXAMPLE_LAB_SOURCE, "recorded_by": "MarrowQ example generator",
+                    })
         created.append(patient)
     return created

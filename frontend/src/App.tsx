@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ShieldAlert, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Topbar, ClinicalAlert } from './components/Topbar';
 import { NewPatientModal } from './components/Modals';
@@ -213,7 +213,7 @@ export function App() {
       case 'quantum_lab':
         return <QuantumLabView />;
       case 'hospital':
-        return <HospitalAnalyticsView patients={patients ?? []} onOpenPatient={(id, tab) => go(tab, id)} onAdmit={() => setShowAdmit(true)} />;
+        return <HospitalAnalyticsView patients={patients ?? []} onOpenPatient={(id, tab) => go(tab, id)} onAdmit={() => setShowAdmit(true)} onRefreshPatients={loadPatients} />;
     }
   };
 
@@ -248,11 +248,6 @@ export function App() {
           onShare={share}
           onNewPatient={() => setShowAdmit(true)}
         />
-
-        <div className="disclaimer-strip" role="note">
-          <ShieldAlert size={13} />
-          <span>Research prototype. Models are trained on a public paediatric cohort (UCI, n = 187). Not for clinical decision-making.</span>
-        </div>
 
         {/* Patient-scoped views remount per patient so no stale state carries over. */}
         <main className="content" key={section.patientScoped || activeTab === 'predict' ? `${activeTab}:${selectedPatient?.patient_id ?? 'none'}` : activeTab}>

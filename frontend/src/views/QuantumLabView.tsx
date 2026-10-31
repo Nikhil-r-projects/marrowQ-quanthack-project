@@ -3,7 +3,7 @@ import {
   Cpu, Server, Activity, ShieldCheck, Play, RefreshCw, AlertCircle,
   Clock, Zap, CheckCircle2, Key, ExternalLink, Check, Sparkles,
   Layers, Database, ArrowRight, AlertTriangle, Radio, BarChart3,
-  Sliders, Gauge, ShieldAlert, GitCompare, Microchip
+  Sliders, Gauge, GitCompare, Microchip
 } from 'lucide-react';
 import {
   QuantumBackend, QuantumStatus, QuantumJob, HardwareKernelRun,
@@ -306,16 +306,16 @@ export const QuantumLabView: React.FC = () => {
                 fontSize: '0.75rem',
                 padding: '0.25rem 0.75rem',
                 borderRadius: '9999px',
-                background: qStatus?.is_connected_to_hardware ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                color: qStatus?.is_connected_to_hardware ? '#34d399' : '#f87171',
-                border: `1px solid ${qStatus?.is_connected_to_hardware ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                background: qStatus?.is_connected_to_hardware ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.12)',
+                color: qStatus?.is_connected_to_hardware ? '#34d399' : '#94a3b8',
+                border: `1px solid ${qStatus?.is_connected_to_hardware ? 'rgba(16, 185, 129, 0.4)' : 'rgba(148, 163, 184, 0.25)'}`,
                 fontWeight: 600,
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.4rem'
               }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: qStatus?.is_connected_to_hardware ? '#10b981' : '#ef4444' }} />
-                {qStatus?.is_connected_to_hardware ? 'IBM Quantum Hardware Authenticated' : 'IBM Hardware: Unauthenticated'}
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: qStatus?.is_connected_to_hardware ? '#10b981' : '#64748b' }} />
+                {qStatus?.is_connected_to_hardware ? 'IBM Quantum Hardware Connected' : 'IBM Quantum · Local GPU Simulation Mode'}
               </span>
 
               <span style={{
@@ -763,12 +763,12 @@ export const QuantumLabView: React.FC = () => {
           <div className="spatial-card" style={{ padding: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: qStatus?.is_connected_to_hardware ? '#34d399' : '#f87171' }} />
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: qStatus?.is_connected_to_hardware ? '#34d399' : '#64748b' }} />
                 <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#fff' }}>Physical IBM Quantum QPU</h4>
                 <span style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px',
-                  background: qStatus?.is_connected_to_hardware ? 'rgba(52, 211, 153, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                  color: qStatus?.is_connected_to_hardware ? '#34d399' : '#f87171' }}>
-                  {qStatus?.is_connected_to_hardware ? `Connected · ${qStatus.default_backend}` : 'Not connected'}
+                  background: qStatus?.is_connected_to_hardware ? 'rgba(52, 211, 153, 0.15)' : 'rgba(148, 163, 184, 0.12)',
+                  color: qStatus?.is_connected_to_hardware ? '#34d399' : '#94a3b8' }}>
+                  {qStatus?.is_connected_to_hardware ? `Connected · ${qStatus.default_backend}` : 'Standby (Configurable via API token)'}
                 </span>
               </div>
               <button

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, ArrowRight, Cpu, Database, Droplets, Hospital, Server, UserPlus, Users } from 'lucide-react';
+import { Activity, ArrowRight, Cpu, Database, Droplets, Hospital, Server, Sparkles, UserPlus, Users } from 'lucide-react';
 import { ClinicalObservation, HospitalOverview, Patient } from '../types';
-import { fetchHospitalOverview, fetchPatientObservations } from '../api';
+import { admitExamplePatients, fetchHospitalOverview, fetchPatientObservations } from '../api';
 import { TabId } from '../navigation';
 import { OBSERVATION_TYPES, daysPostTransplant, latestReadings } from '../data/observations';
 import { abnormalMetrics } from '../data/organs';
@@ -11,6 +11,7 @@ interface HospitalAnalyticsViewProps {
   patients: Patient[];
   onOpenPatient: (patientId: string, tab: TabId) => void;
   onAdmit: () => void;
+  onRefreshPatients?: () => Promise<void>;
 }
 
 /** First post-infusion day with a recorded ANC ≥ 500/µL, if any. */
@@ -21,10 +22,23 @@ function firstAncAbove500(observations: ClinicalObservation[]): number | null {
   return days.length ? Math.min(...days) : null;
 }
 
-export const HospitalAnalyticsView: React.FC<HospitalAnalyticsViewProps> = ({ patients, onOpenPatient, onAdmit }) => {
+export const HospitalAnalyticsView: React.FC<HospitalAnalyticsViewProps> = ({ patients, onOpenPatient, onAdmit, onRefreshPatients }) => {
   const [overview, setOverview] = useState<HospitalOverview | null>(null);
   const [overviewError, setOverviewError] = useState<string | null>(null);
   const [observations, setObservations] = useState<Record<string, ClinicalObservation[]> | null>(null);
+  const [loadingExamples, setLoadingExamples] = useState(false);
+
+  const handleLoadExamples = async () => {
+    setLoadingExamples(true);
+    try {
+      await admitExamplePatients(4);
+      if (onRefreshPatients) await onRefreshPatients();
+    } catch (e) {
+      setOverviewError((e as Error).message);
+    } finally {
+      setLoadingExamples(false);
+    }
+  };
 
   useEffect(() => {
     fetchHospitalOverview().then(setOverview).catch((e: Error) => setOverviewError(e.message));
@@ -64,7 +78,14 @@ export const HospitalAnalyticsView: React.FC<HospitalAnalyticsViewProps> = ({ pa
           <h2>Ward & cohort triage</h2>
           <p>Every admitted transplant patient, sorted so the people who need attention today are at the top. Flags come only from recorded observations.</p>
         </div>
-        <div className="actions"><button className="btn btn-primary" onClick={onAdmit}><UserPlus size={15} /> Admit patient</button></div>
+        <div className="actions">
+          {patients.length < 4 && (
+            <button className="btn btn-secondary" onClick={handleLoadExamples} disabled={loadingExamples} type="button">
+              <Sparkles size={14} /> {loadingExamples ? 'Admitting…' : 'Load UCI Benchmark Patients'}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={onAdmit}><UserPlus size={15} /> Admit patient</button>
+        </div>
       </div>
 
       <div className="grid-4">
@@ -98,8 +119,18 @@ export const HospitalAnalyticsView: React.FC<HospitalAnalyticsViewProps> = ({ pa
           </div>
         </div>
         {patients.length === 0 ? (
-          <div className="empty-state" style={{ padding: '2.5rem 1.5rem' }}>
-            <p>No patients admitted yet.</p>
+          <div className="empty-state" style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
+            <Users size={34} style={{ margin: '0 auto 0.75rem', color: 'var(--text-muted)' }} />
+            <h3 style={{ fontSize: '1.1rem', marginBottom: '0.4rem' }}>No patients on the ward yet</h3>
+            <p className="small muted" style={{ maxWidth: 440, margin: '0 auto 1.25rem' }}>
+              Admit a transplant recipient via clinical intake, or load example paediatric cases copied directly from real UCI cohort records.
+            </p>
+            <div className="row" style={{ justifyContent: 'center', gap: '0.75rem' }}>
+              <button className="btn btn-primary" onClick={onAdmit}><UserPlus size={15} /> Admit patient</button>
+              <button className="btn btn-secondary" onClick={handleLoadExamples} disabled={loadingExamples}>
+                <Database size={15} /> {loadingExamples ? 'Admitting…' : 'Load 4 Benchmark Cohort Cases'}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="table-responsive">

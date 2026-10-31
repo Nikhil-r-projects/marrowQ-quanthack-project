@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CircleAlert, X } from 'lucide-react';
+import { CircleAlert, Sparkles, X } from 'lucide-react';
 import { CohortOverview, CohortVariable, Patient } from '../types';
 import { ApiError, admitPatient, fetchCohort } from '../api';
 
@@ -77,6 +77,32 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ onClose, onAdm
   const required = new Set(cohort?.required_for_intake ?? []);
   const set = (name: string, value: string) => setValues(v => ({ ...v, [name]: value }));
   const hla = values.hla_match;
+
+  const loadBenchmarkCase = () => {
+    setLabel('Demo Case: Paediatric ALL (10/10 MUD)');
+    setConditioning('Bu/Cy Myeloablative');
+    setValues({
+      recipient_age: '8.5',
+      recipient_sex: 'Female',
+      recipient_body_mass: '28.4',
+      recipient_abo: 'A',
+      recipient_rh: '1',
+      recipient_cmv: 'Negative',
+      disease: 'ALL',
+      high_risk: '0',
+      second_transplant: '0',
+      donor_age: '31.0',
+      donor_abo: 'A',
+      donor_cmv: 'Positive',
+      hla_match: '10/10',
+      hla_antigen_differences: '0',
+      female_to_male: '0',
+      stem_cell_source: 'Peripheral blood',
+      cd34_dose: '9.2',
+      cd3_dose: '4.1'
+    });
+    setErrors([]);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -157,6 +183,11 @@ export const NewPatientModal: React.FC<NewPatientModalProps> = ({ onClose, onAdm
       {!cohort && !loadError && <div className="skeleton" style={{ height: 320 }} />}
       {cohort && (
         <form onSubmit={submit} noValidate className="stack" style={{ gap: '1.1rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-0.3rem' }}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={loadBenchmarkCase}>
+              <Sparkles size={13} /> Load Benchmark Demo Patient (Paediatric ALL · 10/10 MUD)
+            </button>
+          </div>
           <div className="grid-3" style={{ gap: '0.9rem 1rem' }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label" htmlFor="np-label">Name or record number <span className="faint">*</span></label>

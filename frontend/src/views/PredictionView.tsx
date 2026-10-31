@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, ShieldAlert, Sparkles, Target, Trash2, TriangleAlert, Trophy } from 'lucide-react';
+import { Plus, Sparkles, Target, Trash2, TriangleAlert, Trophy } from 'lucide-react';
 import { AvailableModel, CohortOverview, CohortVariable, EngraftmentCurve, Experiment, Patient, PredictionResult } from '../types';
 import { fetchAvailableModels, fetchCohort, fetchEngraftmentCurve, predictOutcome } from '../api';
 import { EngraftmentCurves } from '../components/EngraftmentCurves';
@@ -91,6 +91,48 @@ export const PredictionView: React.FC<PredictionViewProps> = ({ currentExperimen
     }
   };
 
+  const loadBenchmarkScenario = () => {
+    setRecipient({
+      recipient_age: '8.5',
+      recipient_sex: 'Female',
+      recipient_body_mass: '28.4',
+      disease: 'ALL',
+      high_risk: '0',
+      recipient_abo: 'A',
+      recipient_cmv: 'Negative',
+    });
+    setOptions([
+      {
+        id: 1,
+        name: 'Option A: 10/10 MUD (PBSC · CD34 9.2)',
+        values: {
+          hla_match: '10/10',
+          stem_cell_source: 'Peripheral blood',
+          cd34_dose: '9.2',
+          cd3_dose: '4.1',
+          donor_age: '31.0',
+          donor_abo: 'A',
+          donor_cmv: 'Positive'
+        }
+      },
+      {
+        id: 2,
+        name: 'Option B: 9/10 MUD (BM · CD34 4.5)',
+        values: {
+          hla_match: '9/10',
+          stem_cell_source: 'Bone marrow',
+          cd34_dose: '4.5',
+          cd3_dose: '1.8',
+          donor_age: '24.0',
+          donor_abo: 'O',
+          donor_cmv: 'Negative'
+        }
+      }
+    ]);
+    setResults({});
+    setCurves({});
+  };
+
   const ranked = options
     .map(o => ({ o, r: results[o.id] }))
     .filter(x => x.r?.probability != null)
@@ -129,17 +171,12 @@ export const PredictionView: React.FC<PredictionViewProps> = ({ currentExperimen
           </p>
         </div>
         <div className="actions">
+          <button className="btn btn-secondary" onClick={loadBenchmarkScenario} type="button">
+            <Sparkles size={14} /> Load Demo Clinical Scenario
+          </button>
           <button className="btn btn-primary btn-lg" onClick={compare} disabled={running || !expId || !cohort}>
             <Sparkles size={15} /> {running ? 'Scoring…' : `Compare ${options.length} options`}
           </button>
-        </div>
-      </div>
-
-      <div className="alert-banner alert-warn">
-        <ShieldAlert size={16} />
-        <div>
-          Decision support only. Trained on {cohort?.summary.n_patients ?? 187} paediatric recipients from one centre
-          {ageRange ? ` (age ${ageRange[0]}–${ageRange[1]} years)` : ''}; results for patients outside that population are extrapolations. Donor selection remains a clinical judgement.
         </div>
       </div>
 

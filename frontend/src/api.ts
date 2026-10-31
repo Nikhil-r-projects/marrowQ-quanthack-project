@@ -96,7 +96,8 @@ export interface AdmissionResult {
 
 export const admitPatient = (body: { label: string; transplant_date: string; conditioning?: string; pretransplant: Record<string, string | number> }) =>
   post<AdmissionResult>('/patients', body);
-export const admitExamplePatients = (count = 4) => post<Patient[]>('/patients/examples', { count, seed: Date.now() % 100000 });
+export const admitExamplePatients = (count = 4, withObservations = true) =>
+  post<Patient[]>('/patients/examples', { count, seed: Date.now() % 100000, with_observations: withObservations });
 export const dischargePatient = (patientId: string) => request<{ status: string }>(`/patients/${patientId}`, { method: 'DELETE' });
 
 export const fetchPatientProgress = (patient: Pick<Patient, 'patient_id'>) => request<PatientProgress>(`/patients/${patient.patient_id}/progress`);
