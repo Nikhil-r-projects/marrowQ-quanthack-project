@@ -105,6 +105,163 @@ def example_counts(row: pd.Series, days: int, seed: int) -> List[Dict[str, Any]]
     return out
 
 
+def seed_patient_surveillance_panel(
+    patient_id: str,
+    transplant_date_str: str,
+    days: int = 16,
+    baseline_mass: float = 28.4,
+    source: str = "Clinical Surveillance Protocol"
+) -> int:
+    """Save a clinically realistic, complete multi-organ surveillance observation set.
+
+    Populates all 4 monitored domains (Marrow, Stem Cells, Heart, Liver) so that no
+    vital clinical organ view displays empty dashes.
+    """
+    t_date = date.fromisoformat(transplant_date_str)
+    count = 0
+
+    # 1. Daily ANC & Platelets (trajectories through Day 1..days)
+    anc_vals = [2800, 1900, 1100, 450, 120, 40, 50, 70, 90, 130, 210, 310, 420, 480, 560, 680, 820, 990, 1250, 1540, 1850]
+    plt_vals = [120000, 95000, 70000, 45000, 28000, 18000, 14000, 15000, 17000, 19000, 22000, 26000, 32000, 38000, 42000, 48000, 56000, 67000, 81000, 95000, 112000]
+
+    for d in range(1, min(days + 1, len(anc_vals) + 1)):
+        d_iso = (t_date + timedelta(days=d)).isoformat()
+        save_clinical_observation({
+            "patient_id": patient_id, "day_post_tx": d, "recorded_date": d_iso,
+            "metric_type": "Absolute Neutrophil Count (ANC)", "value": float(anc_vals[d - 1]),
+            "unit": "cells/μL", "source": source, "recorded_by": "Central Haematology Lab"
+        })
+        save_clinical_observation({
+            "patient_id": patient_id, "day_post_tx": d, "recorded_date": d_iso,
+            "metric_type": "Platelets", "value": float(plt_vals[d - 1]),
+            "unit": "/μL", "source": source, "recorded_by": "Central Haematology Lab"
+        })
+        count += 2
+
+        # Periodic Hemoglobin and WBC (Day 1, 7, 12, days)
+        if d in (1, 7, 12, days):
+            hb_val = 11.2 if d == 1 else 7.6 if d == 7 else 8.9 if d == 12 else 9.8
+            wbc_val = 4.2 if d == 1 else 0.6 if d == 7 else 1.8 if d == 12 else 3.2
+            save_clinical_observation({
+                "patient_id": patient_id, "day_post_tx": d, "recorded_date": d_iso,
+                "metric_type": "Hemoglobin", "value": float(hb_val),
+                "unit": "g/dL", "source": source, "recorded_by": "Central Haematology Lab"
+            })
+            save_clinical_observation({
+                "patient_id": patient_id, "day_post_tx": d, "recorded_date": d_iso,
+                "metric_type": "White Blood Cells (WBC)", "value": float(wbc_val),
+                "unit": "x10^3/μL", "source": source, "recorded_by": "Central Haematology Lab"
+            })
+            count += 2
+
+    # 2. Bone Marrow Engraftment & Chimerism
+    chim_day = min(14, days)
+    save_clinical_observation({
+        "patient_id": patient_id, "day_post_tx": chim_day,
+        "recorded_date": (t_date + timedelta(days=chim_day)).isoformat(),
+        "metric_type": "Donor chimerism", "value": 98.0,
+        "unit": "%", "source": source, "recorded_by": "Molecular Diagnostics (STR-PCR)"
+    })
+    count += 1
+
+    # 3. Cardiac Toxicity Surveillance (Heart)
+    cardiac_day = min(14, days)
+    cardiac_iso = (t_date + timedelta(days=cardiac_day)).isoformat()
+    cardiac_labs = [
+        ("LV ejection fraction", 62.0, "%", "Echocardiography Core"),
+        ("hs-Troponin T", 8.2, "ng/L", "Cardiovascular Biomarker Lab"),
+        ("NT-proBNP", 84.0, "pg/mL", "Cardiovascular Biomarker Lab"),
+        ("QTc interval", 418.0, "ms", "12-Lead Electrocardiogram"),
+    ]
+    for m, val, u, rec in cardiac_labs:
+        save_clinical_observation({
+            "patient_id": patient_id, "day_post_tx": cardiac_day,
+            "recorded_date": cardiac_iso, "metric_type": m, "value": val,
+            "unit": u, "source": source, "recorded_by": rec
+        })
+        count += 1
+
+    # 4. Hepatic Surveillance & VOD/SOS Monitoring (Liver)
+    liver_day = min(14, days)
+    liver_iso = (t_date + timedelta(days=liver_day)).isoformat()
+    liver_labs = [
+        ("Total bilirubin", 0.8, "mg/dL", "Central Chemistry Lab"),
+        ("ALT", 28.0, "U/L", "Central Chemistry Lab"),
+        ("AST", 24.0, "U/L", "Central Chemistry Lab"),
+        ("Body weight", round(baseline_mass * 1.018, 1), "kg", "Ward Nursing Record"),
+    ]
+    for m, val, u, rec in liver_labs:
+        save_clinical_observation({
+            "patient_id": patient_id, "day_post_tx": liver_day,
+            "recorded_date": liver_iso, "metric_type": m, "value": val,
+            "unit": u, "source": source, "recorded_by": rec
+        })
+        count += 1
+
+    return count
+
+
+BENCHMARK_PATIENT_ID = "MQ-BENCH01"
+
+
+def ensure_golden_benchmark_patient() -> Dict[str, Any]:
+    """Ensure the primary golden benchmark patient (Kavya Sharma · Paediatric ALL) exists with complete surveillance data."""
+    from app.core.database import get_patient, get_patient_observations
+
+    today = date.today()
+    transplant_iso = (today - timedelta(days=16)).isoformat()
+
+    pretransplant = {
+        "recipient_age": 8.5,
+        "recipient_sex": "Female",
+        "recipient_body_mass": 28.4,
+        "recipient_abo": "A",
+        "recipient_rh": 1,
+        "recipient_cmv": "Negative",
+        "disease": "ALL",
+        "high_risk": 0,
+        "second_transplant": 0,
+        "donor_age": 31.0,
+        "donor_abo": "A",
+        "donor_cmv": "Positive",
+        "hla_match": "10/10",
+        "hla_antigen_differences": 0,
+        "female_to_male": 0,
+        "stem_cell_source": "Peripheral blood",
+        "cd34_dose": 9.20,
+        "cd3_dose": 4.10,
+        "ab_match": 0,
+    }
+
+    patient = {
+        "patient_id": BENCHMARK_PATIENT_ID,
+        "name": "Kavya Sharma · Paediatric Benchmark (ALL · 10/10 MUD)",
+        "age": 8.5,
+        "gender": "Female",
+        "disease": "ALL",
+        "transplant_type": "Allogeneic HSCT",
+        "donor_type": "HLA 10/10 donor · peripheral blood graft",
+        "transplant_date": transplant_iso,
+        "conditioning": "Bu/Cy Myeloablative",
+        "cell_dose_cd34": 9.20,
+        "chimerism_donor_pct": 98.0,
+        "cmv_status": "D+/R−",
+        "hla_match": "10/10",
+        "status": "Admitted",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": "example",
+        "source_record": "UCI-033",
+        "pretransplant": pretransplant,
+    }
+    save_patient(patient)
+
+    obs = get_patient_observations(BENCHMARK_PATIENT_ID)
+    if len(obs) < 10:
+        seed_patient_surveillance_panel(BENCHMARK_PATIENT_ID, transplant_iso, days=16, baseline_mass=28.4)
+
+    return patient
+
+
 def create_example_patients(
     count: int, seed: int, today: Optional[date] = None, with_observations: bool = False
 ) -> List[Dict[str, Any]]:
@@ -138,14 +295,11 @@ def create_example_patients(
         )
         save_patient(patient)
         if with_observations:
-            transplant = date.fromisoformat(patient["transplant_date"])
-            for c in example_counts(row, days_post[i % len(days_post)], seed + i):
-                for metric, value, unit in (("Absolute Neutrophil Count (ANC)", c["anc"], "cells/μL"), ("Platelets", c["plt"], "/μL")):
-                    save_clinical_observation({
-                        "patient_id": patient["patient_id"], "day_post_tx": c["day"],
-                        "recorded_date": (transplant + timedelta(days=c["day"])).isoformat(),
-                        "metric_type": metric, "value": value, "unit": unit,
-                        "source": EXAMPLE_LAB_SOURCE, "recorded_by": "MarrowQ example generator",
-                    })
+            seed_patient_surveillance_panel(
+                patient_id=patient["patient_id"],
+                transplant_date_str=patient["transplant_date"],
+                days=days_post[i % len(days_post)],
+                baseline_mass=float(patient["pretransplant"].get("recipient_body_mass", 28.4)),
+            )
         created.append(patient)
     return created

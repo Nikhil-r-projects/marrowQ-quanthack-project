@@ -96,3 +96,40 @@ def latest_approved_summary(patient_id: str):
     reports = (run["predictions"] or {}).get("reports") or {}
     return {"available": True, "prediction_id": run["prediction_id"], "reviewed_by": run["reviewed_by"],
             "created_at": run["created_at"], "patient_summary": reports.get("patient_friendly_summary") or reports.get("patient_summary")}
+
+
+@router.post("/patients/{patient_id}/seed-surveillance")
+def seed_surveillance(patient_id: str):
+    p = get_patient(patient_id)
+    if not p:
+        raise HTTPException(status_code=404, detail=f"Patient '{patient_id}' not found.")
+    baseline = 28.4
+    if p.get("pretransplant") and p["pretransplant"].get("recipient_body_mass"):
+        baseline = float(p["pretransplant"]["recipient_body_mass"])
+    count = patient_service.seed_patient_surveillance_panel(
+        patient_id=patient_id,
+        transplant_date_str=p["transplant_date"],
+        days=16,
+        baseline_mass=baseline
+    )
+    return {"status": "seeded", "patient_id": patient_id, "observations_created": count}
+
+
+@router.post("/patients/seed-all-surveillance")
+def seed_all_patients_surveillance():
+    from app.core.database import list_patients, get_patient_observations
+    seeded = []
+    for p in list_patients():
+        obs = get_patient_observations(p["patient_id"])
+        if len(obs) < 5:
+            baseline = 28.4
+            if p.get("pretransplant") and p["pretransplant"].get("recipient_body_mass"):
+                baseline = float(p["pretransplant"]["recipient_body_mass"])
+            count = patient_service.seed_patient_surveillance_panel(
+                patient_id=p["patient_id"],
+                transplant_date_str=p["transplant_date"],
+                days=16,
+                baseline_mass=baseline
+            )
+            seeded.append({"patient_id": p["patient_id"], "observations": count})
+    return {"status": "completed", "seeded_patients": seeded}

@@ -7,10 +7,12 @@ from app.api.routes import router
 from app.api.compute_routes import router as compute_router
 from app.api.cohort_routes import router as cohort_router
 from app.core.database import init_db
+from app.core.patients import ensure_golden_benchmark_patient
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    ensure_golden_benchmark_patient()
     yield
 
 app = FastAPI(

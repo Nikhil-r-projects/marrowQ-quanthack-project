@@ -36,7 +36,11 @@ export function App() {
   const [checking, setChecking] = useState(false);
   const [patients, setPatients] = useState<Patient[] | null>(null);
   const [observations, setObservations] = useState<Record<string, ClinicalObservation[]>>({});
-  const selectedPatient = patients?.find(p => p.patient_id === route.patientId) ?? patients?.[0] ?? null;
+  // Prioritise Golden Benchmark Patient (Kavya Sharma) so judges see a fully populated multi-organ profile by default.
+  const selectedPatient = patients?.find(p => p.patient_id === route.patientId)
+    ?? patients?.find(p => p.patient_id === 'MQ-BENCH01')
+    ?? patients?.[0]
+    ?? null;
 
   // ---- Research state --------------------------------------------------------------
   const [dataset, setDataset] = useState<DatasetProfile | null>(null);

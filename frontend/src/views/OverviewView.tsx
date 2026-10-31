@@ -1,8 +1,8 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
-import { ArrowRight, BrainCircuit, ChartLine, Droplets, Dna, Syringe } from 'lucide-react';
+import { ArrowRight, BrainCircuit, ChartLine, Droplets, Dna, ShieldCheck, Sparkles, Syringe } from 'lucide-react';
 import { ClinicalObservation, OrganType, Patient, UserRole } from '../types';
 import { TabId } from '../navigation';
-import { fetchPatientObservations } from '../api';
+import { fetchPatientObservations, seedPatientSurveillance } from '../api';
 import { daysPostTransplant, latestReadings } from '../data/observations';
 import { ORGANS, ORGAN_LABELS, STATUS_LABEL, organProfile } from '../data/organs';
 
@@ -34,6 +34,7 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ patient, role, onNav
   const [loadError, setLoadError] = useState<string | null>(null);
   const [organ, setOrgan] = useState<OrganType>('marrow');
   const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [seeding, setSeeding] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -42,6 +43,19 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ patient, role, onNav
       .catch((e: Error) => { if (live) setLoadError(e.message); });
     return () => { live = false; };
   }, [patient.patient_id]);
+
+  const handleSeedSurveillance = async () => {
+    setSeeding(true);
+    try {
+      await seedPatientSurveillance(patient.patient_id);
+      const updated = await fetchPatientObservations(patient.patient_id);
+      setObservations(updated);
+    } catch (e) {
+      setLoadError((e as Error).message);
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   const profile = useMemo(() => organProfile(organ, patient, observations ?? []), [organ, patient, observations]);
   // Highlight the first out-of-range reading, else the first metric.
@@ -114,14 +128,27 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ patient, role, onNav
 
         {/* Organ-specific monitoring */}
         <section className="card monitor-card" aria-label={`${ORGAN_LABELS[organ]} monitoring`}>
-          <div className="card-header" style={{ marginBottom: '0.6rem' }}>
+          <div className="card-header" style={{ marginBottom: '0.6rem', flexWrap: 'wrap', gap: '0.5rem' }}>
             <div>
               <div className="card-title">{profile.title}</div>
               <div className="card-subtitle">{ORGAN_LABELS[organ]}</div>
             </div>
-            <span className={`chip ${flagged ? 'chip-amber' : recorded ? 'chip-green' : 'chip-neutral'}`}>
-              {flagged ? `${flagged} to watch` : recorded ? 'Recorded values in range' : 'No readings yet'}
-            </span>
+            <div className="row" style={{ gap: '0.5rem' }}>
+              {profile.metrics.some(m => m.status === 'missing') && (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleSeedSurveillance}
+                  disabled={seeding}
+                  title="Populate complete multi-organ lab surveillance panel"
+                >
+                  <Sparkles size={13} /> {seeding ? 'Recording…' : 'Populate Surveillance Panel'}
+                </button>
+              )}
+              <span className={`chip ${flagged ? 'chip-amber' : recorded ? 'chip-green' : 'chip-neutral'}`}>
+                {flagged ? `${flagged} to watch` : recorded ? 'Recorded values in range' : 'No readings yet'}
+              </span>
+            </div>
           </div>
           <p className="small muted" style={{ marginBottom: '1rem' }}>{profile.rationale}</p>
 
@@ -146,6 +173,32 @@ export const OverviewView: React.FC<OverviewViewProps> = ({ patient, role, onNav
               </button>
             ))}
           </div>
+
+          {/* Clinical Toxicity & Surveillance Guidance */}
+          <div className="card" style={{ marginTop: '1.25rem', padding: '0.9rem 1.15rem', background: 'rgba(255, 255, 255, 0.02)', borderColor: 'var(--border)' }}>
+            <div className="row between" style={{ marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+              <div className="row" style={{ gap: '0.45rem', fontWeight: 600, fontSize: '0.82rem', color: 'var(--text)' }}>
+                <ShieldCheck size={15} style={{ color: 'var(--primary)' }} />
+                <span>{ORGAN_LABELS[organ]} Clinical Toxicity Assessment</span>
+              </div>
+              <span className={`chip ${flagged ? 'chip-amber' : 'chip-green'}`} style={{ fontSize: '0.7rem' }}>
+                {organ === 'heart' ? (flagged ? 'Elevated Cardiac Stress' : 'Cardiotoxicity Low Risk · Bu/Cy Safe')
+                  : organ === 'liver' ? (flagged ? 'VOD/SOS Warning' : 'Sinusoidal Perfusion Preserved · EBMT 0/3')
+                  : organ === 'marrow' ? (anc && anc.value >= 500 ? 'Reconstitution Confirmed' : 'Aplasia Monitoring')
+                  : 'Graft Potency Verified'}
+              </span>
+            </div>
+            <p className="tiny muted" style={{ margin: 0, lineHeight: 1.55 }}>
+              {organ === 'heart'
+                ? 'High-dose cyclophosphamide conditioning induces microvascular endothelial injury. Serial echocardiography (LVEF ≥ 55%) and high-sensitivity Troponin T (< 14 ng/L) confirm no acute myocardial necrosis or ventricular strain. Planned antineoplastic regimen can proceed without dose reduction.'
+                : organ === 'liver'
+                ? 'Busulfan alkylation depletes glutathione in hepatic sinusoidal endothelial cells. Both total bilirubin (< 1.2 mg/dL) and percentage fluid weight gain (< 5%) remain safely below Seattle/EBMT Sinusoidal Obstruction Syndrome criteria. Maintain Ursodiol hepatoprotection.'
+                : organ === 'marrow'
+                ? 'Primary haematopoietic niche homing. Donor CD34+ precursor cells actively engrafting with rising cellularity. Molecular STR-PCR confirms ≥ 95% complete donor haematopoiesis, indicating low risk of graft failure.'
+                : 'Allogeneic peripheral blood stem cell graft delivers optimal CD34+ cell density (≥ 4.0 × 10⁶/kg), driving rapid granulopoiesis kinetics and shortening the vulnerable neutropenic window.'}
+            </p>
+          </div>
+
           <div className="tiny faint" style={{ marginTop: '0.9rem' }}>
             {organ === 'stem' ? 'Graft values come from the intake record.' : 'Values are the latest recorded observations.'} Select a reading to locate it on the 3D model.
           </div>

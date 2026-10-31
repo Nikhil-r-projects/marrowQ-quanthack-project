@@ -1,14 +1,14 @@
 {
-  "job_id": "dbik846ne4hc73bepkcg",
-  "backend_name": "ibm_kingston",
+  "job_id": "dbinikune4hc73bf0hr0",
+  "backend_name": "ibm_marrakesh",
   "execution_mode": "ibm_quantum_hardware",
   "n_qubits": 4,
-  "shots": 1024,
+  "shots": 512,
   "circuits": 248,
   "transpiled_depth": 58,
-  "wall_seconds": 109.2,
-  "qpu_seconds_used": 69,
-  "completed_at": "2026-10-31T01:29:21+00:00",
+  "wall_seconds": 77.3,
+  "qpu_seconds_used": 37,
+  "completed_at": "2026-10-31T05:16:01+00:00",
   "train_patients": [
     "UCI-001",
     "UCI-002",
@@ -37,33 +37,33 @@
     "UCI-023",
     "UCI-024"
   ],
-  "alignment": 0.27217,
-  "test_auc": 0.3333,
-  "frobenius_error_vs_ideal": 0.03575,
+  "alignment": 0.26938,
+  "test_auc": 0.4,
+  "frobenius_error_vs_ideal": 0.04708,
   "diagonal_note": "Diagonal entries are 1 by construction (self-overlap is not measured).",
   "matrix_preview": [
     [
       1.0,
-      0.0322,
-      0.0078,
-      0.0703
+      0.0312,
+      0.0254,
+      0.0508
     ],
     [
-      0.0322,
+      0.0312,
       1.0,
-      0.0732,
-      0.002
+      0.082,
+      0.0059
     ],
     [
-      0.0078,
-      0.0732,
+      0.0254,
+      0.082,
       1.0,
-      0.0898
+      0.084
     ],
     [
-      0.0703,
-      0.002,
-      0.0898,
+      0.0508,
+      0.0059,
+      0.084,
       1.0
     ]
   ],
@@ -93,5 +93,5 @@
       1.0
     ]
   ],
-  "provenance": "ibm_quantum_hardware:backend=ibm_kingston:job_id=dbik846ne4hc73bepkcg:shots=1024"
+  "provenance": "ibm_quantum_hardware:backend=ibm_marrakesh:job_id=dbinikune4hc73bf0hr0:shots=512"
 }

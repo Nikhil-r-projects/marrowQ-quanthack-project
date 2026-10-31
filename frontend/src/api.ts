@@ -99,6 +99,8 @@ export const admitPatient = (body: { label: string; transplant_date: string; con
 export const admitExamplePatients = (count = 4, withObservations = true) =>
   post<Patient[]>('/patients/examples', { count, seed: Date.now() % 100000, with_observations: withObservations });
 export const dischargePatient = (patientId: string) => request<{ status: string }>(`/patients/${patientId}`, { method: 'DELETE' });
+export const seedPatientSurveillance = (patientId: string) => post<{ status: string; observations_created: number }>(`/patients/${patientId}/seed-surveillance`, {});
+export const seedAllSurveillance = () => post<{ status: string }>(`/patients/seed-all-surveillance`, {});
 
 export const fetchPatientProgress = (patient: Pick<Patient, 'patient_id'>) => request<PatientProgress>(`/patients/${patient.patient_id}/progress`);
 export const fetchPatientPredictions = (patientId: string) => request<any[]>(`/patients/${patientId}/predictions`);

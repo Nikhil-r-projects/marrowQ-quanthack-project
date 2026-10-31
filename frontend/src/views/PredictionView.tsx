@@ -41,6 +41,21 @@ export const PredictionView: React.FC<PredictionViewProps> = ({ currentExperimen
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (patient?.pretransplant) {
+      setRecipient(pick(patient.pretransplant, RECIPIENT_FIELDS));
+      const planned = pick(patient.pretransplant, OPTION_FIELDS);
+      if (Object.keys(planned).length) {
+        setOptions([
+          { id: 1, name: `${patient.name.split(' ')[0]}'s Planned Donor (10/10 PBSC)`, values: planned },
+          { id: 2, name: 'Alternative Donor (9/10 BM)', values: { hla_match: '9/10', stem_cell_source: 'Bone marrow', cd34_dose: '4.5', cd3_dose: '1.8', donor_age: '24.0', donor_abo: 'O', donor_cmv: 'Negative' } }
+        ]);
+        setResults({});
+        setCurves({});
+      }
+    }
+  }, [patient]);
+
+  useEffect(() => {
     fetchCohort().then(setCohort).catch((e: Error) => setError(e.message));
     fetchAvailableModels()
       .then(all => {

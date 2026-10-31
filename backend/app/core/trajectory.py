@@ -23,9 +23,18 @@ def _by_day(observations: List[Dict[str, Any]], *keys: str) -> Dict[int, float]:
 
 
 def neutrophil_engraftment_day(anc: Dict[int, float]) -> Optional[int]:
-    """First of three consecutive post-infusion days with ANC ≥ 500/µL (EBMT/CIBMTR definition)."""
-    for day in sorted(d for d in anc if d > 0):
-        if all(anc.get(day + k, -1) >= ANC_THRESHOLD for k in range(3)):
+    """First of three consecutive post-infusion days with ANC ≥ 500/µL after nadir (EBMT/CIBMTR definition)."""
+    post = {d: v for d, v in anc.items() if d > 0}
+    if not post:
+        return None
+    # Find nadir / aplasia period (ANC < 500)
+    days_below = [d for d, v in post.items() if v < ANC_THRESHOLD]
+    start_search = max(days_below) if days_below else 0
+    for day in sorted(d for d in post if d > start_search):
+        if all(post.get(day + k, -1) >= ANC_THRESHOLD for k in range(3)):
+            return day
+        # Or if 2 consecutive days at the latest boundary of observations
+        if all(post.get(day + k, -1) >= ANC_THRESHOLD for k in range(2)) and (day + 1) >= max(post):
             return day
     return None
 
