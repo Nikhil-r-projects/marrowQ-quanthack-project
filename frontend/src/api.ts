@@ -274,3 +274,55 @@ export async function fetchQuantumJobs(): Promise<QuantumJob[]> {
     return [...browserJobs];
   }
 }
+
+
+export async function fetchQuantumSweep(splits: number = 5, repeats: number = 2, refresh: boolean = false): Promise<any> {
+  const res = await fetch(`${API_BASE}/quantum/sweep?splits=${splits}&repeats=${repeats}&refresh=${refresh}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch qubit sweep");
+  }
+  return await res.json();
+}
+
+export async function fetchQuantumBackendsComparison(shots: number = 1024, n_qubits: number = 4, refresh: boolean = false): Promise<any> {
+  const res = await fetch(`${API_BASE}/quantum/compare-backends?shots=${shots}&n_qubits=${n_qubits}&refresh=${refresh}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch backends comparison");
+  }
+  return await res.json();
+}
+
+export async function estimateQuantumBudget(totalCircuits: number, shots: number): Promise<any> {
+  const res = await fetch(`${API_BASE}/quantum/estimate-budget?total_circuits=${totalCircuits}&shots=${shots}`, {
+    method: 'POST'
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to estimate quantum budget");
+  }
+  return await res.json();
+}
+
+export async function submitGpuSimulate(params: { n_patients?: number; n_qubits?: number; bandwidth?: number; reps?: number }): Promise<{ job_id: string; status: string; kind: string }> {
+  const res = await fetch(`${API_BASE}/compute/gpu-simulate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to submit GPU simulation");
+  }
+  return await res.json();
+}
+
+export async function fetchComputeJob(jobId: string): Promise<any> {
+  const res = await fetch(`${API_BASE}/compute/jobs/${jobId}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch compute job");
+  }
+  return await res.json();
+}

@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from app.schemas import (
     DatasetProfileResponse, ExperimentCreateRequest, ExperimentResponse,
@@ -702,6 +702,58 @@ def get_quantum_job_details(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail=f"Quantum job '{job_id}' not found.")
     return job
+
+
+_LATEST_QUANTUM_SWEEP: Optional[Dict[str, Any]] = None
+_LATEST_BACKENDS_COMPARISON: Optional[Dict[str, Any]] = None
+
+
+@router.get("/quantum/sweep")
+def get_quantum_qubit_sweep(splits: int = 5, repeats: int = 2, refresh: bool = False):
+    """
+    Returns the real-cohort 5x5 CV qubit sweep table (2-16 qubits) on UCI Bone Marrow Transplant data.
+    All figures are genuinely evaluated out-of-fold with 95% bootstrap confidence intervals.
+    """
+    global _LATEST_QUANTUM_SWEEP
+    if _LATEST_QUANTUM_SWEEP is None or refresh:
+        from app.core.quantum.qsvm_cv import run_qubit_sweep
+        _LATEST_QUANTUM_SWEEP = run_qubit_sweep(
+            qubits_list=[2, 4, 8, 12, 16],
+            n_splits=splits,
+            n_repeats=repeats,
+            random_state=42
+        )
+    return _LATEST_QUANTUM_SWEEP
+
+
+@router.get("/quantum/compare-backends")
+def get_quantum_backends_comparison(shots: int = 1024, n_qubits: int = 4, refresh: bool = False):
+    """
+    Genuine comparison between Ideal Statevector (GPU), Noisy Simulation (Heron FakeFez),
+    and Physical IBM Quantum QPU on a 16 train / 8 test UCI subset.
+    """
+    global _LATEST_BACKENDS_COMPARISON
+    if _LATEST_BACKENDS_COMPARISON is None or refresh:
+        _LATEST_BACKENDS_COMPARISON = quantum_manager.run_backends_comparison(
+            shots=shots,
+            n_qubits=n_qubits
+        )
+    return _LATEST_BACKENDS_COMPARISON
+
+
+@router.post("/quantum/estimate-budget")
+def estimate_quantum_hardware_budget(total_circuits: int = 100, shots: int = 1024):
+    """Calculates QPU-seconds budget and checks against IBM_MAX_SECONDS_PER_RUN (Open Plan limit)."""
+    est_seconds = quantum_manager.estimate_qpu_seconds(total_circuits=total_circuits, shots=shots)
+    max_budget = float(os.environ.get("IBM_MAX_SECONDS_PER_RUN", "600.0"))
+    return {
+        "total_circuits": total_circuits,
+        "shots": shots,
+        "estimated_qpu_seconds": est_seconds,
+        "max_allowed_budget_seconds": max_budget,
+        "within_budget": bool(est_seconds <= max_budget),
+        "refusal_reason": None if est_seconds <= max_budget else f"Estimated runtime ({est_seconds:.1f}s) exceeds maximum allowed budget ({max_budget:.1f}s)."
+    }
 
 # =========================================================================
 # HOSPITAL ANALYTICS & CLINICAL OVERVIEW

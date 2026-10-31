@@ -363,3 +363,91 @@ export interface QuantumExperimentResult {
   provenance: string;
   leakage_safeguard: string;
 }
+
+
+export interface QubitSweepRow {
+  qubits: number;
+  roc_auc: number;
+  roc_auc_ci: [number, number] | null;
+  balanced_accuracy: number;
+  balanced_accuracy_ci: [number, number] | null;
+  brier_score: number;
+  off_diagonal_variance: number;
+  geometric_difference_vs_rbf: number;
+  kernel_target_alignment: number;
+  is_concentrated: boolean;
+  best_bandwidth: number;
+  best_C: number;
+  training_time_seconds: number;
+  metric: ModelMetric;
+}
+
+export interface QuantumSweepResult {
+  dataset: string;
+  target: string;
+  classical_baseline_auc: number;
+  classical_baseline_ci: [number, number];
+  sweep_table: QubitSweepRow[];
+  best_qubit_setting: QubitSweepRow | null;
+}
+
+export interface BackendComparisonItem {
+  backend_type: string;
+  is_simulator: boolean;
+  frobenius_error_vs_ideal: number | null;
+  alignment: number | null;
+  test_auc: number | null;
+  elapsed_seconds?: number;
+  diagonal_attenuation?: number;
+  matrix_preview?: number[][];
+  available?: boolean;
+  status?: string;
+  message?: string;
+  backend_name?: string | null;
+  device_provenance?: string;
+}
+
+export interface BackendsComparisonResult {
+  subset: string;
+  n_qubits: number;
+  shots: number;
+  ideal: BackendComparisonItem;
+  noisy_simulation: BackendComparisonItem;
+  hardware: BackendComparisonItem;
+}
+
+export interface GPUSimulateJobResult {
+  dataset: string;
+  n_patients: number;
+  patient_ids: string[];
+  n_qubits: number;
+  bandwidth: number;
+  reps: number;
+  telemetry: {
+    device: string;
+    matmul_accelerator: string;
+    n_qubits: number;
+    reps: number;
+    bandwidth: number;
+    elapsed_seconds: number;
+    samples_shape: [number, number];
+  };
+  diagnostics: {
+    off_diagonal_variance: number;
+    off_diagonal_mean: number;
+    kernel_target_alignment: number;
+    geometric_difference_vs_rbf: number;
+    is_concentrated: boolean;
+  };
+  kernel_matrix_preview: number[][];
+  kernel_shape: number[];
+}
+
+export interface BudgetEstimateResult {
+  total_circuits: number;
+  shots: number;
+  estimated_qpu_seconds: number;
+  max_allowed_budget_seconds: number;
+  within_budget: boolean;
+  refusal_reason: string | null;
+}

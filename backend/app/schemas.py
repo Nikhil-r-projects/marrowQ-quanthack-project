@@ -31,6 +31,8 @@ class ExperimentCreateRequest(BaseModel):
     run_logistic: bool = True
     run_random_forest: bool = True
     run_rbf_svm: bool = True
+    run_gradient_boosting: bool = True
+    cv_repeats: int = Field(default=5, ge=1, le=10)
     run_quantum_svm: bool = True
     quantum_qubits: int = Field(default=2, ge=2, le=6)
     quantum_reps: int = Field(default=1, ge=1, le=3)
@@ -53,6 +55,14 @@ class ModelMetric(BaseModel):
     status: str = "completed"
     error_message: Optional[str] = None
     extra_info: Optional[Dict[str, Any]] = None
+    # Cross-validated evaluation (benchmark.py)
+    roc_auc_ci: Optional[List[float]] = None
+    balanced_accuracy_ci: Optional[List[float]] = None
+    brier_ci: Optional[List[float]] = None
+    roc_auc_repeat_sd: Optional[float] = None
+    calibration: Optional[List[Dict[str, float]]] = None
+    best_params: Optional[Dict[str, Any]] = None
+    evaluation: Optional[str] = None
 
 class ExperimentResponse(BaseModel):
     experiment_id: str
