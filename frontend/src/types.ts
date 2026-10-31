@@ -202,13 +202,17 @@ export interface TrajectoryPoint {
   day: number;
   is_observed: boolean;
   anc_observed?: number;
+  /** Posterior median and bands of the patient-specific GPU forecast. */
   anc_predicted: number;
   anc_lower_95: number;
   anc_upper_95: number;
+  anc_lower_80?: number;
+  anc_upper_80?: number;
   plt_observed?: number;
-  plt_predicted: number;
-  plt_lower_95: number;
-  plt_upper_95: number;
+  /** No calibrated platelet model: platelet curves are null and only recorded counts are drawn. */
+  plt_predicted: number | null;
+  plt_lower_95: number | null;
+  plt_upper_95: number | null;
   hb_observed?: number;
   wbc_observed?: number;
 }
@@ -230,12 +234,24 @@ export interface PatientProgress {
   patient_name: string;
   transplant_date: string;
   latest_observed_day: number;
-  expected_anc_engraft_day: number;
-  expected_plt_engraft_day: number;
+  expected_anc_engraft_day: number | null;
+  expected_plt_engraft_day: number | null;
   is_anc_engrafted: boolean;
   is_plt_engrafted: boolean;
   timeline_series: TrajectoryPoint[];
   milestones: Milestone[];
+  forecast?: {
+    probability_engrafted_by: Record<string, number>;
+    median_engraftment_day: number | null;
+    engraftment_day_80: [number | null, number | null];
+    delayed_engraftment_risk: boolean;
+    draws_used: number;
+    effective_sample_size: number;
+    particles: number;
+    device: string;
+    calibration: { n_patients: number; holdout_coverage_80: number; holdout_coverage_95: number };
+    measurement_sd: number | null;
+  };
   clinical_summary: {
     current_anc: number | string;
     current_plt: number | string;

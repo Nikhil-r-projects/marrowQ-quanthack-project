@@ -1,7 +1,7 @@
 import { PatientProgress } from '../types';
 
 /** Actual engraftment day from the completed milestone, else the projected day. */
-export function engraftmentDay(progress: PatientProgress, kind: 'anc' | 'plt'): number {
+export function engraftmentDay(progress: PatientProgress, kind: 'anc' | 'plt'): number | null {
   const re = kind === 'anc' ? /neutrophil|anc/i : /platelet|plt/i;
   const done = progress.milestones.find(m => re.test(`${m.id} ${m.name}`) && m.status === 'COMPLETED');
   return done?.actual_day ?? (kind === 'anc' ? progress.expected_anc_engraft_day : progress.expected_plt_engraft_day);

@@ -41,9 +41,11 @@ export const TrajectoryChart: React.FC<TrajectoryChartProps> = ({
   const meta = META[metric];
   const get = (p: TrajectoryPoint) => ({
     obs: metric === 'anc' ? p.anc_observed : p.plt_observed,
-    pred: metric === 'anc' ? p.anc_predicted : p.plt_predicted,
-    lo: metric === 'anc' ? p.anc_lower_95 : p.plt_lower_95,
-    hi: metric === 'anc' ? p.anc_upper_95 : p.plt_upper_95
+    pred: (metric === 'anc' ? p.anc_predicted : p.plt_predicted) ?? undefined,
+    lo: (metric === 'anc' ? p.anc_lower_95 : p.plt_lower_95) ?? undefined,
+    hi: (metric === 'anc' ? p.anc_upper_95 : p.plt_upper_95) ?? undefined,
+    lo80: metric === 'anc' ? p.anc_lower_80 : undefined,
+    hi80: metric === 'anc' ? p.anc_upper_80 : undefined
   });
 
   const geo = useMemo(() => {
@@ -63,9 +65,15 @@ export const TrajectoryChart: React.FC<TrajectoryChartProps> = ({
   const observed = series.filter(s => s.obs != null) as { day: number; obs: number }[];
   const linePath = (key: 'pred' | 'obs', rows: { day: number; [k: string]: number | undefined }[]) =>
     rows.map((r, i) => `${i ? 'L' : 'M'}${x(r.day).toFixed(1)},${y(r[key] as number).toFixed(1)}`).join('');
-  const band = series.length
-    ? `${series.map((s, i) => `${i ? 'L' : 'M'}${x(s.day).toFixed(1)},${y(s.hi).toFixed(1)}`).join('')}${[...series].reverse().map(s => `L${x(s.day).toFixed(1)},${y(s.lo).toFixed(1)}`).join('')}Z`
-    : '';
+  const modelled = series.filter(s => s.pred != null && s.lo != null && s.hi != null) as { day: number; pred: number; lo: number; hi: number; lo80?: number; hi80?: number }[];
+  const area = (rows: typeof modelled, lo: 'lo' | 'lo80', hi: 'hi' | 'hi80') => {
+    const ok = rows.filter(r => r[lo] != null && r[hi] != null);
+    return ok.length
+      ? `${ok.map((s, i) => `${i ? 'L' : 'M'}${x(s.day).toFixed(1)},${y(s[hi] as number).toFixed(1)}`).join('')}${[...ok].reverse().map(s => `L${x(s.day).toFixed(1)},${y(s[lo] as number).toFixed(1)}`).join('')}Z`
+      : '';
+  };
+  const band = area(modelled, 'lo', 'hi');
+  const band80 = area(modelled, 'lo80', 'hi80');
 
   const xStep = d1 - d0 > 60 ? 14 : 7;
   const xTicks: number[] = [];
@@ -117,7 +125,8 @@ export const TrajectoryChart: React.FC<TrajectoryChartProps> = ({
 
         {/* 95% band + model */}
         <path d={band} className="chart-band" />
-        <path d={linePath('pred', series)} className="chart-model" />
+        {band80 && <path d={band80} className="chart-band" />}
+        {modelled.length > 0 && <path d={linePath('pred', modelled)} className="chart-model" />}
 
         {/* Threshold */}
         <line x1={M.left} x2={width - M.right} y1={y(threshold)} y2={y(threshold)} className="chart-threshold" />
@@ -148,7 +157,7 @@ export const TrajectoryChart: React.FC<TrajectoryChartProps> = ({
         {hovered && (
           <g pointerEvents="none">
             <line x1={x(hovered.day)} x2={x(hovered.day)} y1={M.top} y2={height - M.bottom} className="chart-crosshair" />
-            <circle cx={x(hovered.day)} cy={y(hovered.obs ?? hovered.pred)} r={5} className={hovered.obs != null ? 'chart-obs-dot' : 'chart-model-dot'} />
+            {(hovered.obs ?? hovered.pred) != null && <circle cx={x(hovered.day)} cy={y((hovered.obs ?? hovered.pred) as number)} r={5} className={hovered.obs != null ? 'chart-obs-dot' : 'chart-model-dot'} />}
           </g>
         )}
 
@@ -173,8 +182,10 @@ export const TrajectoryChart: React.FC<TrajectoryChartProps> = ({
           {hovered.obs != null && (
             <div className="tt-row"><span className="tt-key obs" /><strong>{fmt(hovered.obs)}</strong><span className="muted">observed</span></div>
           )}
-          <div className="tt-row"><span className="tt-key model" /><strong>{fmt(hovered.pred)}</strong><span className="muted">model</span></div>
-          <div className="tiny muted">95% band {fmt(hovered.lo)} – {fmt(hovered.hi)}</div>
+          {hovered.pred != null && hovered.lo != null && hovered.hi != null && <>
+            <div className="tt-row"><span className="tt-key model" /><strong>{fmt(hovered.pred)}</strong><span className="muted">forecast median</span></div>
+            <div className="tiny muted">95% range {fmt(hovered.lo)} – {fmt(hovered.hi)}</div>
+          </>}
         </div>
       )}
     </div>

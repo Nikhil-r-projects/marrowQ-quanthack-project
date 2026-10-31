@@ -1,0 +1,25 @@
+{
+  "params": {
+    "mtt_mu": 2.2399769114925965,
+    "mtt_sd": 0.026670505985495762,
+    "gamma_mu": -1.8357669601148654,
+    "gamma_sd": 0.16360422554575355,
+    "seed_mu": -0.0007053783722434429,
+    "beta_cd34": 0.9300018418328363,
+    "beta_pb": 0.3646752819698823,
+    "beta_hla": 0.3027531485178978,
+    "seed_sd": 0.00017918304131800107
+  },
+  "neg_log_likelihood": 432.86,
+  "objective_evaluations": 4729,
+  "holdout_validation": {
+    "n": 38,
+    "coverage_80": 0.789,
+    "coverage_95": 0.921,
+    "median_abs_error_days": 2.0,
+    "baseline_median_abs_error_days": 2.0
+  },
+  "fit_seconds": 193.1,
+  "device": "GPU (CuPy)",
+  "n_patients": 187
+}

@@ -269,7 +269,8 @@ def test_patient_progress_and_trajectory(ward_patient):
     # Check 95% confidence bounds
     point = data["timeline_series"][20]
     assert point["anc_lower_95"] <= point["anc_predicted"] <= point["anc_upper_95"]
-    assert point["plt_lower_95"] <= point["plt_predicted"] <= point["plt_upper_95"]
+    assert point["plt_predicted"] is None, "no calibrated platelet model, so no platelet curve"
+    assert data["forecast"]["particles"] >= 10000
 
 def test_add_observation(ward_patient):
     payload = {

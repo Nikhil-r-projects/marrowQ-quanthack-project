@@ -67,7 +67,7 @@ export const PatientProgressView: React.FC<PatientProgressViewProps> = ({ patien
         <div className="card kpi">
           <span className="kpi-label">Neutrophils (ANC) <Velocity size={15} className="muted" aria-label={s?.velocity} /></span>
           <span className="kpi-value">{fmt(anc)}<small>cells/µL</small></span>
-          <span className="kpi-foot">{progress ? (progress.is_anc_engrafted ? `≥ 500 since Day +${engraftmentDay(progress, 'anc')}` : 'Engraftment threshold 500') : ' '}</span>
+          <span className="kpi-foot">{progress ? (progress.is_anc_engrafted ? `Engrafted Day +${engraftmentDay(progress, 'anc')}` : progress.forecast?.median_engraftment_day != null ? `Forecast engraftment Day +${progress.forecast.median_engraftment_day}` : 'Engraftment threshold 500') : ''}</span>
         </div>
         <div className="card kpi">
           <span className="kpi-label">Platelets</span>
@@ -91,7 +91,11 @@ export const PatientProgressView: React.FC<PatientProgressViewProps> = ({ patien
           <div className="card-header">
             <div>
               <div className="card-title">{metric === 'anc' ? 'Neutrophil recovery' : 'Platelet recovery'}</div>
-              <div className="card-subtitle">Log scale · recorded draws against a generic reference curve (not fitted to this patient)</div>
+              <div className="card-subtitle">
+                {metric === 'anc'
+                  ? `Log scale · recorded draws with this patient's forecast (GPU simulation of ${progress?.forecast?.particles.toLocaleString() ?? '20,000'} particles, calibrated to ${progress?.forecast?.calibration.n_patients ?? 187} UCI recoveries)`
+                  : 'Log scale · recorded platelet counts (no validated platelet forecast is available)'}
+              </div>
             </div>
             <div className="row">
               <div className="seg" role="tablist" aria-label="Count">
@@ -130,17 +134,43 @@ export const PatientProgressView: React.FC<PatientProgressViewProps> = ({ patien
               latestDay={latest}
               threshold={metric === 'anc' ? 500 : 20000}
               thresholdLabel={metric === 'anc' ? 'Engraftment 500' : 'Engraftment 20K'}
+              projectedDay={metric === 'anc' && !progress.is_anc_engrafted ? progress.forecast?.median_engraftment_day ?? undefined : undefined}
             />
           )}
 
           <div className="chart-key" style={{ marginTop: '0.75rem' }}>
             <span><i className="key-dot" />Observed</span>
-            <span><i className="key-line model" />Generic reference curve</span>
-            <span><i className="key-band" />Illustrative range</span>
+            {metric === 'anc' && <span><i className="key-line model" />Forecast median</span>}
+            {metric === 'anc' && <span><i className="key-band" />80% and 95% ranges</span>}
             <span><i className="key-line threshold" />Engraftment threshold</span>
           </div>
         </section>
 
+        <div className="stack">
+        {progress?.forecast && !progress.is_anc_engrafted && (
+          <section className="card">
+            <div className="card-header">
+              <div className="card-title">Engraftment forecast</div>
+              <span className={`chip ${progress.forecast.delayed_engraftment_risk ? 'chip-red' : 'chip-green'}`}>
+                {progress.forecast.delayed_engraftment_risk ? 'Delayed engraftment risk' : 'Within expected range'}
+              </span>
+            </div>
+            <div className="grid-3" style={{ gap: '0.75rem' }}>
+              {[14, 21, 28].map(d => (
+                <div key={d}>
+                  <div className="tiny muted">By Day +{d}</div>
+                  <div className="kpi-value" style={{ fontSize: '1.35rem' }}>{Math.round(progress.forecast!.probability_engrafted_by[d] * 100)}%</div>
+                </div>
+              ))}
+            </div>
+            <p className="tiny faint" style={{ marginTop: '0.75rem' }}>
+              {progress.forecast.draws_used
+                ? `Updated with ${progress.forecast.draws_used} recorded neutrophil draw${progress.forecast.draws_used === 1 ? '' : 's'}.`
+                : 'Based on the graft profile only; record neutrophil counts to personalise it.'}
+              {' '}Calibrated on held-out patients: 80% ranges contained {Math.round(progress.forecast.calibration.holdout_coverage_80 * 100)}% of real recovery days. Computed on {progress.forecast.device}.
+            </p>
+          </section>
+        )}
         <section className="card">
           <div className="card-header"><div className="card-title">Transplant milestones</div></div>
           {!progress ? (
@@ -169,6 +199,7 @@ export const PatientProgressView: React.FC<PatientProgressViewProps> = ({ patien
             </ol>
           )}
         </section>
+        </div>
       </div>
 
       {showLab && (

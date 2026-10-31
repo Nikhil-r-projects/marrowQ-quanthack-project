@@ -37,8 +37,61 @@ def to_numpy(a) -> np.ndarray:
     return a.get() if ON_GPU and hasattr(a, "get") else np.asarray(a)
 
 
+_CUDA_SOURCE = r"""
+extern "C" __global__ void granulopoiesis(const float* mtt, const float* gamma, const float* seed,
+                                          float* out, const int n, const int days, const int steps,
+                                          const float dt, const float nss, const float n0) {
+    int i = blockDim.x * blockIdx.x + threadIdx.x;
+    if (i >= n) return;
+    float ktr = 4.0f / mtt[i], g = gamma[i];
+    float s[5] = {seed[i], 0.0f, 0.0f, 0.0f, n0};
+    float k[4][5], tmp[5];
+    out[(long)i * (days + 1)] = n0;
+    for (int d = 1; d <= days; d++) {
+        for (int st = 0; st < steps; st++) {
+            for (int stage = 0; stage < 4; stage++) {
+                float h = stage == 0 ? 0.0f : (stage == 3 ? dt : 0.5f * dt);
+                for (int c = 0; c < 5; c++) tmp[c] = stage == 0 ? s[c] : s[c] + h * k[stage - 1][c];
+                float fb = powf(nss / fmaxf(tmp[4], 1.0f), g);
+                k[stage][0] = ktr * tmp[0] * (fb - 1.0f);
+                k[stage][1] = ktr * (tmp[0] - tmp[1]);
+                k[stage][2] = ktr * (tmp[1] - tmp[2]);
+                k[stage][3] = ktr * (tmp[2] - tmp[3]);
+                k[stage][4] = ktr * (tmp[3] - tmp[4]);
+            }
+            for (int c = 0; c < 5; c++)
+                s[c] = fmaxf(s[c] + dt / 6.0f * (k[0][c] + 2.0f * k[1][c] + 2.0f * k[2][c] + k[3][c]), 0.0f);
+        }
+        out[(long)i * (days + 1) + d] = s[4];
+    }
+}
+"""
+_kernel = None
+
+
 def simulate(mtt, gamma, seed, days: int = HORIZON_DAYS, dt: float = DT):
-    """Integrate all particles; returns daily ANC (particles × days+1) on the active device."""
+    """Integrate all particles; returns daily ANC (particles × days+1) on the active device.
+
+    On the GPU each CUDA thread integrates one particle for the whole horizon (one kernel launch);
+    the NumPy path below is the reference implementation and the CPU fallback."""
+    global _kernel
+    if ON_GPU:
+        if _kernel is None:
+            _kernel = xp.RawKernel(_CUDA_SOURCE, "granulopoiesis")
+        # Single precision: consumer GPUs run FP64 at ~1/64 rate; FP32 agrees with the FP64 reference to <1e-4.
+        m, g_, sd = (xp.ascontiguousarray(xp.asarray(v, dtype=xp.float32)) for v in (mtt, gamma, seed))
+        n = m.shape[0]
+        out = xp.empty((n, days + 1), dtype=xp.float32)
+        threads = 128
+        _kernel(((n + threads - 1) // threads,), (threads,),
+                (m, g_, sd, out, np.int32(n), np.int32(days), np.int32(round(1 / dt)), np.float32(dt),
+                 np.float32(STEADY_STATE_ANC), np.float32(RESIDUAL_ANC)))
+        return out
+    return simulate_reference(mtt, gamma, seed, days, dt)
+
+
+def simulate_reference(mtt, gamma, seed, days: int = HORIZON_DAYS, dt: float = DT):
+    """Vectorised RK4 in NumPy/CuPy array operations (reference for the fused CUDA kernel)."""
     mtt, gamma, seed = (xp.asarray(v, dtype=xp.float64) for v in (mtt, gamma, seed))
     ktr = 4.0 / mtt
     n = mtt.shape[0]

@@ -30,9 +30,19 @@ def _gpu_benchmark(payload: Dict[str, Any], progress: Progress) -> Dict[str, Any
     return {"capabilities": caps, "benchmark": statevector_benchmark(n_qubits, devices, progress)}
 
 
+def _calibrate_biology(payload: Dict[str, Any], progress: Progress) -> Dict[str, Any]:
+    from app.core.biology import calibrate
+    from app.core.biology import forecast
+
+    result = calibrate.run(progress)
+    forecast._calibration.cache_clear()
+    return result
+
+
 # Job kinds this worker executes; later chunks register simulation and quantum handlers here.
 HANDLERS: Dict[str, Handler] = {
     "gpu_benchmark": _gpu_benchmark,
+    "calibrate_biology": _calibrate_biology,
 }
 
 
