@@ -51,34 +51,42 @@ def test_quantum_estimate_budget_endpoint():
     assert data["within_budget"] is True
 
 
+def _run_queued(kind, **payload_overrides):
+    job = jobs.claim_next_job("test-worker", [kind])
+    assert job is not None
+    job["payload"].update(payload_overrides)
+    Worker("test-worker")._execute(job)
+    done = jobs.get_job(job["job_id"])
+    assert done["status"] == "succeeded", done["error"]
+
+
 def test_quantum_compare_backends_endpoint():
-    # Small test on 4 qubits, 256 shots
-    res = client.get("/api/quantum/compare-backends?shots=256&n_qubits=2")
-    assert res.status_code == 200
-    data = res.json()
-    assert "ideal" in data
-    assert "noisy_simulation" in data
-    assert "hardware" in data
+    # First request queues the computation on the worker instead of running it in the request.
+    first = client.get("/api/quantum/compare-backends?shots=256&n_qubits=2").json()
+    assert first["result"] is None and first["job"]["kind"] == "compare_backends"
+    _run_queued("compare_backends")
+    data = client.get("/api/quantum/compare-backends?shots=256&n_qubits=2").json()["result"]
     assert data["ideal"]["is_simulator"] is True
     assert data["noisy_simulation"]["is_simulator"] is True
-    # Rule 5 check: never label a simulator run as hardware
-    assert data["hardware"]["available"] in (True, False)
-    if not data["hardware"]["available"]:
-        assert data["hardware"]["status"] == "UNAUTHENTICATED"
+    assert len(data["train_patients"]) == 16 and len(data["test_patients"]) == 8
+    # Never labels a simulation as hardware: hardware results only come from a real IBM job.
+    assert data["hardware_run"] is None
+
+
+def test_hardware_run_refused_without_ibm_connection():
+    res = client.post("/api/quantum/hardware-run", json={"shots": 512, "n_qubits": 4})
+    assert res.status_code == 409
 
 
 def test_quantum_sweep_endpoint():
-    # Test sweep with 2 splits and 1 repeat on 2 qubits
-    res = client.get("/api/quantum/sweep?splits=2&repeats=1")
-    assert res.status_code == 200
-    data = res.json()
+    first = client.get("/api/quantum/sweep?splits=2&repeats=1").json()
+    assert first["job"]["kind"] == "quantum_cv_sweep"
+    _run_queued("quantum_cv_sweep", qubits_list=[2])
+    data = client.get("/api/quantum/sweep?splits=2&repeats=1").json()["result"]
     assert data["dataset"] == "UCI Bone Marrow Transplant: Children (n=187)"
-    assert data["classical_baseline_auc"] == 0.755
-    assert "sweep_table" in data
-    assert len(data["sweep_table"]) > 0
+    # The classical baseline is computed on the same folds, not a constant.
+    assert 0.5 < data["classical_baseline_auc"] < 1.0
+    assert len(data["sweep_table"]) == 1
     row0 = data["sweep_table"][0]
-    assert "roc_auc" in row0
-    assert "roc_auc_ci" in row0
-    assert "off_diagonal_variance" in row0
-    assert "kernel_target_alignment" in row0
-
+    for key in ("roc_auc", "roc_auc_ci", "off_diagonal_variance", "kernel_target_alignment"):
+        assert key in row0

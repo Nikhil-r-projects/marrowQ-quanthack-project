@@ -1,0 +1,583 @@
+{
+  "dataset": "UCI Bone Marrow Transplant: Children (n=187)",
+  "target": "early_engraftment",
+  "classical_baseline_model": "Logistic Regression (L2)",
+  "classical_baseline_auc": 0.753,
+  "classical_baseline_ci": [
+    0.6828,
+    0.8163
+  ],
+  "cv_protocol": "2x5 repeated stratified CV (same folds for the classical baseline)",
+  "sweep_table": [
+    {
+      "qubits": 2,
+      "roc_auc": 0.5418,
+      "roc_auc_ci": [
+        0.4558,
+        0.6202
+      ],
+      "balanced_accuracy": 0.5655,
+      "balanced_accuracy_ci": [
+        0.4942,
+        0.6339
+      ],
+      "brier_score": 0.2493,
+      "off_diagonal_variance": 0.031565,
+      "geometric_difference_vs_rbf": 1.7018,
+      "kernel_target_alignment": 0.03385,
+      "is_concentrated": false,
+      "best_bandwidth": 0.1,
+      "best_C": 0.1,
+      "training_time_seconds": 30.7916,
+      "metric": {
+        "model_name": "quantum_kernel_svm",
+        "display_name": "Quantum-Kernel SVM (2 Qubits, ZZ Map)",
+        "accuracy": 0.5508,
+        "balanced_accuracy": 0.5655,
+        "precision": 0.4722,
+        "recall": 0.6538,
+        "f1_score": 0.5484,
+        "roc_auc": 0.5418,
+        "brier_score": 0.2493,
+        "confusion_matrix": [
+          [
+            52,
+            57
+          ],
+          [
+            27,
+            51
+          ]
+        ],
+        "training_time_seconds": 30.7916,
+        "inference_time_seconds": 0.0,
+        "test_sample_count": 187,
+        "status": "completed",
+        "error_message": null,
+        "extra_info": null,
+        "roc_auc_ci": [
+          0.4558,
+          0.6202
+        ],
+        "balanced_accuracy_ci": [
+          0.4942,
+          0.6339
+        ],
+        "brier_ci": [
+          0.2286,
+          0.2725
+        ],
+        "roc_auc_repeat_sd": 0.0208,
+        "calibration": [
+          {
+            "predicted": 0.1949,
+            "observed": 0.2895,
+            "n": 38.0
+          },
+          {
+            "predicted": 0.3294,
+            "observed": 0.3784,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.4459,
+            "observed": 0.5405,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.5248,
+            "observed": 0.5135,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.5973,
+            "observed": 0.3684,
+            "n": 38.0
+          }
+        ],
+        "best_params": {
+          "bandwidth": 0.1,
+          "C": 0.1,
+          "qubits": 2,
+          "reps": 1
+        },
+        "evaluation": "2\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)"
+      }
+    },
+    {
+      "qubits": 4,
+      "roc_auc": 0.5775,
+      "roc_auc_ci": [
+        0.4999,
+        0.6578
+      ],
+      "balanced_accuracy": 0.5838,
+      "balanced_accuracy_ci": [
+        0.5126,
+        0.6527
+      ],
+      "brier_score": 0.2418,
+      "off_diagonal_variance": 0.059455,
+      "geometric_difference_vs_rbf": 1.8532,
+      "kernel_target_alignment": 0.03277,
+      "is_concentrated": false,
+      "best_bandwidth": 0.1,
+      "best_C": 0.1,
+      "training_time_seconds": 39.8258,
+      "metric": {
+        "model_name": "quantum_kernel_svm",
+        "display_name": "Quantum-Kernel SVM (4 Qubits, ZZ Map)",
+        "accuracy": 0.5722,
+        "balanced_accuracy": 0.5838,
+        "precision": 0.4904,
+        "recall": 0.6538,
+        "f1_score": 0.5604,
+        "roc_auc": 0.5775,
+        "brier_score": 0.2418,
+        "confusion_matrix": [
+          [
+            56,
+            53
+          ],
+          [
+            27,
+            51
+          ]
+        ],
+        "training_time_seconds": 39.8258,
+        "inference_time_seconds": 0.0,
+        "test_sample_count": 187,
+        "status": "completed",
+        "error_message": null,
+        "extra_info": null,
+        "roc_auc_ci": [
+          0.4999,
+          0.6578
+        ],
+        "balanced_accuracy_ci": [
+          0.5126,
+          0.6527
+        ],
+        "brier_ci": [
+          0.2219,
+          0.2619
+        ],
+        "roc_auc_repeat_sd": 0.0142,
+        "calibration": [
+          {
+            "predicted": 0.2196,
+            "observed": 0.1842,
+            "n": 38.0
+          },
+          {
+            "predicted": 0.3427,
+            "observed": 0.4595,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.4354,
+            "observed": 0.5676,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.5116,
+            "observed": 0.4595,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.6002,
+            "observed": 0.4211,
+            "n": 38.0
+          }
+        ],
+        "best_params": {
+          "bandwidth": 0.1,
+          "C": 0.1,
+          "qubits": 4,
+          "reps": 1
+        },
+        "evaluation": "2\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)"
+      }
+    },
+    {
+      "qubits": 8,
+      "roc_auc": 0.6366,
+      "roc_auc_ci": [
+        0.5557,
+        0.7163
+      ],
+      "balanced_accuracy": 0.6187,
+      "balanced_accuracy_ci": [
+        0.5434,
+        0.6879
+      ],
+      "brier_score": 0.254,
+      "off_diagonal_variance": 0.043167,
+      "geometric_difference_vs_rbf": 3.739,
+      "kernel_target_alignment": 0.04691,
+      "is_concentrated": false,
+      "best_bandwidth": 0.1,
+      "best_C": 1.0,
+      "training_time_seconds": 44.0162,
+      "metric": {
+        "model_name": "quantum_kernel_svm",
+        "display_name": "Quantum-Kernel SVM (8 Qubits, ZZ Map)",
+        "accuracy": 0.6257,
+        "balanced_accuracy": 0.6187,
+        "precision": 0.5488,
+        "recall": 0.5769,
+        "f1_score": 0.5625,
+        "roc_auc": 0.6366,
+        "brier_score": 0.254,
+        "confusion_matrix": [
+          [
+            72,
+            37
+          ],
+          [
+            33,
+            45
+          ]
+        ],
+        "training_time_seconds": 44.0162,
+        "inference_time_seconds": 0.0,
+        "test_sample_count": 187,
+        "status": "completed",
+        "error_message": null,
+        "extra_info": null,
+        "roc_auc_ci": [
+          0.5557,
+          0.7163
+        ],
+        "balanced_accuracy_ci": [
+          0.5434,
+          0.6879
+        ],
+        "brier_ci": [
+          0.2155,
+          0.2911
+        ],
+        "roc_auc_repeat_sd": 0.0096,
+        "calibration": [
+          {
+            "predicted": 0.0862,
+            "observed": 0.1842,
+            "n": 38.0
+          },
+          {
+            "predicted": 0.2328,
+            "observed": 0.3784,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.3677,
+            "observed": 0.4595,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.5792,
+            "observed": 0.6216,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.7876,
+            "observed": 0.4474,
+            "n": 38.0
+          }
+        ],
+        "best_params": {
+          "bandwidth": 0.1,
+          "C": 1.0,
+          "qubits": 8,
+          "reps": 1
+        },
+        "evaluation": "2\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)"
+      }
+    },
+    {
+      "qubits": 12,
+      "roc_auc": 0.7195,
+      "roc_auc_ci": [
+        0.6378,
+        0.7945
+      ],
+      "balanced_accuracy": 0.6691,
+      "balanced_accuracy_ci": [
+        0.6008,
+        0.7357
+      ],
+      "brier_score": 0.2128,
+      "off_diagonal_variance": 0.027721,
+      "geometric_difference_vs_rbf": 4.18,
+      "kernel_target_alignment": 0.07011,
+      "is_concentrated": false,
+      "best_bandwidth": 0.1,
+      "best_C": 1.0,
+      "training_time_seconds": 52.7341,
+      "metric": {
+        "model_name": "quantum_kernel_svm",
+        "display_name": "Quantum-Kernel SVM (12 Qubits, ZZ Map)",
+        "accuracy": 0.6738,
+        "balanced_accuracy": 0.6691,
+        "precision": 0.6024,
+        "recall": 0.641,
+        "f1_score": 0.6211,
+        "roc_auc": 0.7195,
+        "brier_score": 0.2128,
+        "confusion_matrix": [
+          [
+            76,
+            33
+          ],
+          [
+            28,
+            50
+          ]
+        ],
+        "training_time_seconds": 52.7341,
+        "inference_time_seconds": 0.0,
+        "test_sample_count": 187,
+        "status": "completed",
+        "error_message": null,
+        "extra_info": null,
+        "roc_auc_ci": [
+          0.6378,
+          0.7945
+        ],
+        "balanced_accuracy_ci": [
+          0.6008,
+          0.7357
+        ],
+        "brier_ci": [
+          0.1776,
+          0.2495
+        ],
+        "roc_auc_repeat_sd": 0.0002,
+        "calibration": [
+          {
+            "predicted": 0.0852,
+            "observed": 0.2105,
+            "n": 38.0
+          },
+          {
+            "predicted": 0.2129,
+            "observed": 0.3243,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.3624,
+            "observed": 0.2432,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.577,
+            "observed": 0.5676,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.8156,
+            "observed": 0.7368,
+            "n": 38.0
+          }
+        ],
+        "best_params": {
+          "bandwidth": 0.1,
+          "C": 1.0,
+          "qubits": 12,
+          "reps": 1
+        },
+        "evaluation": "2\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)"
+      }
+    },
+    {
+      "qubits": 16,
+      "roc_auc": 0.6814,
+      "roc_auc_ci": [
+        0.6063,
+        0.7537
+      ],
+      "balanced_accuracy": 0.6499,
+      "balanced_accuracy_ci": [
+        0.5831,
+        0.7142
+      ],
+      "brier_score": 0.2296,
+      "off_diagonal_variance": 0.020737,
+      "geometric_difference_vs_rbf": 4.9177,
+      "kernel_target_alignment": 0.06737,
+      "is_concentrated": false,
+      "best_bandwidth": 0.1,
+      "best_C": 1.0,
+      "training_time_seconds": 114.8866,
+      "metric": {
+        "model_name": "quantum_kernel_svm",
+        "display_name": "Quantum-Kernel SVM (16 Qubits, ZZ Map)",
+        "accuracy": 0.6578,
+        "balanced_accuracy": 0.6499,
+        "precision": 0.5875,
+        "recall": 0.6026,
+        "f1_score": 0.5949,
+        "roc_auc": 0.6814,
+        "brier_score": 0.2296,
+        "confusion_matrix": [
+          [
+            76,
+            33
+          ],
+          [
+            31,
+            47
+          ]
+        ],
+        "training_time_seconds": 114.8866,
+        "inference_time_seconds": 0.0,
+        "test_sample_count": 187,
+        "status": "completed",
+        "error_message": null,
+        "extra_info": null,
+        "roc_auc_ci": [
+          0.6063,
+          0.7537
+        ],
+        "balanced_accuracy_ci": [
+          0.5831,
+          0.7142
+        ],
+        "brier_ci": [
+          0.1969,
+          0.2651
+        ],
+        "roc_auc_repeat_sd": 0.0086,
+        "calibration": [
+          {
+            "predicted": 0.0861,
+            "observed": 0.2368,
+            "n": 38.0
+          },
+          {
+            "predicted": 0.2014,
+            "observed": 0.2973,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.3421,
+            "observed": 0.3514,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.5728,
+            "observed": 0.5676,
+            "n": 37.0
+          },
+          {
+            "predicted": 0.7806,
+            "observed": 0.6316,
+            "n": 38.0
+          }
+        ],
+        "best_params": {
+          "bandwidth": 0.1,
+          "C": 1.0,
+          "qubits": 16,
+          "reps": 1
+        },
+        "evaluation": "2\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)"
+      }
+    }
+  ],
+  "best_qubit_setting": {
+    "qubits": 12,
+    "roc_auc": 0.7195,
+    "roc_auc_ci": [
+      0.6378,
+      0.7945
+    ],
+    "balanced_accuracy": 0.6691,
+    "balanced_accuracy_ci": [
+      0.6008,
+      0.7357
+    ],
+    "brier_score": 0.2128,
+    "off_diagonal_variance": 0.027721,
+    "geometric_difference_vs_rbf": 4.18,
+    "kernel_target_alignment": 0.07011,
+    "is_concentrated": false,
+    "best_bandwidth": 0.1,
+    "best_C": 1.0,
+    "training_time_seconds": 52.7341,
+    "metric": {
+      "model_name": "quantum_kernel_svm",
+      "display_name": "Quantum-Kernel SVM (12 Qubits, ZZ Map)",
+      "accuracy": 0.6738,
+      "balanced_accuracy": 0.6691,
+      "precision": 0.6024,
+      "recall": 0.641,
+      "f1_score": 0.6211,
+      "roc_auc": 0.7195,
+      "brier_score": 0.2128,
+      "confusion_matrix": [
+        [
+          76,
+          33
+        ],
+        [
+          28,
+          50
+        ]
+      ],
+      "training_time_seconds": 52.7341,
+      "inference_time_seconds": 0.0,
+      "test_sample_count": 187,
+      "status": "completed",
+      "error_message": null,
+      "extra_info": null,
+      "roc_auc_ci": [
+        0.6378,
+        0.7945
+      ],
+      "balanced_accuracy_ci": [
+        0.6008,
+        0.7357
+      ],
+      "brier_ci": [
+        0.1776,
+        0.2495
+      ],
+      "roc_auc_repeat_sd": 0.0002,
+      "calibration": [
+        {
+          "predicted": 0.0852,
+          "observed": 0.2105,
+          "n": 38.0
+        },
+        {
+          "predicted": 0.2129,
+          "observed": 0.3243,
+          "n": 37.0
+        },
+        {
+          "predicted": 0.3624,
+          "observed": 0.2432,
+          "n": 37.0
+        },
+        {
+          "predicted": 0.577,
+          "observed": 0.5676,
+          "n": 37.0
+        },
+        {
+          "predicted": 0.8156,
+          "observed": 0.7368,
+          "n": 38.0
+        }
+      ],
+      "best_params": {
+        "bandwidth": 0.1,
+        "C": 1.0,
+        "qubits": 12,
+        "reps": 1
+      },
+      "evaluation": "2\u00d75-fold repeated stratified CV, nested tuning; threshold 0.42 (base rate)"
+    }
+  }
+}

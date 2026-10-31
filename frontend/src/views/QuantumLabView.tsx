@@ -6,14 +6,63 @@ import {
   Sliders, Gauge, ShieldAlert, GitCompare, Microchip
 } from 'lucide-react';
 import {
-  QuantumBackend, QuantumStatus, QuantumJob,
+  QuantumBackend, QuantumStatus, QuantumJob, HardwareKernelRun,
   QuantumSweepResult, BackendsComparisonResult, GPUSimulateJobResult, BudgetEstimateResult
 } from '../types';
 import {
   fetchQuantumBackends, fetchQuantumStatus, fetchQuantumJobs,
   testQuantumConnection, fetchQuantumSweep, fetchQuantumBackendsComparison,
-  estimateQuantumBudget, submitGpuSimulate, fetchComputeJob
+  estimateQuantumBudget, submitGpuSimulate, fetchJob, submitHardwareRun, fetchLatestHardwareRun
 } from '../api';
+
+type JobProgress = { progress: number; message: string } | null;
+
+/** Polls a worker job until it finishes; resolves on success, rejects with the worker's error. */
+function waitForJob(jobId: string, onProgress: (p: { progress: number; message: string }) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setInterval(async () => {
+      try {
+        const job = await fetchJob(jobId);
+        if (job.status === 'succeeded') { clearInterval(timer); resolve(); }
+        else if (job.status === 'failed') { clearInterval(timer); reject(new Error(job.error || 'The worker job failed.')); }
+        else onProgress({ progress: job.progress ?? 0, message: job.progress_message || (job.status === 'queued' ? 'Waiting for the compute worker…' : 'Running…') });
+      } catch { /* transient: keep polling */ }
+    }, 2000);
+  });
+}
+
+/** Circuits in one hardware kernel run: 16 train (upper triangle) + 8 test × 16 train (ibm_quantum.py HARDWARE_CIRCUITS). */
+const HARDWARE_CIRCUITS = 16 * 15 / 2 + 8 * 16;
+
+const JobBar: React.FC<{ job: { progress: number; message: string }; color: string }> = ({ job, color }) => (
+  <div style={{ margin: '0.5rem 0 1rem' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#cbd5e1', marginBottom: '0.35rem' }}>
+      <span>{job.message}</span><span>{Math.round(job.progress * 100)}%</span>
+    </div>
+    <div style={{ height: 6, background: 'rgba(255,255,255,0.08)', borderRadius: 3, overflow: 'hidden' }}>
+      <div style={{ width: `${Math.max(3, job.progress * 100)}%`, height: '100%', background: color, transition: 'width 0.4s' }} />
+    </div>
+  </div>
+);
+
+const ErrorNote: React.FC<{ text: string }> = ({ text }) => (
+  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)',
+    borderRadius: '8px', padding: '0.75rem 1rem', fontSize: '0.8rem', color: '#fca5a5', margin: '0.5rem 0 1rem' }}>
+    <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} /><span>{text}</span>
+  </div>
+);
+
+const MatrixPreview: React.FC<{ title: string; matrix: number[][]; rgb: string }> = ({ title, matrix, rgb }) => (
+  <div>
+    <span style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'block', marginBottom: '0.4rem' }}>{title}</span>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${matrix[0]?.length ?? 4}, 1fr)`, gap: '4px' }}>
+      {matrix.flatMap((row, r) => row.map((v, c) => (
+        <div key={`${r}-${c}`} style={{ background: `rgba(${rgb}, ${Math.max(0.1, v)})`, padding: '0.4rem 0.2rem', textAlign: 'center',
+          fontSize: '0.68rem', fontFamily: 'monospace', borderRadius: '4px', color: v > 0.5 ? '#fff' : '#94a3b8' }}>{v.toFixed(2)}</div>
+      )))}
+    </div>
+  </div>
+);
 
 export const QuantumLabView: React.FC = () => {
   const [backends, setBackends] = useState<QuantumBackend[]>([]);
@@ -24,12 +73,25 @@ export const QuantumLabView: React.FC = () => {
   const [sweepResult, setSweepResult] = useState<QuantumSweepResult | null>(null);
   const [loadingSweep, setLoadingSweep] = useState<boolean>(false);
   const [sweepError, setSweepError] = useState<string | null>(null);
+  const [sweepJob, setSweepJob] = useState<JobProgress>(null);
 
   // Backends Comparison state
   const [compResult, setCompResult] = useState<BackendsComparisonResult | null>(null);
   const [loadingComp, setLoadingComp] = useState<boolean>(false);
-  const [compShots, setCompShots] = useState<number>(1024);
+  const [compShots, setCompShots] = useState<number>(512);
   const [compQubits, setCompQubits] = useState<number>(4);
+  const [compJob, setCompJob] = useState<JobProgress>(null);
+  const [compError, setCompError] = useState<string | null>(null);
+
+  // IBM hardware run state
+  const [hwRun, setHwRun] = useState<HardwareKernelRun | null>(null);
+  const [hwJob, setHwJob] = useState<JobProgress>(null);
+  const [hwError, setHwError] = useState<string | null>(null);
+  const [hwEstimate, setHwEstimate] = useState<number | null>(null);
+
+  useEffect(() => {
+    estimateQuantumBudget(HARDWARE_CIRCUITS, compShots).then(r => setHwEstimate(r.estimated_qpu_seconds)).catch(() => setHwEstimate(null));
+  }, [compShots]);
 
   // GPU Simulation state
   const [simPatients, setSimPatients] = useState<number>(24);
@@ -71,24 +133,69 @@ export const QuantumLabView: React.FC = () => {
     setLoadingSweep(true);
     setSweepError(null);
     try {
-      const data = await fetchQuantumSweep(5, 2, refresh);
-      setSweepResult(data);
+      const { result, job } = await fetchQuantumSweep(5, 2, refresh);
+      if (result) setSweepResult(result);
+      if (job) {
+        setSweepJob({ progress: job.progress ?? 0, message: 'Queued on the compute worker…' });
+        await waitForJob(job.job_id, setSweepJob);
+        setSweepResult((await fetchQuantumSweep(5, 2, false)).result);
+      }
     } catch (err: any) {
       setSweepError(err.message || 'Failed to load qubit sweep.');
     } finally {
+      setSweepJob(null);
       setLoadingSweep(false);
     }
   };
 
   const loadComparison = async (refresh: boolean = false) => {
     setLoadingComp(true);
+    setCompError(null);
     try {
-      const data = await fetchQuantumBackendsComparison(compShots, compQubits, refresh);
-      setCompResult(data);
+      const { result, job } = await fetchQuantumBackendsComparison(compShots, compQubits, refresh);
+      if (result) setCompResult(result);
+      if (job) {
+        setCompJob({ progress: job.progress ?? 0, message: 'Queued on the compute worker…' });
+        await waitForJob(job.job_id, setCompJob);
+        setCompResult((await fetchQuantumBackendsComparison(compShots, compQubits, false)).result);
+      }
     } catch (err: any) {
-      console.error("Comparison load error:", err);
+      setCompError(err.message || 'Failed to load the backend comparison.');
     } finally {
+      setCompJob(null);
       setLoadingComp(false);
+    }
+  };
+
+  const followHardwareJob = async (jobId: string) => {
+    setHwJob({ progress: 0, message: 'Queued on the compute worker…' });
+    try {
+      await waitForJob(jobId, setHwJob);
+      const latest = await fetchLatestHardwareRun();
+      setHwRun(latest.result);
+      loadBaseData();
+    } catch (err: any) {
+      setHwError(err.message);
+    } finally {
+      setHwJob(null);
+    }
+  };
+
+  const loadHardwareRun = async () => {
+    try {
+      const { result, job } = await fetchLatestHardwareRun();
+      setHwRun(result);
+      if (job) followHardwareJob(job.job_id);
+    } catch { /* server offline: nothing to show */ }
+  };
+
+  const handleRunHardware = async () => {
+    setHwError(null);
+    try {
+      const { job } = await submitHardwareRun({ shots: compShots, n_qubits: compQubits });
+      if (job) await followHardwareJob(job.job_id);
+    } catch (err: any) {
+      setHwError(err.message);
     }
   };
 
@@ -105,6 +212,7 @@ export const QuantumLabView: React.FC = () => {
     loadBaseData();
     loadSweep(false);
     loadComparison(false);
+    loadHardwareRun();
     handleEstimateBudget();
   }, []);
 
@@ -142,16 +250,16 @@ export const QuantumLabView: React.FC = () => {
       // Poll worker job
       const pollInterval = setInterval(async () => {
         try {
-          const job = await fetchComputeJob(job_id);
+          const job = await fetchJob(job_id);
           if (job.status === 'succeeded') {
             clearInterval(pollInterval);
             setSimRunning(false);
             setSimProgress({ progress: 1.0, message: 'Simulation completed!' });
-            setSimResult(job.result);
+            setSimResult((job as unknown as { result: GPUSimulateJobResult }).result);
           } else if (job.status === 'failed') {
             clearInterval(pollInterval);
             setSimRunning(false);
-            alert(`GPU Simulation Failed: ${job.error_message || 'Worker error'}`);
+            alert(`GPU simulation failed: ${job.error || 'Worker error'}`);
           } else {
             setSimProgress({
               progress: job.progress || 0.3,
@@ -311,8 +419,11 @@ export const QuantumLabView: React.FC = () => {
                 </span>
               </div>
               <div style={{ fontSize: '0.82rem', color: '#94a3b8' }}>
-                Classical Benchmark to Beat: <strong style={{ color: '#38bdf8' }}>Logistic Regression ROC-AUC 0.755 (0.685–0.819)</strong>.
-                Evaluated under identical RepeatedStratifiedKFold (5×5 nested CV) with inner bandwidth (Shaydulin & Wild 2022) and margin tuning.
+                {sweepResult ? (
+                  <>Classical baseline on the same folds: <strong style={{ color: '#38bdf8' }}>{sweepResult.classical_baseline_model ?? 'Logistic Regression'} ROC-AUC {sweepResult.classical_baseline_auc.toFixed(3)}
+                  {sweepResult.classical_baseline_ci && ` (${sweepResult.classical_baseline_ci[0].toFixed(3)}–${sweepResult.classical_baseline_ci[1].toFixed(3)})`}</strong>.{' '}
+                  {sweepResult.cv_protocol ?? 'Repeated stratified CV'}; bandwidth (Shaydulin &amp; Wild 2022) and C tuned on inner folds.</>
+                ) : 'Quantum-kernel SVM under repeated stratified CV with a classical baseline on the same folds.'}
               </div>
             </div>
 
@@ -323,7 +434,7 @@ export const QuantumLabView: React.FC = () => {
               style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', padding: '0.5rem 1rem' }}
             >
               <RefreshCw size={14} className={loadingSweep ? 'animate-spin' : ''} />
-              {loadingSweep ? 'Running 5×5 CV Sweep...' : 'Re-run Qubit Sweep'}
+              {loadingSweep ? 'Sweep running…' : 'Re-run Qubit Sweep'}
             </button>
           </div>
 
@@ -333,21 +444,20 @@ export const QuantumLabView: React.FC = () => {
               Qubit Scaling Benchmark (2 to 16 Qubits)
             </h3>
 
-            {loadingSweep && (
-              <div style={{ padding: '3rem', textAlign: 'center', color: '#94a3b8' }}>
-                <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 1rem', display: 'block', color: '#60a5fa' }} />
-                Computing nested cross-validation across qubit dimensions on GPU...
-              </div>
+            {sweepJob && <JobBar job={sweepJob} color="#60a5fa" />}
+            {sweepError && <ErrorNote text={sweepError} />}
+            {loadingSweep && !sweepJob && !sweepResult && (
+              <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>Loading…</div>
             )}
 
-            {!loadingSweep && sweepResult && (
+            {sweepResult && (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.12)', textAlign: 'left', color: '#94a3b8' }}>
                       <th style={{ padding: '0.75rem 0.5rem' }}>Qubits</th>
                       <th style={{ padding: '0.75rem 0.5rem' }}>ROC-AUC (95% CI)</th>
-                      <th style={{ padding: '0.75rem 0.5rem' }}>vs Classical Baseline (0.755)</th>
+                      <th style={{ padding: '0.75rem 0.5rem' }}>vs Classical Baseline ({sweepResult.classical_baseline_auc.toFixed(3)})</th>
                       <th style={{ padding: '0.75rem 0.5rem' }}>Balanced Acc (95% CI)</th>
                       <th style={{ padding: '0.75rem 0.5rem' }}>Off-Diagonal Variance (Concentration)</th>
                       <th style={{ padding: '0.75rem 0.5rem' }}>Geometric Diff vs RBF</th>
@@ -435,7 +545,7 @@ export const QuantumLabView: React.FC = () => {
               </div>
             )}
 
-            {!loadingSweep && !sweepResult && (
+            {!loadingSweep && !sweepResult && !sweepError && (
               <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8' }}>
                 No sweep data loaded. Click "Re-run Qubit Sweep" to execute.
               </div>
@@ -637,60 +747,89 @@ export const QuantumLabView: React.FC = () => {
                   </div>
                 )}
               </div>
-
-              {/* 3. Physical IBM Hardware */}
-              <div className="spatial-card" style={{ padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: compResult.hardware.available ? '#34d399' : '#f87171' }} />
-                    <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#fff' }}>
-                      Physical IBM Quantum QPU
-                    </h4>
-                  </div>
-                  <span style={{
-                    fontSize: '0.7rem',
-                    padding: '0.2rem 0.5rem',
-                    background: compResult.hardware.available ? 'rgba(52, 211, 153, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                    color: compResult.hardware.available ? '#34d399' : '#f87171',
-                    borderRadius: '4px'
-                  }}>
-                    {compResult.hardware.available ? 'Connected' : 'Unauthenticated'}
-                  </span>
-                </div>
-
-                <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '1.5rem' }}>
-                  {compResult.hardware.message}
-                </div>
-
-                {!compResult.hardware.available ? (
-                  <div style={{
-                    background: 'rgba(239, 68, 68, 0.08)',
-                    border: '1px solid rgba(239, 68, 68, 0.25)',
-                    borderRadius: '8px',
-                    padding: '1.25rem',
-                    textAlign: 'center'
-                  }}>
-                    <ShieldAlert size={28} style={{ color: '#f87171', margin: '0 auto 0.75rem', display: 'block' }} />
-                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#fca5a5', lineHeight: 1.5 }}>
-                      <strong>Strict Transparency Rule:</strong> Simulator runs are never masqueraded as hardware. Configure <code style={{ color: '#fff' }}>IBM_QUANTUM_API_KEY</code> to submit circuits to live QPUs via Qiskit Runtime SamplerV2.
-                    </p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <div style={{ background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '8px' }}>
-                      <span style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block' }}>Target Backend</span>
-                      <strong style={{ fontSize: '1rem', color: '#34d399' }}>{compResult.hardware.backend_name}</strong>
-                    </div>
-                    <div style={{ background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '8px' }}>
-                      <span style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block' }}>Provenance</span>
-                      <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>ibm_quantum_hardware</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
             </div>
           )}
+
+          {compResult && (
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+              Test AUC here is on only {compResult.test_patients?.length ?? 8} held-out patients, so it shows whether a backend preserves the kernel, not
+              predictive skill; use the cross-validated qubit sweep for performance. Computed {compResult.computed_at ? new Date(compResult.computed_at).toLocaleString() : ''} · {compResult.shots} shots.
+            </div>
+          )}
+          {compJob && <JobBar job={compJob} color="#fbbf24" />}
+          {compError && <ErrorNote text={compError} />}
+
+          {/* 3. Physical IBM Hardware: a real QPU run on the same patients */}
+          <div className="spatial-card" style={{ padding: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ width: 10, height: 10, borderRadius: '50%', background: qStatus?.is_connected_to_hardware ? '#34d399' : '#f87171' }} />
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#fff' }}>Physical IBM Quantum QPU</h4>
+                <span style={{ fontSize: '0.7rem', padding: '0.2rem 0.5rem', borderRadius: '4px',
+                  background: qStatus?.is_connected_to_hardware ? 'rgba(52, 211, 153, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                  color: qStatus?.is_connected_to_hardware ? '#34d399' : '#f87171' }}>
+                  {qStatus?.is_connected_to_hardware ? `Connected · ${qStatus.default_backend}` : 'Not connected'}
+                </span>
+              </div>
+              <button
+                onClick={handleRunHardware}
+                disabled={!qStatus?.is_connected_to_hardware || !!hwJob || qStatus?.usage?.usage_limit_reached}
+                className="btn btn-primary"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', padding: '0.5rem 1rem' }}
+              >
+                <Microchip size={14} />
+                {hwJob ? 'Running on IBM hardware…' : `Run on IBM hardware (${compQubits} qubits, ${compShots} shots)`}
+              </button>
+            </div>
+
+            <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '1rem', lineHeight: 1.6 }}>
+              {qStatus?.is_connected_to_hardware ? (
+                <>
+                  Submits {HARDWARE_CIRCUITS} compute–uncompute kernel circuits (the same 16 train / 8 test UCI patients as above) as one
+                  SamplerV2 job, then scores the measured kernel against the ideal one.
+                  {hwEstimate != null && <> Estimated QPU time ≈ {hwEstimate.toFixed(0)} s.</>}
+                  {qStatus.usage && <> Plan usage: {qStatus.usage.usage_consumed_seconds} of {qStatus.usage.usage_limit_seconds} s used, {qStatus.usage.usage_remaining_seconds} s remaining this period.</>}
+                </>
+              ) : (
+                <>Hardware results are never simulated. {qStatus?.connection_error ? `Connection: ${qStatus.connection_error}` : 'Set QISKIT_IBM_TOKEN and QISKIT_IBM_INSTANCE in the server .env to connect.'}</>
+              )}
+            </div>
+
+            {hwJob && <JobBar job={hwJob} color="#34d399" />}
+            {hwError && <ErrorNote text={hwError} />}
+
+            {hwRun ? (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+                  {[
+                    ['Backend', hwRun.backend_name],
+                    ['IBM job ID', hwRun.job_id],
+                    ['Frobenius error vs ideal', `${(hwRun.frobenius_error_vs_ideal * 100).toFixed(2)}%`],
+                    ['Kernel alignment', hwRun.alignment.toFixed(4)],
+                    ['QSVM test AUC', hwRun.test_auc.toFixed(3)],
+                    ['QPU seconds used', hwRun.qpu_seconds_used != null ? `${hwRun.qpu_seconds_used} s` : 'not reported'],
+                    ['Circuits · depth', `${hwRun.circuits} · ${hwRun.transpiled_depth}`],
+                    ['Qubits · shots', `${hwRun.n_qubits} · ${hwRun.shots}`],
+                  ].map(([label, value]) => (
+                    <div key={label} style={{ background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '8px', minWidth: 0 }}>
+                      <span style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'block' }}>{label}</span>
+                      <strong style={{ fontSize: '0.95rem', color: '#f8fafc', wordBreak: 'break-all' }}>{value}</strong>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+                  <MatrixPreview title="Measured on hardware (4×4 block)" matrix={hwRun.matrix_preview} rgb="52, 211, 153" />
+                  <MatrixPreview title="Ideal statevector, same patients" matrix={hwRun.ideal_matrix_preview} rgb="56, 189, 248" />
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.75rem' }}>
+                  Completed {new Date(hwRun.completed_at).toLocaleString()} · provenance {hwRun.provenance}
+                  {compResult && hwRun.n_qubits !== compResult.n_qubits && <> · this run used {hwRun.n_qubits} qubits; the simulations above use {compResult.n_qubits}</>}
+                </div>
+              </>
+            ) : !hwJob && (
+              <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>No hardware run yet.</div>
+            )}
+          </div>
         </div>
       )}
 

@@ -7,11 +7,11 @@ from app.core.ibm_quantum import quantum_manager, BudgetExceededError
 
 
 def test_estimate_qpu_seconds():
-    # 10 circuits, 1000 shots: overhead 5s + 10 * 1000 * 0.00015 = 5.0 + 1.5 = 6.5s
+    # 10 circuits, 1000 shots: overhead 5s + 10 * 1000 * 0.00025 = 7.5s (calibrated on a measured ibm_kingston run)
     est = quantum_manager.estimate_qpu_seconds(total_circuits=10, shots=1000)
-    assert est == pytest.approx(6.5, rel=1e-2)
+    assert est == pytest.approx(7.5, rel=1e-2)
 
-    # 500 circuits, 8192 shots: 5.0 + 500 * 8192 * 0.00015 = 5.0 + 614.4 = 619.4s
+    # 500 circuits, 8192 shots: 5.0 + 500 * 8192 * 0.00025 = 1029s
     large_est = quantum_manager.estimate_qpu_seconds(total_circuits=500, shots=8192)
     assert large_est > 600.0
 

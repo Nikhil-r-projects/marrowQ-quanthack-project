@@ -7,6 +7,7 @@ _tmp = tempfile.mkdtemp(prefix="marrowq-test-")
 os.environ["MARROWQ_DB_PATH"] = os.path.join(_tmp, "test.db")
 os.environ["MARROWQ_DATA_DIR"] = os.path.join(_tmp, "data")
 os.environ["MARROWQ_ARTIFACTS_DIR"] = os.path.join(_tmp, "artifacts")
+os.environ["MARROWQ_RESULTS_DIR"] = os.path.join(_tmp, "results")
 # Never let real IBM or Anthropic credentials (from .env) reach tests or spend money.
 os.environ["QISKIT_IBM_TOKEN"] = ""
 os.environ["ANTHROPIC_API_KEY"] = ""

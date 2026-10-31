@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from app.core.database import list_patients, save_patient
+from app.core.database import list_patients, save_clinical_observation, save_patient
 from app.core.datasets import uci_bmt
 
 
@@ -63,6 +63,48 @@ def _record_values(row: pd.Series) -> Dict[str, Any]:
     return values
 
 
+EXAMPLE_LAB_SOURCE = "Example: simulated by the calibrated model, consistent with the record's recovery day"
+
+
+def example_counts(row: pd.Series, days: int, seed: int) -> List[Dict[str, Any]]:
+    """Daily ANC and platelet counts for an example patient (Day 1..days).
+
+    ANC: median trajectory of the calibrated granulopoiesis particles for this record's graft whose simulated
+    engraftment day equals the record's recorded recovery day, with 15% log-normal assay noise. Platelets:
+    log-linear course from a Day +7 nadir of 15,000/µL to 50,000/µL on the recorded platelet-recovery day.
+    """
+    from app.core.biology import calibrate, granulopoiesis as g
+
+    rng = np.random.default_rng(seed)
+    params = calibrate.load_params()["params"]
+    z = rng.standard_normal((20000, 3))
+    mtt, gamma, seed_cells = g.particle_parameters(params, calibrate.covariates(row), z)
+    anc = g.to_numpy(g.simulate(mtt, gamma, seed_cells))
+    eng = g.to_numpy(g.engraftment_day(anc))
+    target = row.get("anc_recovery_day")
+    if pd.notna(target):
+        match = np.abs(eng - float(target)) <= 0.5
+        if not match.any():
+            match = np.abs(eng - float(target)) <= np.nanmin(np.abs(eng - float(target))) + 0.5
+    else:
+        match = ~np.isfinite(eng)
+        if not match.any():
+            match = eng >= np.nanpercentile(eng[np.isfinite(eng)], 95)
+    anc_path = np.median(anc[match], axis=0)
+
+    plt_day = row.get("plt_recovery_day")
+    plt_day = float(plt_day) if pd.notna(plt_day) and plt_day > 8 else 40.0
+    out = []
+    for d in range(1, days + 1):
+        anc_v = float(anc_path[min(d, len(anc_path) - 1)] * rng.lognormal(0, 0.15))
+        if d <= 7:
+            plt_v = 120000 * (15000 / 120000) ** (d / 7)
+        else:
+            plt_v = 15000 * (50000 / 15000) ** ((d - 7) / (plt_day - 7))
+        out.append({"day": d, "anc": round(anc_v / 10) * 10, "plt": round(plt_v * rng.lognormal(0, 0.1) / 1000) * 1000})
+    return out
+
+
 def create_example_patients(count: int, seed: int, today: Optional[date] = None) -> List[Dict[str, Any]]:
     """Admit `count` example patients copied from distinct UCI records not already in use.
 
@@ -78,7 +120,7 @@ def create_example_patients(count: int, seed: int, today: Optional[date] = None)
     ]
     today = today or date.today()
     # Spread admissions over the first weeks after infusion, where engraftment is decided.
-    days_post = [5, 9, 12, 16, 3, 7, 14, 19]
+    days_post = [16, 11, 21, 8, 13, 19, 6, 24]
     created = []
     for i in range(count):
         pool = pools[i % 2] or pools[(i + 1) % 2]
@@ -93,5 +135,14 @@ def create_example_patients(count: int, seed: int, today: Optional[date] = None)
             source_record=row.patient_id,
         )
         save_patient(patient)
+        transplant = date.fromisoformat(patient["transplant_date"])
+        for c in example_counts(row, days_post[i % len(days_post)], seed + i):
+            for metric, value, unit in (("Absolute Neutrophil Count (ANC)", c["anc"], "cells/μL"), ("Platelets", c["plt"], "/μL")):
+                save_clinical_observation({
+                    "patient_id": patient["patient_id"], "day_post_tx": c["day"],
+                    "recorded_date": (transplant + timedelta(days=c["day"])).isoformat(),
+                    "metric_type": metric, "value": value, "unit": unit,
+                    "source": EXAMPLE_LAB_SOURCE, "recorded_by": "MarrowQ example generator",
+                })
         created.append(patient)
     return created

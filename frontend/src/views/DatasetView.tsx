@@ -101,13 +101,17 @@ export const DatasetView: React.FC<DatasetViewProps> = ({ dataset, onDatasetLoad
           </div>
 
           {dataset.potential_leakage_warnings.length > 0 && (
-            <div className="alert-banner alert-error">
-              <TriangleAlert size={16} />
+            <div className="alert-banner alert-success">
+              <CheckCircle2 size={16} />
               <div>
-                <strong>Leakage screen · {dataset.potential_leakage_warnings.length} finding{dataset.potential_leakage_warnings.length > 1 ? 's' : ''}</strong>
-                <ul style={{ margin: '0.3rem 0 0 1.1rem' }}>
-                  {dataset.potential_leakage_warnings.map((w, i) => <li key={i}>{w}</li>)}
-                </ul>
+                <strong>Leakage screen passed · {dataset.potential_leakage_warnings.length} post-transplant column{dataset.potential_leakage_warnings.length > 1 ? 's' : ''} excluded from the features automatically</strong>
+                <details style={{ marginTop: '0.3rem' }}>
+                  <summary className="small" style={{ cursor: 'pointer' }}>Show excluded columns{dataset.data_quality_notes?.length ? ' and data-quality notes' : ''}</summary>
+                  <ul className="small" style={{ margin: '0.3rem 0 0 1.1rem' }}>
+                    {dataset.potential_leakage_warnings.map((w, i) => <li key={i}>{w}</li>)}
+                    {dataset.data_quality_notes?.map((w, i) => <li key={`q${i}`}>{w}</li>)}
+                  </ul>
+                </details>
               </div>
             </div>
           )}

@@ -9,7 +9,7 @@ import socket
 import threading
 import traceback
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, Optional
 
 from app.core import jobs
 from app.core.compute import detect_capabilities, statevector_benchmark
@@ -112,7 +112,10 @@ def _quantum_cv_sweep(payload: Dict[str, Any], progress: Progress) -> Dict[str, 
     qubits_list = payload.get("qubits_list", [2, 4, 8, 12, 16])
     n_splits = int(payload.get("n_splits", 5))
     n_repeats = int(payload.get("n_repeats", 5))
-    return run_qubit_sweep(qubits_list=qubits_list, n_splits=n_splits, n_repeats=n_repeats, progress_callback=progress)
+    from app.core.quantum import store
+    result = run_qubit_sweep(qubits_list=qubits_list, n_splits=n_splits, n_repeats=n_repeats, progress_callback=progress)
+    store.save("quantum_sweep", result)
+    return result
 
 
 def _compare_backends(payload: Dict[str, Any], progress: Progress) -> Dict[str, Any]:
@@ -140,8 +143,9 @@ HANDLERS: Dict[str, Handler] = {
 
 
 class Worker:
-    def __init__(self, worker_id: str):
+    def __init__(self, worker_id: str, kinds: Optional[list] = None):
         self.worker_id = worker_id
+        self.kinds = kinds or list(HANDLERS)
         self.started_at = datetime.now(timezone.utc).isoformat()
         self.capabilities = detect_capabilities()
         self.stop = threading.Event()
@@ -160,11 +164,11 @@ class Worker:
         if requeued:
             log.info("returned %d interrupted job(s) to the queue", requeued)
         threading.Thread(target=self._heartbeat_loop, daemon=True).start()
-        log.info("worker %s ready · GPU: %s · kinds: %s", self.worker_id, self.capabilities.get("gpu_name", "none"), ", ".join(HANDLERS))
+        log.info("worker %s ready · GPU: %s · kinds: %s", self.worker_id, self.capabilities.get("gpu_name", "none"), ", ".join(self.kinds))
 
         poll = get_settings().worker_poll_seconds
         while not self.stop.is_set():
-            job = jobs.claim_next_job(self.worker_id, list(HANDLERS))
+            job = jobs.claim_next_job(self.worker_id, self.kinds)
             if job is None:
                 self.stop.wait(poll)
                 continue
@@ -186,12 +190,16 @@ class Worker:
 def main() -> None:
     parser = argparse.ArgumentParser(description="MarrowQ compute worker")
     parser.add_argument("--id", default=f"{socket.gethostname()}-worker", help="stable id, so interrupted jobs are requeued on restart")
+    parser.add_argument("--kinds", default="", help="comma-separated job kinds to serve (default: all); e.g. a separate "
+                                                     "lane for ibm_hardware_kernel so QPU runs never wait behind GPU sweeps")
+    parser.add_argument("--exclude", default="", help="comma-separated job kinds this worker skips")
     args = parser.parse_args()
+    kinds = [k for k in (args.kinds.split(",") if args.kinds else HANDLERS) if k in HANDLERS and k not in args.exclude.split(",")]
     # Libraries such as the Qiskit transpiler log every pass at INFO; keep only our own progress lines.
     logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s")
     log.setLevel(logging.INFO)
 
-    worker = Worker(args.id)
+    worker = Worker(args.id, kinds)
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: worker.stop.set())
     worker.run()

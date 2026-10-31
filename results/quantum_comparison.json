@@ -1,0 +1,103 @@
+{
+  "subset": "UCI Bone Marrow Transplant (16 train / 8 test)",
+  "train_patients": [
+    "UCI-001",
+    "UCI-002",
+    "UCI-003",
+    "UCI-004",
+    "UCI-005",
+    "UCI-006",
+    "UCI-007",
+    "UCI-008",
+    "UCI-009",
+    "UCI-010",
+    "UCI-011",
+    "UCI-012",
+    "UCI-013",
+    "UCI-014",
+    "UCI-015",
+    "UCI-016"
+  ],
+  "test_patients": [
+    "UCI-017",
+    "UCI-018",
+    "UCI-019",
+    "UCI-020",
+    "UCI-021",
+    "UCI-022",
+    "UCI-023",
+    "UCI-024"
+  ],
+  "n_qubits": 4,
+  "shots": 1024,
+  "computed_at": "2026-10-31T01:26:41+00:00",
+  "ideal": {
+    "backend_type": "Local AerSimulator (GPU)",
+    "is_simulator": true,
+    "alignment": 0.27564,
+    "test_auc": 0.4,
+    "frobenius_error_vs_ideal": 0.0,
+    "elapsed_seconds": 0.6069,
+    "matrix_preview": [
+      [
+        1.0,
+        0.0497,
+        0.0139,
+        0.0531
+      ],
+      [
+        0.0497,
+        1.0,
+        0.0786,
+        0.0025
+      ],
+      [
+        0.0139,
+        0.0786,
+        1.0,
+        0.0827
+      ],
+      [
+        0.0531,
+        0.0025,
+        0.0827,
+        1.0
+      ]
+    ]
+  },
+  "noisy_simulation": {
+    "backend_type": "FakeFez (156-qubit Heron noise model)",
+    "is_simulator": true,
+    "alignment": 0.27006,
+    "test_auc": 0.4667,
+    "frobenius_error_vs_ideal": 0.03084,
+    "elapsed_seconds": 21.2346,
+    "diagonal_attenuation": 0.0134,
+    "matrix_preview": [
+      [
+        0.9795,
+        0.0508,
+        0.0117,
+        0.0576
+      ],
+      [
+        0.0508,
+        0.9902,
+        0.0742,
+        0.0039
+      ],
+      [
+        0.0117,
+        0.0742,
+        0.9873,
+        0.0742
+      ],
+      [
+        0.0576,
+        0.0039,
+        0.0742,
+        0.9922
+      ]
+    ]
+  }
+}

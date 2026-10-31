@@ -1,7 +1,8 @@
 import {
   DatasetProfile, Experiment, PredictionResult, SystemHealth, AvailableModel,
   Patient, ClinicalObservation, PatientProgress, QuantumBackend, QuantumStatus,
-  QuantumJob, OrchestrationResult, HospitalOverview, CohortOverview, QuantumExperimentResult, EngraftmentCurve
+  QuantumJob, OrchestrationResult, HospitalOverview, CohortOverview, QuantumExperimentResult, EngraftmentCurve,
+  CachedQuantumResult, QuantumSweepResult, BackendsComparisonResult, HardwareKernelRun
 } from './types';
 import { zzCircuitDepth, zzKernelMatrix } from './lib/quantumKernel';
 
@@ -285,23 +286,16 @@ export async function fetchQuantumJobs(): Promise<QuantumJob[]> {
 }
 
 
-export async function fetchQuantumSweep(splits: number = 5, repeats: number = 2, refresh: boolean = false): Promise<any> {
-  const res = await fetch(`${API_BASE}/quantum/sweep?splits=${splits}&repeats=${repeats}&refresh=${refresh}`);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Failed to fetch qubit sweep");
-  }
-  return await res.json();
-}
+export const fetchQuantumSweep = (splits = 5, repeats = 2, refresh = false) =>
+  request<CachedQuantumResult<QuantumSweepResult>>(`/quantum/sweep?splits=${splits}&repeats=${repeats}&refresh=${refresh}`);
 
-export async function fetchQuantumBackendsComparison(shots: number = 1024, n_qubits: number = 4, refresh: boolean = false): Promise<any> {
-  const res = await fetch(`${API_BASE}/quantum/compare-backends?shots=${shots}&n_qubits=${n_qubits}&refresh=${refresh}`);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Failed to fetch backends comparison");
-  }
-  return await res.json();
-}
+export const fetchQuantumBackendsComparison = (shots = 1024, n_qubits = 4, refresh = false) =>
+  request<CachedQuantumResult<BackendsComparisonResult>>(`/quantum/compare-backends?shots=${shots}&n_qubits=${n_qubits}&refresh=${refresh}`);
+
+export const submitHardwareRun = (params: { shots: number; n_qubits: number; backend_name?: string }) =>
+  post<{ job: CachedQuantumResult<HardwareKernelRun>['job']; estimated_qpu_seconds: number }>('/quantum/hardware-run', params);
+
+export const fetchLatestHardwareRun = () => request<CachedQuantumResult<HardwareKernelRun>>('/quantum/hardware-run/latest');
 
 export async function estimateQuantumBudget(totalCircuits: number, shots: number): Promise<any> {
   const res = await fetch(`${API_BASE}/quantum/estimate-budget?total_circuits=${totalCircuits}&shots=${shots}`, {

@@ -318,10 +318,12 @@ def register_dataset():
     profile.suggested_target = target
     profile.suggested_features = list(CORE_FEATURES)
     profile.class_distribution = {str(k): int(v) for k, v in df[target].value_counts().sort_index().items()}
+    profile.leakage_columns = [name for name in OUTCOMES if name != target]
     profile.potential_leakage_warnings = [
         f"{name}: {DATA_DICTIONARY[name].label} is recorded after Day 0 and would leak the outcome"
-        for name in OUTCOMES if name != target
-    ] + quality_notes(raw, df)
+        for name in profile.leakage_columns
+    ]
+    profile.data_quality_notes = quality_notes(raw, df)
     save_dataset_meta(
         dataset_id=DATASET_ID, name=profile.name, source=profile.source, data_mode=profile.data_mode,
         filepath=str(path), row_count=profile.total_rows, col_count=profile.total_columns,

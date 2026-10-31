@@ -254,7 +254,7 @@ def run_qubit_sweep(
 ) -> Dict[str, Any]:
     """Sweeps qubit counts 2-16 inside the 5x5 CV protocol on the real UCI cohort.
 
-    Outputs comparative benchmark results against classical baseline (0.755).
+    Includes a logistic-regression baseline evaluated on the same folds.
     """
     if qubits_list is None:
         qubits_list = [2, 4, 8, 12, 16]
@@ -299,6 +299,13 @@ def run_qubit_sweep(
         }
         results.append(row)
 
+    # Classical baseline on the same repeated folds (same seed), so the comparison is like for like.
+    from app.core.benchmark import run_cross_validated_benchmark
+    if progress_callback:
+        progress_callback(0.99, "Classical logistic-regression baseline on the same folds")
+    baseline = run_cross_validated_benchmark(df, "early_engraftment", CORE_FEATURES, ["logistic_regression"],
+                                             seed=random_state, n_splits=n_splits, n_repeats=n_repeats)[0]["logistic_regression"]
+
     # Sort by ROC-AUC
     results_sorted = sorted(results, key=lambda x: x["roc_auc"], reverse=True)
     best_setting = results_sorted[0] if results_sorted else None
@@ -306,8 +313,10 @@ def run_qubit_sweep(
     return {
         "dataset": "UCI Bone Marrow Transplant: Children (n=187)",
         "target": "early_engraftment",
-        "classical_baseline_auc": 0.755,
-        "classical_baseline_ci": [0.685, 0.819],
+        "classical_baseline_model": "Logistic Regression (L2)",
+        "classical_baseline_auc": baseline["roc_auc"],
+        "classical_baseline_ci": baseline.get("roc_auc_ci"),
+        "cv_protocol": f"{n_repeats}x{n_splits} repeated stratified CV (same folds for the classical baseline)",
         "sweep_table": results,
         "best_qubit_setting": best_setting,
     }

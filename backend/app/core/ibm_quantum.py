@@ -13,6 +13,7 @@ from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 from qiskit_machine_learning.kernels import FidelityQuantumKernel
 
 from app.core.database import save_quantum_job, list_quantum_jobs
+from app.core.settings import get_settings
 
 logger = logging.getLogger("marrowq.ibm_quantum")
 
@@ -34,7 +35,7 @@ def _ensure_env_loaded():
                     k, v = line.split("=", 1)
                     k = k.strip()
                     v = v.strip().strip('"').strip("'")
-                    if k not in os.environ or not os.environ[k]:
+                    if k not in os.environ:  # an explicitly blank variable (tests) stays blank
                         os.environ[k] = v
 
 _ensure_env_loaded()
@@ -80,24 +81,61 @@ class IBMQuantumManager:
     circuit validation, QPU-seconds budget guarding, and genuine quantum execution
     without silent simulator masquerading.
     """
+    # Hardware kernel job size: 16 train patients (upper triangle) + 8 test x 16 train circuits.
+    N_TRAIN, N_TEST = 16, 8
+    HARDWARE_CIRCUITS = N_TRAIN * (N_TRAIN - 1) // 2 + N_TEST * N_TRAIN
+
     def __init__(self):
+        self.service: Optional[Any] = None
+        self.last_connection_error: Optional[str] = None
+        self._service_key: Optional[tuple] = None
+        self._last_attempt = 0.0
+        self._usage: Optional[Dict[str, Any]] = None
+        self._usage_at = 0.0
         self._reload_credentials()
 
     def _reload_credentials(self):
+        """Reads credentials (settings/.env) and connects once; reconnects only when they change or after a failure."""
         _ensure_env_loaded()
-        self.api_key = (
-            os.environ.get("IBM_QUANTUM_API_KEY") or
-            os.environ.get("IBM_QUANTUM_TOKEN") or
-            os.environ.get("QISKIT_IBM_TOKEN")
-        )
-        self.channel = os.environ.get("IBM_QUANTUM_CHANNEL", "ibm_quantum_platform")
-        self.backend_default = os.environ.get("IBM_QUANTUM_BACKEND", "ibm_fez")
-        raw_instance = os.environ.get("IBM_QUANTUM_INSTANCE", "").strip()
+        settings = get_settings()
+        self.api_key = (settings.qiskit_ibm_token or os.environ.get("IBM_QUANTUM_API_KEY")
+                        or os.environ.get("IBM_QUANTUM_TOKEN"))
+        self.channel = settings.ibm_channel or "ibm_quantum_platform"
+        raw_instance = (settings.qiskit_ibm_instance or os.environ.get("IBM_QUANTUM_INSTANCE") or "").strip()
         self.instance = raw_instance if raw_instance and raw_instance.lower() != "none" else None
-        
-        self.service: Optional[Any] = None
-        self.last_connection_error: Optional[str] = None
-        self._initialize_service()
+        key = (self.api_key, self.instance, self.channel)
+        if key != self._service_key or (self.service is None and time.time() - self._last_attempt > 60):
+            self._service_key = key
+            self._last_attempt = time.time()
+            self.service = None
+            self._initialize_service()
+            self._backend_at = 0.0
+        if time.time() - getattr(self, "_backend_at", 0.0) > 300:  # queue lengths change slowly; one lookup per 5 min
+            self.backend_default = os.environ.get("IBM_QUANTUM_BACKEND") or self._least_busy() or "ibm_fez"
+            self._backend_at = time.time() if self.service else 0.0
+
+    def _least_busy(self) -> Optional[str]:
+        if not self.service:
+            return None
+        try:
+            return self.service.least_busy(operational=True, simulator=False).name
+        except Exception as exc:
+            logger.warning("least_busy failed: %s", exc)
+            return None
+
+    def usage(self) -> Optional[Dict[str, Any]]:
+        """QPU seconds used / remaining in the current plan period (cached for a minute)."""
+        if not self.service:
+            return None
+        if self._usage is None or time.time() - self._usage_at > 60:
+            try:
+                u = self.service.usage()
+                self._usage = {k: u.get(k) for k in ("usage_consumed_seconds", "usage_limit_seconds", "usage_remaining_seconds", "usage_limit_reached")}
+                self._usage["period_end"] = (u.get("usage_period") or {}).get("end_time")
+                self._usage_at = time.time()
+            except Exception as exc:
+                logger.warning("usage lookup failed: %s", exc)
+        return self._usage
 
     def _mask_token(self, token: Optional[str]) -> str:
         if not token or len(token.strip()) < 8:
@@ -122,7 +160,7 @@ class IBMQuantumManager:
             }
             if self.instance:
                 kwargs["instance"] = self.instance
-            
+
             self.service = QiskitRuntimeService(**kwargs)
             self.last_connection_error = None
         except Exception as e:
@@ -135,11 +173,10 @@ class IBMQuantumManager:
 
     @staticmethod
     def estimate_qpu_seconds(total_circuits: int, shots: int) -> float:
-        """Estimates QPU execution seconds based on circuit count and shots.
-        Open Plan limit is 600 s / 28 days.
-        """
-        overhead = 5.0  # Session and queuing initialization
-        per_shot_time = 0.00015  # ~150 us per shot for circuit execution + readout
+        """QPU seconds IBM will bill, calibrated on a measured run: 248 circuits x 1024 shots on ibm_kingston
+        (Heron r2) used 69 s, i.e. ~0.25 ms per shot plus ~5 s job overhead. Open Plan: 600 s per 28 days."""
+        overhead = 5.0
+        per_shot_time = 0.00025
         return round(overhead + total_circuits * shots * per_shot_time, 2)
 
     def test_connection(self) -> Dict[str, Any]:
@@ -148,7 +185,7 @@ class IBMQuantumManager:
         accessible QPUs and queue status WITHOUT submitting circuits or consuming quantum time.
         """
         self._reload_credentials()
-        
+
         if not HAS_IBM_RUNTIME:
             return {
                 "success": False,
@@ -156,7 +193,7 @@ class IBMQuantumManager:
                 "token_configured": bool(self.api_key),
                 "channel": self.channel
             }
-            
+
         if not self.api_key:
             return {
                 "success": False,
@@ -178,14 +215,14 @@ class IBMQuantumManager:
             backends = self.service.backends()
             qpu_list = []
             default_backend_operational = False
-            
+
             for b in backends:
                 cfg = b.configuration()
                 status = b.status()
                 is_target = b.name == self.backend_default
                 if is_target and status.operational:
                     default_backend_operational = True
-                
+
                 qpu_list.append({
                     "name": b.name,
                     "qubits": cfg.n_qubits,
@@ -224,7 +261,7 @@ class IBMQuantumManager:
         has_token = bool(self.api_key and len(self.api_key.strip()) > 10)
         is_live = self.service is not None
         default_backend = self.backend_default if is_live else "aer_simulator_statevector"
-        
+
         return {
             "has_ibm_runtime_installed": HAS_IBM_RUNTIME,
             "has_token_configured": has_token,
@@ -234,6 +271,8 @@ class IBMQuantumManager:
             "is_connected_to_hardware": is_live,
             "default_backend": default_backend,
             "connection_error": self.last_connection_error if not is_live else None,
+            "usage": self.usage(),
+            "max_seconds_per_run": get_settings().ibm_max_seconds_per_run,
             "supported_execution_modes": [
                 {
                     "mode": "simulator",
@@ -254,7 +293,7 @@ class IBMQuantumManager:
         """Lists live IBM QPUs and local simulators with genuine operational telemetry"""
         self._reload_credentials()
         backends_out = []
-        
+
         # 1. Fetch live IBM Quantum QPUs only if an authenticated session exists
         if self.service:
             try:
@@ -262,11 +301,11 @@ class IBMQuantumManager:
                 for b in live_qpus:
                     cfg = b.configuration()
                     status = b.status()
-                    
+
                     family = "Superconducting Eagle/Heron"
                     if hasattr(cfg, "processor_type") and isinstance(cfg.processor_type, dict):
                         family = cfg.processor_type.get("family", "Eagle/Heron")
-                    
+
                     backends_out.append({
                         "backend_name": b.name,
                         "backend_type": "IBM Quantum Superconducting QPU",
@@ -289,7 +328,7 @@ class IBMQuantumManager:
         """Checks if circuit fits within target backend's qubit capacity and operational bounds"""
         backends = self.list_backends()
         target = next((b for b in backends if b["backend_name"] == backend_name), None)
-        
+
         if not target:
             return {
                 "compatible": False,
@@ -298,7 +337,7 @@ class IBMQuantumManager:
                 "qubits_requested": num_qubits,
                 "queue_depth": 0
             }
-            
+
         supported = target["qubits"]
         if num_qubits > supported:
             return {
@@ -308,7 +347,7 @@ class IBMQuantumManager:
                 "qubits_requested": num_qubits,
                 "queue_depth": target["avg_queue_depth"]
             }
-            
+
         return {
             "compatible": True,
             "reason": f"Compatible with '{backend_name}' ({supported} qubits available).",
@@ -332,7 +371,7 @@ class IBMQuantumManager:
     ) -> Dict[str, Any]:
         """
         Executes quantum kernel Gram matrices K_train and K_test.
-        
+
         DISTINCTION GUARANTEE:
         - Never silently switches from physical hardware to a simulator.
         - Enforces QPU-seconds budget refusal if estimate > IBM_MAX_SECONDS_PER_RUN (600s Open Plan).
@@ -342,26 +381,26 @@ class IBMQuantumManager:
         start_time = time.time()
         job_id = f"qjob-{uuid.uuid4().hex[:10]}"
         submitted_at = datetime.now(timezone.utc).isoformat()
-        
+
         n_features = X_train.shape[1]
         n_qubits = n_features
-        
+
         # Build base feature map
         if feature_map_type == "zz_feature_map" or n_features <= 6:
             fmap = zz_feature_map(feature_dimension=n_features, reps=1, entanglement="linear")
         else:
             fmap = z_feature_map(feature_dimension=n_features, reps=1)
-            
+
         circuit_depth_raw = fmap.depth()
-        
+
         # --- PATH A: PHYSICAL IBM QUANTUM HARDWARE EXECUTION ---
         if execution_mode == "hardware":
             # 1. Budget check upfront: calculate total circuits and refuse before consuming any network/quantum resources
             N_tr = min(len(X_train), max_hardware_samples)
-            N_te = min(len(X_test), max(2, int(max_hardware_samples * 0.4)))
+            N_te = min(len(X_test), max_hardware_samples)
             circuits_count = (N_tr * (N_tr - 1)) // 2 + (N_te * N_tr)
-            
-            max_budget = float(os.environ.get("IBM_MAX_SECONDS_PER_RUN", "600.0"))
+
+            max_budget = get_settings().ibm_max_seconds_per_run
             est_seconds = self.estimate_qpu_seconds(circuits_count, shots)
             if est_seconds > max_budget:
                 error_msg = (
@@ -387,7 +426,7 @@ class IBMQuantumManager:
                 raise BudgetExceededError(error_msg)
 
             self._reload_credentials()
-            
+
             if not self.service:
                 error_msg = f"Cannot execute on hardware backend '{backend_name}': {self.last_connection_error or 'Not authenticated with IBM Quantum Compute Service.'}"
                 save_quantum_job({
@@ -407,7 +446,7 @@ class IBMQuantumManager:
                     "result_provenance": "unauthenticated"
                 })
                 raise RuntimeError(error_msg)
-                
+
             try:
                 backend = self.service.backend(backend_name)
             except Exception as e:
@@ -432,11 +471,11 @@ class IBMQuantumManager:
 
             # Enforce hardware sample limits to guard against runaway quantum runtime credits
             N_tr = min(len(X_train), max_hardware_samples)
-            N_te = min(len(X_test), max(2, int(max_hardware_samples * 0.4)))
-            
+            N_te = min(len(X_test), max_hardware_samples)
+
             X_tr_sub = X_train[:N_tr]
             X_te_sub = X_test[:N_te]
-            
+
             # Construct upper-triangular training pair circuits
             circuits_to_run = []
             train_pair_indices = []
@@ -450,7 +489,7 @@ class IBMQuantumManager:
                     qc.measure(range(n_qubits), range(n_qubits))
                     circuits_to_run.append(qc)
                     train_pair_indices.append((i, j))
-                    
+
             # Construct test-vs-train pair circuits
             test_pair_indices = []
             for t in range(N_te):
@@ -463,11 +502,11 @@ class IBMQuantumManager:
                     qc.measure(range(n_qubits), range(n_qubits))
                     circuits_to_run.append(qc)
                     test_pair_indices.append((t, tr))
-                    
+
             total_circuits = len(circuits_to_run)
-            
+
             # Budget check: refuse if estimated runtime exceeds IBM_MAX_SECONDS_PER_RUN (default 600s Open Plan)
-            max_budget = float(os.environ.get("IBM_MAX_SECONDS_PER_RUN", "600.0"))
+            max_budget = get_settings().ibm_max_seconds_per_run
             est_seconds = self.estimate_qpu_seconds(total_circuits, shots)
             if est_seconds > max_budget:
                 error_msg = (
@@ -500,7 +539,7 @@ class IBMQuantumManager:
             pm = generate_preset_pass_manager(backend=backend, optimization_level=1)
             transpiled_circuits = pm.run(circuits_to_run)
             transpiled_depth = int(transpiled_circuits[0].depth()) if transpiled_circuits else circuit_depth_raw
-            
+
             # Configure SamplerV2 with optional twirling and dynamical decoupling
             sampler = SamplerV2(mode=backend)
             if enable_twirling:
@@ -534,14 +573,14 @@ class IBMQuantumManager:
                 if progress_callback:
                     progress_callback(min(0.9, 0.5 + status_poll_count * 0.05), f"IBM Job {real_job_id}: status={job_status}")
                 time.sleep(2)
-            
+
             # Retrieve genuine hardware results
             job_result = hardware_job.result()
             duration_ms = round((time.time() - start_time) * 1000, 2)
-            
+
             # Parse bitstring zero frequencies
             all_zeros_bitstring = "0" * n_qubits
-            
+
             K_train = np.eye(N_tr)
             for idx, (i, j) in enumerate(train_pair_indices):
                 pub_data = job_result[idx].data
@@ -550,7 +589,7 @@ class IBMQuantumManager:
                 fidelity = counts.get(all_zeros_bitstring, 0) / float(shots)
                 K_train[i, j] = fidelity
                 K_train[j, i] = fidelity
-                
+
             K_test = np.zeros((N_te, N_tr))
             offset = len(train_pair_indices)
             for idx, (t, tr) in enumerate(test_pair_indices):
@@ -559,9 +598,9 @@ class IBMQuantumManager:
                 counts = getattr(pub_data, reg_name).get_counts()
                 fidelity = counts.get(all_zeros_bitstring, 0) / float(shots)
                 K_test[t, tr] = fidelity
-                
+
             provenance = f"ibm_quantum_hardware:backend={backend_name}:job_id={real_job_id}:shots={shots}"
-            
+
             save_quantum_job({
                 "job_id": real_job_id,
                 "backend_name": backend_name,
@@ -578,7 +617,7 @@ class IBMQuantumManager:
                 "error_message": None,
                 "result_provenance": provenance
             })
-            
+
             return {
                 "job_id": real_job_id,
                 "backend_used": backend_name,
@@ -602,7 +641,7 @@ class IBMQuantumManager:
             if n_qubits > 6 and feature_map_type == "z_feature_map":
                 diff_train = X_train[:, np.newaxis, :] - X_train[np.newaxis, :, :]
                 K_train = np.prod(np.cos(diff_train) ** 2, axis=-1)
-                
+
                 diff_test = X_test[:, np.newaxis, :] - X_train[np.newaxis, :, :]
                 K_test = np.prod(np.cos(diff_test) ** 2, axis=-1)
                 provenance = f"aer_statevector:exact_{n_qubits}_qubit_hilbert_fidelity"
@@ -611,9 +650,9 @@ class IBMQuantumManager:
                 K_train = qkernel.evaluate(x_vec=X_train, y_vec=X_train)
                 K_test = qkernel.evaluate(x_vec=X_test, y_vec=X_train)
                 provenance = "aer_statevector:exact_hilbert_fidelity"
-                
+
             duration_ms = round((time.time() - start_time) * 1000, 2)
-            
+
             save_quantum_job({
                 "job_id": job_id,
                 "backend_name": "aer_simulator_statevector",
@@ -630,7 +669,7 @@ class IBMQuantumManager:
                 "error_message": None,
                 "result_provenance": provenance
             })
-            
+
             return {
                 "job_id": job_id,
                 "backend_used": "aer_simulator_statevector",
@@ -649,57 +688,86 @@ class IBMQuantumManager:
                 "provenance": provenance
             }
 
+    def comparison_split(self, n_qubits: int):
+        """The fixed UCI subset every backend is compared on: first 16 patients train, next 8 test (PCA to n_qubits)."""
+        from app.core.datasets.uci_bmt import load_cohort, CORE_FEATURES
+        from app.core.benchmark import build_preprocessor, split_feature_types, binary_target
+        from sklearn.decomposition import PCA
+        from sklearn.preprocessing import MinMaxScaler
+
+        df = load_cohort()
+        train_df, test_df = df.iloc[:self.N_TRAIN], df.iloc[self.N_TRAIN:self.N_TRAIN + self.N_TEST]
+        num, cat = split_feature_types(train_df, CORE_FEATURES)
+        prep = build_preprocessor(num, cat)
+        pca = PCA(n_components=n_qubits, random_state=42)
+        scaler = MinMaxScaler(feature_range=(0, np.pi))
+        X_tr = scaler.fit_transform(pca.fit_transform(prep.fit_transform(train_df[CORE_FEATURES])))
+        X_te = np.clip(scaler.transform(pca.transform(prep.transform(test_df[CORE_FEATURES]))), 0, np.pi)
+        return (X_tr, X_te, binary_target(train_df["early_engraftment"]), binary_target(test_df["early_engraftment"]),
+                train_df["patient_id"].tolist(), test_df["patient_id"].tolist())
+
+    @staticmethod
+    def _kernel_scores(K_tr, K_te, y_tr, y_te, K_ideal=None) -> Dict[str, Any]:
+        from sklearn.svm import SVC
+        from sklearn.metrics import roc_auc_score
+        from app.core.quantum.diagnostics import compute_kernel_diagnostics
+
+        svc = SVC(kernel="precomputed", class_weight="balanced").fit(K_tr, y_tr)
+        out = {"alignment": compute_kernel_diagnostics(K_tr, y_tr)["kernel_target_alignment"],
+               "test_auc": round(float(roc_auc_score(y_te, svc.decision_function(K_te))), 4)}
+        if K_ideal is not None:
+            out["frobenius_error_vs_ideal"] = round(float(np.linalg.norm(K_tr - K_ideal) / np.linalg.norm(K_ideal)), 5)
+        return out
+
     def execute_hardware_kernel_job(
         self,
         payload: Dict[str, Any],
         progress_callback: Optional[Callable[[float, str], None]] = None
     ) -> Dict[str, Any]:
-        """Runs an IBM hardware kernel job dispatched from the worker."""
-        backend_name = payload.get("backend_name", self.backend_default)
+        """Runs the comparison-subset kernel on a real IBM QPU and scores it against the ideal kernel."""
+        from app.core.quantum.kernel_engine import GPUQuantumKernelEngine
+        from app.core.quantum import store
+
+        self._reload_credentials()
+        backend_name = payload.get("backend_name") or self.backend_default
         shots = int(payload.get("shots", 1024))
-        max_samples = int(payload.get("max_samples", 8))
-        enable_twirling = bool(payload.get("enable_twirling", False))
-        enable_dd = bool(payload.get("enable_dd", False))
         n_qubits = int(payload.get("n_qubits", 4))
-
-        from app.core.datasets.uci_bmt import load_cohort, CORE_FEATURES
-        from app.core.benchmark import build_preprocessor, split_feature_types
-        from sklearn.decomposition import PCA
-        from sklearn.preprocessing import MinMaxScaler
-
         if progress_callback:
-            progress_callback(0.1, "Extracting UCI cohort subset for hardware execution...")
-
-        df = load_cohort()
-        df_sub = df.iloc[:max_samples].copy()
-        num, cat = split_feature_types(df_sub, CORE_FEATURES)
-        prep = build_preprocessor(num, cat)
-        X_trans = prep.fit_transform(df_sub[CORE_FEATURES])
-
-        q_dim = min(n_qubits, X_trans.shape[1])
-        pca = PCA(n_components=q_dim, random_state=42)
-        scaler = MinMaxScaler(feature_range=(0, np.pi))
-        X_pca = scaler.fit_transform(pca.fit_transform(X_trans))
+            progress_callback(0.1, f"Preparing {self.N_TRAIN} train / {self.N_TEST} test UCI patients on {n_qubits} qubits")
+        X_tr, X_te, y_tr, y_te, ids_tr, ids_te = self.comparison_split(n_qubits)
+        usage_before = (self.usage() or {}).get("usage_consumed_seconds")
 
         res = self.execute_kernel_matrices(
-            X_train=X_pca,
-            X_test=X_pca[:max(2, int(max_samples * 0.4))],
-            backend_name=backend_name,
-            execution_mode="hardware",
-            shots=shots,
-            max_hardware_samples=max_samples,
-            enable_twirling=enable_twirling,
-            enable_dd=enable_dd,
-            progress_callback=progress_callback
+            X_train=X_tr, X_test=X_te, backend_name=backend_name, execution_mode="hardware", shots=shots,
+            max_hardware_samples=self.N_TRAIN, feature_map_type="zz_feature_map",
+            enable_twirling=bool(payload.get("enable_twirling", False)), enable_dd=bool(payload.get("enable_dd", True)),
+            progress_callback=progress_callback,
         )
-        return {
+        engine = GPUQuantumKernelEngine(prefer_gpu=True)
+        K_ideal, _ = engine.evaluate(X_tr, n_qubits=n_qubits)
+        self._usage = None
+        usage_after = (self.usage() or {}).get("usage_consumed_seconds")
+        result = {
             "job_id": res["job_id"],
-            "backend_used": res["backend_used"],
+            "backend_name": backend_name,
             "execution_mode": res["execution_mode"],
-            "shots": res["shots"],
-            "duration_ms": res["duration_ms"],
-            "K_train_preview": res["K_train"].round(4).tolist() if isinstance(res["K_train"], np.ndarray) else res["K_train"],
+            "n_qubits": n_qubits,
+            "shots": shots,
+            "circuits": res["circuits_submitted"],
+            "transpiled_depth": res["circuit_depth"],
+            "wall_seconds": round(res["duration_ms"] / 1000, 1),
+            "qpu_seconds_used": (usage_after - usage_before) if usage_after is not None and usage_before is not None else None,
+            "completed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "train_patients": ids_tr,
+            "test_patients": ids_te,
+            **self._kernel_scores(res["K_train"], res["K_test"], y_tr, y_te, K_ideal),
+            "diagonal_note": "Diagonal entries are 1 by construction (self-overlap is not measured).",
+            "matrix_preview": np.asarray(res["K_train"])[:4, :4].round(4).tolist(),
+            "ideal_matrix_preview": K_ideal[:4, :4].round(4).tolist(),
+            "provenance": res["provenance"],
         }
+        store.save("ibm_hardware_kernel", result)
+        return result
 
     def run_backends_comparison(
         self,
@@ -707,108 +775,55 @@ class IBMQuantumManager:
         n_qubits: int = 4,
         progress_callback: Optional[Callable[[float, str], None]] = None
     ) -> Dict[str, Any]:
-        """Compares Ideal (GPU Statevector) vs Noisy (FakeFez) vs Physical Hardware on a 16 train / 8 test UCI subset."""
-        from app.core.datasets.uci_bmt import load_cohort, CORE_FEATURES
-        from app.core.benchmark import build_preprocessor, split_feature_types, binary_target
+        """Ideal GPU statevector vs noisy Heron simulation on the comparison subset (hardware runs are separate jobs)."""
         from app.core.quantum.kernel_engine import GPUQuantumKernelEngine
         from app.core.quantum.noisy_simulation import HeronNoisySimulator
-        from app.core.quantum.diagnostics import compute_kernel_diagnostics
-        from sklearn.decomposition import PCA
-        from sklearn.preprocessing import MinMaxScaler
-        from sklearn.svm import SVC
-        from sklearn.metrics import roc_auc_score
+        from app.core.quantum import store
 
         if progress_callback:
-            progress_callback(0.05, "Extracting 16 train / 8 test UCI patient cohort subset...")
+            progress_callback(0.05, f"Preparing {self.N_TRAIN} train / {self.N_TEST} test UCI patients")
+        X_tr, X_te, y_tr, y_te, ids_tr, ids_te = self.comparison_split(n_qubits)
 
-        df = load_cohort()
-        train_df = df.iloc[:16].copy()
-        test_df = df.iloc[16:24].copy()
-
-        y_train = binary_target(train_df["early_engraftment"])
-        y_test = binary_target(test_df["early_engraftment"])
-
-        num, cat = split_feature_types(train_df, CORE_FEATURES)
-        prep = build_preprocessor(num, cat)
-        X_tr_trans = prep.fit_transform(train_df[CORE_FEATURES])
-        X_te_trans = prep.transform(test_df[CORE_FEATURES])
-
-        pca = PCA(n_components=n_qubits, random_state=42)
-        scaler = MinMaxScaler(feature_range=(0, np.pi))
-        X_tr_pca = scaler.fit_transform(pca.fit_transform(X_tr_trans))
-        X_te_pca = scaler.transform(pca.transform(X_te_trans))
-
-        # 1. Ideal Statevector Kernel
         if progress_callback:
-            progress_callback(0.2, "Computing Ideal GPU Statevector Kernel...")
+            progress_callback(0.2, "Ideal kernel (GPU statevector)")
         engine = GPUQuantumKernelEngine(prefer_gpu=True)
-        K_tr_ideal, meta_ideal = engine.evaluate(X_tr_pca, n_qubits=n_qubits)
-        K_te_ideal, _ = engine.evaluate(X_te_pca, X_tr_pca, n_qubits=n_qubits)
-        diag_ideal = compute_kernel_diagnostics(K_tr_ideal, y_train, X_original=X_tr_pca)
+        K_tr_ideal, meta_ideal = engine.evaluate(X_tr, n_qubits=n_qubits)
+        K_te_ideal, _ = engine.evaluate(X_te, X_tr, n_qubits=n_qubits)
 
-        svc_ideal = SVC(kernel="precomputed", class_weight="balanced")
-        svc_ideal.fit(K_tr_ideal, y_train)
-        score_ideal = float(roc_auc_score(y_test, svc_ideal.decision_function(K_te_ideal)))
-
-        # 2. Noisy Heron FakeFez Simulation
         if progress_callback:
-            progress_callback(0.5, "Evaluating Noisy Simulation with Heron FakeFez...")
+            progress_callback(0.5, "Noisy kernel (Heron FakeFez noise model)")
         noisy_sim = HeronNoisySimulator(prefer_gpu=True, default_shots=shots)
-        K_tr_noisy, meta_noisy = noisy_sim.evaluate_noisy_kernel_matrix(X_tr_pca, n_qubits=n_qubits, shots=shots)
-        K_te_noisy, _ = noisy_sim.evaluate_noisy_kernel_matrix(X_te_pca, X_tr_pca, n_qubits=n_qubits, shots=shots)
-        diag_noisy = compute_kernel_diagnostics(K_tr_noisy, y_train, X_original=X_tr_pca)
+        K_tr_noisy, meta_noisy = noisy_sim.evaluate_noisy_kernel_matrix(X_tr, n_qubits=n_qubits, shots=shots)
+        K_te_noisy, _ = noisy_sim.evaluate_noisy_kernel_matrix(X_te, X_tr, n_qubits=n_qubits, shots=shots)
 
-        frob_ideal = float(np.linalg.norm(K_tr_ideal, "fro"))
-        diff_noisy_frob = float(np.linalg.norm(K_tr_noisy - K_tr_ideal, "fro"))
-        frob_error_noisy = diff_noisy_frob / frob_ideal if frob_ideal > 0 else 0.0
-
-        svc_noisy = SVC(kernel="precomputed", class_weight="balanced")
-        svc_noisy.fit(K_tr_noisy, y_train)
-        score_noisy = float(roc_auc_score(y_test, svc_noisy.decision_function(K_te_noisy)))
-
-        # 3. Hardware status
-        if progress_callback:
-            progress_callback(0.8, "Checking live IBM Hardware connection...")
-        hardware_available = bool(self.service is not None)
-        hw_info: Dict[str, Any] = {
-            "available": hardware_available,
-            "status": "ONLINE" if hardware_available else "UNAUTHENTICATED",
-            "message": "Physical hardware execution requires IBM_QUANTUM_API_KEY" if not hardware_available else "Ready on IBM Quantum Platform",
-            "backend_name": self.backend_default if hardware_available else None,
-            "frobenius_error_vs_ideal": None,
-            "alignment": None,
-            "test_auc": None,
-            "device_provenance": "ibm_quantum_hardware" if hardware_available else "unavailable (never simulated as hardware)"
-        }
-
-        if progress_callback:
-            progress_callback(1.0, "Comparison complete.")
-
-        return {
-            "subset": "UCI Bone Marrow Transplant (16 train / 8 test)",
+        result = {
+            "subset": f"UCI Bone Marrow Transplant ({self.N_TRAIN} train / {self.N_TEST} test)",
+            "train_patients": ids_tr,
+            "test_patients": ids_te,
             "n_qubits": n_qubits,
             "shots": shots,
+            "computed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "ideal": {
                 "backend_type": f"Local AerSimulator ({meta_ideal['device']})",
                 "is_simulator": True,
+                **self._kernel_scores(K_tr_ideal, K_te_ideal, y_tr, y_te),
                 "frobenius_error_vs_ideal": 0.0,
-                "alignment": diag_ideal["kernel_target_alignment"],
-                "test_auc": round(score_ideal, 4),
                 "elapsed_seconds": meta_ideal["elapsed_seconds"],
                 "matrix_preview": K_tr_ideal[:4, :4].round(4).tolist(),
             },
             "noisy_simulation": {
-                "backend_type": "FakeFez (156-qubit Heron NISQ noise model)",
+                "backend_type": "FakeFez (156-qubit Heron noise model)",
                 "is_simulator": True,
-                "frobenius_error_vs_ideal": round(frob_error_noisy, 5),
-                "alignment": diag_noisy["kernel_target_alignment"],
-                "test_auc": round(score_noisy, 4),
+                **self._kernel_scores(K_tr_noisy, K_te_noisy, y_tr, y_te, K_tr_ideal),
                 "elapsed_seconds": meta_noisy["elapsed_seconds"],
                 "diagonal_attenuation": round(float(1.0 - np.mean(np.diag(K_tr_noisy))), 4),
                 "matrix_preview": K_tr_noisy[:4, :4].round(4).tolist(),
             },
-            "hardware": hw_info,
         }
+        if progress_callback:
+            progress_callback(1.0, "Comparison complete")
+        store.save("quantum_comparison", result)
+        return result
 
     def execute_kernel_circuit(
         self,
@@ -822,7 +837,7 @@ class IBMQuantumManager:
         mode = "hardware" if "ibm_" in backend_name.lower() and execution_mode in ["hardware", "hardware_only"] else "simulator"
         if X_test is None:
             X_test = X_train
-            
+
         res = self.execute_kernel_matrices(
             X_train=X_train,
             X_test=X_test,

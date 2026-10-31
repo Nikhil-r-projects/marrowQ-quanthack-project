@@ -30,6 +30,7 @@ def profile_dataset(
     numeric_summaries: Dict[str, Dict[str, float]] = {}
     categorical_summaries: Dict[str, Dict[str, int]] = {}
     leakage_warnings: List[str] = []
+    leakage_columns: List[str] = []
     
     duplicates_count = int(df.duplicated().sum())
     
@@ -41,6 +42,7 @@ def profile_dataset(
                 leakage_warnings.append(
                     f"Potential target leakage detected in column '{col}': resembles post-transplant event or time-to-event marker."
                 )
+                leakage_columns.append(col)
                 break
         
         # Missing values
@@ -109,6 +111,7 @@ def profile_dataset(
         numeric_summaries=numeric_summaries,
         categorical_summaries=categorical_summaries,
         potential_leakage_warnings=leakage_warnings,
+        leakage_columns=leakage_columns,
         suggested_target=suggested_target,
         suggested_features=suggested_features,
         class_distribution=class_distribution

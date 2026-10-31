@@ -42,9 +42,11 @@ export const SetupView: React.FC<SetupViewProps> = ({ dataset, onExperimentStart
     );
   }
 
-  const featureOptions = candidateColumns.filter(c => c !== targetColumn);
+  // Columns recorded after Day 0 are never offered as features.
+  const leakageCols = new Set(dataset.leakage_columns ?? []);
+  const featureOptions = candidateColumns.filter(c => c !== targetColumn && !leakageCols.has(c));
+  const recommended = new Set(dataset.suggested_features);
   const toggleFeature = (f: string) => setSelectedFeatures(s => (s.includes(f) ? s.filter(x => x !== f) : [...s, f]));
-  const leakageCols = new Set(dataset.potential_leakage_warnings.flatMap(w => dataset.columns.filter(c => w.includes(c))));
 
   const handleRun = async () => {
     if (selectedFeatures.length === 0) { setErrorMessage('Select at least one feature.'); return; }
@@ -104,9 +106,10 @@ export const SetupView: React.FC<SetupViewProps> = ({ dataset, onExperimentStart
           </div>
 
           <div className="row between" style={{ marginBottom: '0.4rem' }}>
-            <span className="form-label" style={{ margin: 0 }}>Pre-transplant features · {selectedFeatures.length} selected</span>
+            <span className="form-label" style={{ margin: 0 }}>Pre-transplant features · {selectedFeatures.length} selected{leakageCols.size > 0 && <span className="faint"> · {leakageCols.size} post-transplant columns excluded</span>}</span>
             <div className="row" style={{ gap: '0.35rem' }}>
-              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedFeatures(featureOptions.filter(f => !leakageCols.has(f)))}>All</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedFeatures(dataset.suggested_features.filter(f => featureOptions.includes(f)))}>Recommended</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setSelectedFeatures(featureOptions)}>All</button>
               <button className="btn btn-ghost btn-sm" onClick={() => setSelectedFeatures([])}>None</button>
             </div>
           </div>
@@ -116,7 +119,7 @@ export const SetupView: React.FC<SetupViewProps> = ({ dataset, onExperimentStart
                 <input type="checkbox" checked={selectedFeatures.includes(col)} onChange={() => toggleFeature(col)} />
                 <code>{col}</code>
                 <span className="tiny faint">{dataset.column_types[col]}</span>
-                {leakageCols.has(col) && <span className="chip chip-red" style={{ marginLeft: 'auto' }}>Leakage risk</span>}
+                {recommended.has(col) && <span className="chip chip-blue" style={{ marginLeft: 'auto' }}>Recommended</span>}
               </label>
             ))}
           </div>

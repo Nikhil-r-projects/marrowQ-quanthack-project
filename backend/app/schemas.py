@@ -16,6 +16,8 @@ class DatasetProfileResponse(BaseModel):
     numeric_summaries: Dict[str, Dict[str, float]]
     categorical_summaries: Dict[str, Dict[str, int]]
     potential_leakage_warnings: List[str]
+    leakage_columns: List[str] = []          # recorded after Day 0: excluded from features automatically
+    data_quality_notes: List[str] = []       # informational (missing values, coding fixes)
     suggested_target: str
     suggested_features: List[str]
     class_distribution: Optional[Dict[str, int]] = None

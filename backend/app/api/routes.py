@@ -7,6 +7,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
+from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 
 from app.schemas import (
@@ -346,8 +347,12 @@ def get_available_trained_models():
             full = get_experiment_record(exp["experiment_id"])
             if not full:
                 continue
+            art = full.get("artifacts_path") or ""
             for m_key, m_val in full.get("metrics", {}).items():
-                if m_val.get("status") == "completed":
+                # Only models that can actually score a new patient (saved pipeline or quantum bundle).
+                scorable = os.path.exists(os.path.join(art, f"pipeline_{m_key}.joblib")) or (
+                    m_key == "quantum_kernel_svm" and os.path.exists(os.path.join(art, "model_quantum.joblib")))
+                if m_val.get("status") == "completed" and scorable:
                     models.append({
                         "experiment_id": exp["experiment_id"],
                         "dataset_name": exp["dataset_name"],
@@ -643,48 +648,58 @@ def get_quantum_job_details(job_id: str):
     return job
 
 
-_LATEST_QUANTUM_SWEEP: Optional[Dict[str, Any]] = None
-_LATEST_BACKENDS_COMPARISON: Optional[Dict[str, Any]] = None
-
-
 @router.get("/quantum/sweep")
 def get_quantum_qubit_sweep(splits: int = 5, repeats: int = 2, refresh: bool = False):
-    """
-    Returns the real-cohort 5x5 CV qubit sweep table (2-16 qubits) on UCI Bone Marrow Transplant data.
-    All figures are genuinely evaluated out-of-fold with 95% bootstrap confidence intervals.
-    """
-    global _LATEST_QUANTUM_SWEEP
-    if _LATEST_QUANTUM_SWEEP is None or refresh:
-        from app.core.quantum.qsvm_cv import run_qubit_sweep
-        _LATEST_QUANTUM_SWEEP = run_qubit_sweep(
-            qubits_list=[2, 4, 8, 12, 16],
-            n_splits=splits,
-            n_repeats=repeats,
-            random_state=42
-        )
-    return _LATEST_QUANTUM_SWEEP
+    """Last saved UCI qubit sweep (nested CV QSVM, 2-16 qubits); computed by the worker, never in the request."""
+    from app.core.quantum import store
+    return store.cached_or_enqueue("quantum_sweep", "quantum_cv_sweep",
+                                   {"qubits_list": [2, 4, 8, 12, 16], "n_splits": splits, "n_repeats": repeats}, refresh)
 
 
 @router.get("/quantum/compare-backends")
 def get_quantum_backends_comparison(shots: int = 1024, n_qubits: int = 4, refresh: bool = False):
-    """
-    Genuine comparison between Ideal Statevector (GPU), Noisy Simulation (Heron FakeFez),
-    and Physical IBM Quantum QPU on a 16 train / 8 test UCI subset.
-    """
-    global _LATEST_BACKENDS_COMPARISON
-    if _LATEST_BACKENDS_COMPARISON is None or refresh:
-        _LATEST_BACKENDS_COMPARISON = quantum_manager.run_backends_comparison(
-            shots=shots,
-            n_qubits=n_qubits
-        )
-    return _LATEST_BACKENDS_COMPARISON
+    """Ideal GPU statevector vs Heron noisy simulation vs IBM hardware on the same 16 train / 8 test UCI patients."""
+    from app.core.quantum import store
+    out = store.cached_or_enqueue("quantum_comparison", "compare_backends", {"shots": shots, "n_qubits": n_qubits}, refresh)
+    hw = store.load("ibm_hardware_kernel")
+    if out["result"] is not None:
+        out["result"]["hardware_run"] = hw if hw and hw.get("n_qubits") == out["result"].get("n_qubits") else None
+    return out
+
+
+class HardwareRunRequest(BaseModel):
+    backend_name: Optional[str] = None
+    shots: int = 1024
+    n_qubits: int = 4
+
+
+@router.post("/quantum/hardware-run", status_code=202)
+def submit_hardware_run(req: HardwareRunRequest):
+    """Queues the UCI kernel job on a real IBM QPU (the worker checks the QPU-seconds budget before submitting)."""
+    from app.core.quantum import store
+    from app.core import jobs as job_queue
+    if not quantum_manager.service:
+        raise HTTPException(status_code=409, detail=quantum_manager.last_connection_error or "IBM Quantum is not connected.")
+    if not 2 <= req.n_qubits <= 8 or not 128 <= req.shots <= 4096:
+        raise HTTPException(status_code=400, detail="n_qubits must be 2-8 and shots 128-4096.")
+    estimate = quantum_manager.estimate_qpu_seconds(quantum_manager.HARDWARE_CIRCUITS, req.shots)
+    if estimate > get_settings().ibm_max_seconds_per_run:
+        raise HTTPException(status_code=400, detail=f"Estimated {estimate:.0f} QPU-seconds exceeds IBM_MAX_SECONDS_PER_RUN ({get_settings().ibm_max_seconds_per_run:.0f}s).")
+    job = store.active_job("ibm_hardware_kernel") or job_queue.enqueue_job("ibm_hardware_kernel", req.model_dump())
+    return {"job": job, "estimated_qpu_seconds": estimate}
+
+
+@router.get("/quantum/hardware-run/latest")
+def latest_hardware_run():
+    from app.core.quantum import store
+    return {"result": store.load("ibm_hardware_kernel"), "job": store.active_job("ibm_hardware_kernel")}
 
 
 @router.post("/quantum/estimate-budget")
 def estimate_quantum_hardware_budget(total_circuits: int = 100, shots: int = 1024):
     """Calculates QPU-seconds budget and checks against IBM_MAX_SECONDS_PER_RUN (Open Plan limit)."""
     est_seconds = quantum_manager.estimate_qpu_seconds(total_circuits=total_circuits, shots=shots)
-    max_budget = float(os.environ.get("IBM_MAX_SECONDS_PER_RUN", "600.0"))
+    max_budget = get_settings().ibm_max_seconds_per_run
     return {
         "total_circuits": total_circuits,
         "shots": shots,

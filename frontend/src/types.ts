@@ -21,6 +21,8 @@ export interface DatasetProfile {
   }>;
   categorical_summaries: Record<string, Record<string, number>>;
   potential_leakage_warnings: string[];
+  leakage_columns?: string[];
+  data_quality_notes?: string[];
   suggested_target: string;
   suggested_features: string[];
   class_distribution?: Record<string, number>;
@@ -286,6 +288,9 @@ export interface QuantumStatus {
   default_backend: string;
   environment_instructions?: string;
   execution_modes_supported?: any;
+  connection_error?: string | null;
+  usage?: { usage_consumed_seconds: number; usage_limit_seconds: number; usage_remaining_seconds: number; usage_limit_reached: boolean; period_end?: string } | null;
+  max_seconds_per_run?: number;
 }
 
 export interface QuantumJob {
@@ -426,8 +431,10 @@ export interface QubitSweepRow {
 export interface QuantumSweepResult {
   dataset: string;
   target: string;
+  classical_baseline_model?: string;
   classical_baseline_auc: number;
-  classical_baseline_ci: [number, number];
+  classical_baseline_ci: [number, number] | null;
+  cv_protocol?: string;
   sweep_table: QubitSweepRow[];
   best_qubit_setting: QubitSweepRow | null;
 }
@@ -448,13 +455,39 @@ export interface BackendComparisonItem {
   device_provenance?: string;
 }
 
+export interface HardwareKernelRun {
+  job_id: string;
+  backend_name: string;
+  n_qubits: number;
+  shots: number;
+  circuits: number;
+  transpiled_depth: number;
+  wall_seconds: number;
+  qpu_seconds_used: number | null;
+  completed_at: string;
+  alignment: number;
+  test_auc: number;
+  frobenius_error_vs_ideal: number;
+  matrix_preview: number[][];
+  ideal_matrix_preview: number[][];
+  provenance: string;
+}
+
 export interface BackendsComparisonResult {
   subset: string;
   n_qubits: number;
   shots: number;
+  computed_at?: string;
+  test_patients?: string[];
   ideal: BackendComparisonItem;
   noisy_simulation: BackendComparisonItem;
-  hardware: BackendComparisonItem;
+  hardware_run: HardwareKernelRun | null;
+}
+
+/** Saved result of a worker-computed quantum task, plus the job computing a newer one (if any). */
+export interface CachedQuantumResult<T> {
+  result: T | null;
+  job: { job_id: string; status: string; progress: number; progress_message: string | null; error?: string | null } | null;
 }
 
 export interface GPUSimulateJobResult {
