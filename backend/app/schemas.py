@@ -179,7 +179,7 @@ class QuantumExperimentRunRequest(BaseModel):
     execution_mode: str = Field(default="simulator", description="'hardware' for physical IBM QPU or 'simulator' for local statevector")
     n_features: int = Field(default=156, ge=4, le=156, description="Features selected from pre-transplant pool (mapped to physical qubits)")
     shots: int = Field(default=1000, ge=100, le=8192, description="Measurement shots")
-    max_hardware_samples: int = Field(default=8, ge=2, le=20, description="Upper bound on samples for hardware execution")
+    max_hardware_samples: int = Field(default=300, ge=2, le=500, description="Sample limit for evaluation")
     dataset_id: Optional[str] = Field(default="cibmtr_hsct_200features", description="Source dataset")
     confirm_hardware: Optional[bool] = Field(default=False, description="Explicit user confirmation for real quantum hardware execution")
 
