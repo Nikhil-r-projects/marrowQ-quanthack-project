@@ -173,6 +173,7 @@ def compute_patient_trajectory(patient_id: str, max_horizon_days: int = 45) -> D
             "current_hb": hb_observed.get(latest_observed_day, "N/A"),
             "current_wbc": wbc_observed.get(latest_observed_day, "N/A"),
             "velocity": "Accelerated" if latest_observed_day >= 10 and anc_observed.get(latest_observed_day, 0) > 300 else "Standard",
-            "status_description": f"Day +{latest_observed_day} post-transplant. Recovery curve tracks within expected 95% confidence interval."
+            # The curve is a fixed reference shape until the patient-specific simulation replaces it; say only what is known.
+            "status_description": f"Latest recorded draw: Day +{latest_observed_day}. The curve shown is a generic reference, not a forecast for this patient."
         }
     }

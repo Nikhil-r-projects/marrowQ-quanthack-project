@@ -22,7 +22,7 @@ class DatasetProfileResponse(BaseModel):
 
 class ExperimentCreateRequest(BaseModel):
     dataset_id: str
-    target_column: str = "neutrophil_recovery_day28"
+    target_column: str = "early_engraftment"
     positive_class: Any = 1
     selected_features: Optional[List[str]] = None
     test_size: float = Field(default=0.25, ge=0.1, le=0.5)
@@ -31,6 +31,8 @@ class ExperimentCreateRequest(BaseModel):
     run_logistic: bool = True
     run_random_forest: bool = True
     run_rbf_svm: bool = True
+    run_gradient_boosting: bool = True
+    cv_repeats: int = Field(default=5, ge=1, le=10)
     run_quantum_svm: bool = True
     quantum_qubits: int = Field(default=2, ge=2, le=6)
     quantum_reps: int = Field(default=1, ge=1, le=3)
@@ -53,6 +55,14 @@ class ModelMetric(BaseModel):
     status: str = "completed"
     error_message: Optional[str] = None
     extra_info: Optional[Dict[str, Any]] = None
+    # Cross-validated evaluation (benchmark.py)
+    roc_auc_ci: Optional[List[float]] = None
+    balanced_accuracy_ci: Optional[List[float]] = None
+    brier_ci: Optional[List[float]] = None
+    roc_auc_repeat_sd: Optional[float] = None
+    calibration: Optional[List[Dict[str, float]]] = None
+    best_params: Optional[Dict[str, Any]] = None
+    evaluation: Optional[str] = None
 
 class ExperimentResponse(BaseModel):
     experiment_id: str
@@ -114,7 +124,7 @@ class QuantumSimulationResponse(BaseModel):
 class PatientResponse(BaseModel):
     patient_id: str
     name: str
-    age: int
+    age: float
     gender: str
     disease: str
     transplant_type: str
@@ -127,6 +137,20 @@ class PatientResponse(BaseModel):
     hla_match: Optional[str] = None
     status: str
     created_at: str
+    source: str = "clinical"
+    source_record: Optional[str] = None
+    pretransplant: Optional[Dict[str, Any]] = None
+
+class PatientCreateRequest(BaseModel):
+    """Intake for a transplant recipient. `pretransplant` uses the cohort data-dictionary variable names."""
+    label: str = Field(min_length=1, max_length=80, description="Name or medical record number as used locally")
+    transplant_date: str = Field(description="Date of stem-cell infusion (Day 0), ISO format")
+    conditioning: str = Field(default="Not recorded", max_length=80)
+    pretransplant: Dict[str, Any]
+
+class ExamplePatientsRequest(BaseModel):
+    count: int = Field(default=4, ge=1, le=8)
+    seed: int = 7
 
 class ObservationCreateRequest(BaseModel):
     patient_id: str

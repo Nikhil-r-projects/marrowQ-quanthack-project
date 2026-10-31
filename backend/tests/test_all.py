@@ -21,6 +21,14 @@ from app.main import app
 
 client = TestClient(app)
 
+
+@pytest.fixture(scope="module")
+def ward_patient():
+    """A ward patient admitted from a real UCI record (the app no longer ships invented patients)."""
+    res = client.post("/api/patients/examples", json={"count": 1})
+    assert res.status_code == 201
+    return res.json()[0]
+
 def test_health_endpoint():
     response = client.get("/api/health")
     assert response.status_code == 200
@@ -132,8 +140,8 @@ def test_api_demo_dataset_and_experiment_lifecycle():
     # 2. Create experiment
     create_payload = {
         "dataset_id": dataset_id,
-        "target_column": "neutrophil_recovery_day28",
-        "selected_features": ["recipient_age", "cd34_dose", "recipient_gender", "graft_source"],
+        "target_column": "early_engraftment",
+        "selected_features": ["recipient_age", "cd34_dose", "recipient_sex", "stem_cell_source"],
         "test_size": 0.25,
         "random_state": 42,
         "run_dummy": True,
@@ -167,17 +175,17 @@ def test_api_demo_dataset_and_experiment_lifecycle():
         "experiment_id": exp_id,
         "model_name": "logistic_regression",
         "features": {
-            "recipient_age": 45,
+            "recipient_age": 9.5,
             "cd34_dose": 5.2,
-            "recipient_gender": "M",
-            "graft_source": "PBSC"
+            "recipient_sex": "Male",
+            "stem_cell_source": "Peripheral blood"
         }
     }
     pred_res = client.post("/api/predictions", json=pred_payload)
     assert pred_res.status_code == 200
     pred_data = pred_res.json()
     assert pred_data["prediction"] in [0, 1]
-    assert "SYNTHETIC DEMONSTRATION" in pred_data["disclaimer"]
+    assert "NOT CLINICAL ADVICE" in pred_data["disclaimer"]
     
     # 6. Report
     rep_res = client.get(f"/api/reports/{exp_id}")
@@ -230,28 +238,24 @@ def test_quantum_simulation_api():
 # MARROWQ 2.0 TESTS
 # =========================================================================
 
-def test_patients_and_observations_api():
-    res = client.get("/api/patients")
-    assert res.status_code == 200
-    patients = res.json()
-    assert len(patients) >= 3
-    assert any(p["patient_id"] == "PT-9042-BMT" for p in patients)
+def test_patients_and_observations_api(ward_patient):
+    pid = ward_patient["patient_id"]
+    patients = client.get("/api/patients").json()
+    assert any(p["patient_id"] == pid for p in patients)
+    assert not any(p["patient_id"] == "PT-9042-BMT" for p in patients), "invented seed patient must be gone"
 
-    # Single patient
-    res_single = client.get("/api/patients/PT-9042-BMT")
-    assert res_single.status_code == 200
-    data = res_single.json()
-    assert data["name"] == "Eleanora Vance"
+    data = client.get(f"/api/patients/{pid}").json()
+    assert data["source"] == "example" and data["source_record"].startswith("UCI-")
+    assert data["name"] == f"Example · {data['source_record']}"
     assert data["transplant_type"] == "Allogeneic HSCT"
+    # Outcomes must never be copied onto the ward record.
+    assert not set(data["pretransplant"]) & {"anc_recovery_day", "early_engraftment", "died"}
 
-    # Observations
-    res_obs = client.get("/api/patients/PT-9042-BMT/observations")
-    assert res_obs.status_code == 200
-    obs = res_obs.json()
-    assert len(obs) >= 7
+    # A newly admitted patient has no labs until someone records them.
+    assert client.get(f"/api/patients/{pid}/observations").json() == []
 
-def test_patient_progress_and_trajectory():
-    res = client.get("/api/patients/PT-9042-BMT/progress")
+def test_patient_progress_and_trajectory(ward_patient):
+    res = client.get(f"/api/patients/{ward_patient['patient_id']}/progress")
     assert res.status_code == 200
     data = res.json()
     assert "timeline_series" in data
@@ -265,16 +269,16 @@ def test_patient_progress_and_trajectory():
     assert point["anc_lower_95"] <= point["anc_predicted"] <= point["anc_upper_95"]
     assert point["plt_lower_95"] <= point["plt_predicted"] <= point["plt_upper_95"]
 
-def test_add_observation():
+def test_add_observation(ward_patient):
     payload = {
-        "patient_id": "PT-9042-BMT",
+        "patient_id": ward_patient["patient_id"],
         "day_post_tx": 15,
         "recorded_date": "2026-10-29",
         "metric_type": "Absolute Neutrophil Count (ANC)",
         "value": 520.0,
         "unit": "cells/μL"
     }
-    res = client.post("/api/patients/PT-9042-BMT/observations", json=payload)
+    res = client.post(f"/api/patients/{ward_patient['patient_id']}/observations", json=payload)
     assert res.status_code == 200
     assert res.json()["status"] == "SUCCESS"
 
@@ -288,13 +292,13 @@ def test_quantum_backends_and_status():
     res_backends = client.get("/api/quantum/backends")
     assert res_backends.status_code == 200
     backends = res_backends.json()
-    assert len(backends) >= 4
-    assert any(b["backend_name"] == "ibm_brisbane" for b in backends)
+    # Without IBM credentials only the local simulators may be listed, never a static hardware catalogue.
+    assert not any(b["is_hardware"] for b in backends)
     assert any(b["backend_name"] == "aer_simulator_statevector" for b in backends)
 
-def test_multi_agent_orchestrator():
+def test_multi_agent_orchestrator(ward_patient):
     payload = {
-        "patient_id": "PT-9042-BMT",
+        "patient_id": ward_patient["patient_id"],
         "current_labs": {"anc": 420.0, "platelets": 18500.0},
         "quantum_backend": "aer_simulator_statevector",
         "execution_mode": "auto_fallback"
@@ -316,10 +320,10 @@ def test_hospital_operational_overview():
     assert res.status_code == 200
     data = res.json()
     assert "cohort_summary" in data
-    assert data["cohort_summary"]["total_active_patients"] >= 3
-    assert "quantum_service_health" in data
-    assert "service_health" in data
-    assert data["service_health"]["orchestrator_agents_active"] == 8
+    assert data["cohort_summary"]["total_active_patients"] >= 0
+    assert data["service_health"]["database"] == "ONLINE"
+    assert "uptime_pct" not in data["service_health"], "no hard-coded uptime figure"
+    assert data["quantum_service_health"]["hardware_backends_available"] == 0
 
 
 

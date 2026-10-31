@@ -7,8 +7,9 @@ export function engraftmentDay(progress: PatientProgress, kind: 'anc' | 'plt'): 
   return done?.actual_day ?? (kind === 'anc' ? progress.expected_anc_engraft_day : progress.expected_plt_engraft_day);
 }
 
+/** Two letters from the words that start with a letter or digit ("Example · UCI-017" → "EU"). */
 export const initials = (name: string) =>
-  name.split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase();
+  name.split(/\s+/).filter(w => /^[\p{L}\p{N}]/u.test(w)).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 
 const AVATAR_TONES = ['', 'violet', 'green', 'amber'];
 

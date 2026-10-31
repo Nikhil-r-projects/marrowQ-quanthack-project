@@ -227,8 +227,19 @@ def init_db(db_path: str = DB_PATH):
     )
     """)
 
+    # Columns added after the first release; ALTER keeps existing databases usable.
+    patient_cols = {row[1] for row in cursor.execute("PRAGMA table_info(patients)")}
+    for column, ddl in (
+        ("source", "TEXT NOT NULL DEFAULT 'clinical'"),
+        ("source_record", "TEXT"),
+        ("pretransplant_json", "TEXT"),
+    ):
+        if column not in patient_cols:
+            cursor.execute(f"ALTER TABLE patients ADD COLUMN {column} {ddl}")
+
     conn.commit()
     conn.close()
+    purge_legacy_seed_data(db_path)
 
 _initialized: set = set()
 
@@ -345,65 +356,56 @@ def list_experiments(db_path: str = DB_PATH) -> List[Dict[str, Any]]:
 
 # --- Clinical Patients & Observations Store (marrowQ 2.0) ---
 
-def list_patients(db_path: str = DB_PATH) -> List[Dict[str, Any]]:
-    conn = get_connection(db_path)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT patient_id, name, age, gender, disease, transplant_type, donor_type,
-               transplant_date, conditioning, cell_dose_cd34, chimerism_donor_pct,
-               cmv_status, hla_match, status, created_at
-        FROM patients ORDER BY transplant_date DESC
-    """)
-    rows = cursor.fetchall()
-    conn.close()
-    return [{
-        "patient_id": r[0], "name": r[1], "age": r[2], "gender": r[3],
-        "disease": r[4], "transplant_type": r[5], "donor_type": r[6],
-        "transplant_date": r[7], "conditioning": r[8], "cell_dose_cd34": r[9],
-        "chimerism_donor_pct": r[10], "cmv_status": r[11], "hla_match": r[12],
-        "status": r[13], "created_at": r[14]
-    } for r in rows]
+_PATIENT_COLUMNS = (
+    "patient_id, name, age, gender, disease, transplant_type, donor_type, transplant_date, conditioning, "
+    "cell_dose_cd34, chimerism_donor_pct, cmv_status, hla_match, status, created_at, source, source_record, pretransplant_json"
+)
 
-def get_patient(patient_id: str, db_path: str = DB_PATH) -> Optional[Dict[str, Any]]:
-    conn = get_connection(db_path)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT patient_id, name, age, gender, disease, transplant_type, donor_type,
-               transplant_date, conditioning, cell_dose_cd34, chimerism_donor_pct,
-               cmv_status, hla_match, status, created_at
-        FROM patients WHERE patient_id = ?
-    """, (patient_id,))
-    r = cursor.fetchone()
-    conn.close()
-    if not r:
-        return None
+
+def _row_to_patient(r) -> Dict[str, Any]:
     return {
         "patient_id": r[0], "name": r[1], "age": r[2], "gender": r[3],
         "disease": r[4], "transplant_type": r[5], "donor_type": r[6],
         "transplant_date": r[7], "conditioning": r[8], "cell_dose_cd34": r[9],
         "chimerism_donor_pct": r[10], "cmv_status": r[11], "hla_match": r[12],
-        "status": r[13], "created_at": r[14]
+        "status": r[13], "created_at": r[14], "source": r[15], "source_record": r[16],
+        "pretransplant": json.loads(r[17]) if r[17] else None,
     }
 
+
+def list_patients(db_path: str = DB_PATH) -> List[Dict[str, Any]]:
+    with get_connection(db_path) as conn:
+        rows = conn.execute(f"SELECT {_PATIENT_COLUMNS} FROM patients ORDER BY transplant_date DESC").fetchall()
+    return [_row_to_patient(r) for r in rows]
+
+
+def get_patient(patient_id: str, db_path: str = DB_PATH) -> Optional[Dict[str, Any]]:
+    with get_connection(db_path) as conn:
+        r = conn.execute(f"SELECT {_PATIENT_COLUMNS} FROM patients WHERE patient_id = ?", (patient_id,)).fetchone()
+    return _row_to_patient(r) if r else None
+
+
 def save_patient(patient: Dict[str, Any], db_path: str = DB_PATH):
-    conn = get_connection(db_path)
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT OR REPLACE INTO patients (
-            patient_id, name, age, gender, disease, transplant_type, donor_type,
-            transplant_date, conditioning, cell_dose_cd34, chimerism_donor_pct,
-            cmv_status, hla_match, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        patient["patient_id"], patient["name"], patient["age"], patient["gender"],
-        patient["disease"], patient["transplant_type"], patient["donor_type"],
-        patient["transplant_date"], patient.get("conditioning", "Myeloablative"),
-        patient.get("cell_dose_cd34", 5.0), patient.get("chimerism_donor_pct", 95.0),
-        patient.get("cmv_status", "Negative"), patient.get("hla_match", "10/10"),
-        patient.get("status", "Active"), patient.get("created_at", datetime.now(timezone.utc).isoformat())
-    ))
-    conn.commit()
-    conn.close()
+    with get_connection(db_path) as conn:
+        conn.execute(f"""
+            INSERT OR REPLACE INTO patients ({_PATIENT_COLUMNS}) VALUES ({",".join("?" * 18)})
+        """, (
+            patient["patient_id"], patient["name"], patient["age"], patient["gender"],
+            patient["disease"], patient["transplant_type"], patient["donor_type"],
+            patient["transplant_date"], patient["conditioning"],
+            patient.get("cell_dose_cd34"), patient.get("chimerism_donor_pct"),
+            patient.get("cmv_status"), patient.get("hla_match"),
+            patient["status"], patient.get("created_at", datetime.now(timezone.utc).isoformat()),
+            patient.get("source", "clinical"), patient.get("source_record"),
+            json.dumps(patient["pretransplant"]) if patient.get("pretransplant") is not None else None,
+        ))
+
+
+def delete_patient(patient_id: str, db_path: str = DB_PATH) -> bool:
+    with get_connection(db_path) as conn:
+        conn.execute("DELETE FROM clinical_observations WHERE patient_id = ?", (patient_id,))
+        conn.execute("DELETE FROM prediction_runs WHERE patient_id = ?", (patient_id,))
+        return conn.execute("DELETE FROM patients WHERE patient_id = ?", (patient_id,)).rowcount > 0
 
 def get_patient_observations(patient_id: str, db_path: str = DB_PATH) -> List[Dict[str, Any]]:
     conn = get_connection(db_path)
@@ -524,172 +526,19 @@ def list_prediction_runs(patient_id: Optional[str] = None, db_path: str = DB_PAT
         })
     return results
 
-def seed_default_clinical_data(db_path: str = DB_PATH):
-    """Seed authentic clinical records for marrowQ 2.0 demonstration"""
-    conn = get_connection(db_path)
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT COUNT(*) FROM patients")
-    count = cursor.fetchone()[0]
-    if count > 0:
-        conn.close()
-        return
+# Rows that earlier versions seeded with invented patients, labs, an approved prediction and a
+# hardware job that never ran. Removed on start-up so no fabricated record survives an upgrade.
+_LEGACY_SEED_PATIENTS = ("PT-9042-BMT", "PT-8104-BMT", "PT-4421-BMT")
+_LEGACY_SEED_JOBS = ("qjob-bmt-9042-kernel-eval",)
+_LEGACY_SEED_PREDICTIONS = ("PR-9042-20261028",)
 
-    # Seed Patient 1: PT-9042-BMT (Eleanora Vance, Day +14 Active Recovery)
-    p1 = {
-        "patient_id": "PT-9042-BMT",
-        "name": "Eleanora Vance",
-        "age": 42,
-        "gender": "Female",
-        "disease": "Acute Myeloid Leukemia (AML, adverse cytogenetics)",
-        "transplant_type": "Allogeneic HSCT",
-        "donor_type": "10/10 Matched Unrelated Donor (MUD)",
-        "transplant_date": "2026-10-14",
-        "conditioning": "Busulfan/Cyclophosphamide (Bu/Cy)",
-        "cell_dose_cd34": 6.4,
-        "chimerism_donor_pct": 98.4,
-        "cmv_status": "D+/R- (High Risk)",
-        "hla_match": "10/10",
-        "status": "Active Surveillance - Engraftment Impending",
-        "created_at": "2026-10-14T08:00:00Z"
-    }
-    
-    # Seed Patient 2: PT-8104-BMT (Marcus Chen, Day +32 Engrafted)
-    p2 = {
-        "patient_id": "PT-8104-BMT",
-        "name": "Marcus Chen",
-        "age": 58,
-        "gender": "Male",
-        "disease": "Myelodysplastic Syndrome (MDS-EB2)",
-        "transplant_type": "Allogeneic HSCT",
-        "donor_type": "Haploidentical Related Donor",
-        "transplant_date": "2026-09-26",
-        "conditioning": "Fludarabine/Melphalan/TBI (Flu/Mel)",
-        "cell_dose_cd34": 5.2,
-        "chimerism_donor_pct": 99.8,
-        "cmv_status": "D+/R+ (Reactivated, Treated)",
-        "hla_match": "5/10 Haplo",
-        "status": "Engrafted - Stable Outpatient",
-        "created_at": "2026-09-26T08:00:00Z"
-    }
 
-    # Seed Patient 3: PT-4421-BMT (Sarah Jenkins, Day +5 Aplasia)
-    p3 = {
-        "patient_id": "PT-4421-BMT",
-        "name": "Sarah Jenkins",
-        "age": 29,
-        "gender": "Female",
-        "disease": "Acute Lymphoblastic Leukemia (B-ALL, Ph-like)",
-        "transplant_type": "Allogeneic HSCT",
-        "donor_type": "Matched Sibling Donor (MSD)",
-        "transplant_date": "2026-10-23",
-        "conditioning": "Total Body Irradiation + Cyclophosphamide (TBI/Cy)",
-        "cell_dose_cd34": 7.1,
-        "chimerism_donor_pct": 92.0,
-        "cmv_status": "D-/R- (Low Risk)",
-        "hla_match": "12/12",
-        "status": "Aplastic Nadir - Intensive Isolation",
-        "created_at": "2026-10-23T08:00:00Z"
-    }
-
-    conn.close()
-    save_patient(p1, db_path)
-    save_patient(p2, db_path)
-    save_patient(p3, db_path)
-
-    # Seed Longitudinal observations for PT-9042-BMT (Eleanora Vance)
-    # Days -2, 0, 3, 7, 10, 12, 14
-    labs_p1 = [
-        # Day -2 (Conditioning)
-        {"day": -2, "date": "2026-10-12", "anc": 2800, "plt": 145000, "hb": 11.8, "wbc": 3.9},
-        # Day 0 (Transplant Infusion)
-        {"day": 0, "date": "2026-10-14", "anc": 450, "plt": 85000, "hb": 10.4, "wbc": 1.2},
-        # Day +3 (Early Aplasia)
-        {"day": 3, "date": "2026-10-17", "anc": 30, "plt": 32000, "hb": 8.5, "wbc": 0.1},
-        # Day +7 (Nadir)
-        {"day": 7, "date": "2026-10-21", "anc": 80, "plt": 14000, "hb": 7.9, "wbc": 0.3},
-        # Day +10 (Early Recovery)
-        {"day": 10, "date": "2026-10-24", "anc": 190, "plt": 12500, "hb": 8.6, "wbc": 0.8},
-        # Day +12 (Engraftment Surge)
-        {"day": 12, "date": "2026-10-26", "anc": 280, "plt": 15000, "hb": 9.1, "wbc": 1.3},
-        # Day +14 (Today: 420 cells/uL, impending 500 milestone)
-        {"day": 14, "date": "2026-10-28", "anc": 420, "plt": 18500, "hb": 9.6, "wbc": 1.9},
-    ]
-    for row in labs_p1:
-        save_clinical_observation({"patient_id": "PT-9042-BMT", "day_post_tx": row["day"], "recorded_date": row["date"], "metric_type": "Absolute Neutrophil Count (ANC)", "value": row["anc"], "unit": "cells/μL", "source": "Central Hematology Lab"}, db_path)
-        save_clinical_observation({"patient_id": "PT-9042-BMT", "day_post_tx": row["day"], "recorded_date": row["date"], "metric_type": "Platelets", "value": row["plt"], "unit": "/μL", "source": "Central Hematology Lab"}, db_path)
-        save_clinical_observation({"patient_id": "PT-9042-BMT", "day_post_tx": row["day"], "recorded_date": row["date"], "metric_type": "Hemoglobin", "value": row["hb"], "unit": "g/dL", "source": "Central Hematology Lab"}, db_path)
-        save_clinical_observation({"patient_id": "PT-9042-BMT", "day_post_tx": row["day"], "recorded_date": row["date"], "metric_type": "White Blood Cells (WBC)", "value": row["wbc"], "unit": "x10^3/μL", "source": "Central Hematology Lab"}, db_path)
-
-    # Seed observations for PT-8104-BMT (Engrafted)
-    labs_p2 = [
-        {"day": 0, "date": "2026-09-26", "anc": 300, "plt": 70000, "hb": 9.8, "wbc": 0.9},
-        {"day": 7, "date": "2026-10-03", "anc": 40, "plt": 12000, "hb": 7.6, "wbc": 0.2},
-        {"day": 14, "date": "2026-10-10", "anc": 320, "plt": 16000, "hb": 8.4, "wbc": 1.1},
-        {"day": 18, "date": "2026-10-14", "anc": 680, "plt": 24000, "hb": 9.2, "wbc": 2.4}, # Engrafted ANC > 500
-        {"day": 24, "date": "2026-10-20", "anc": 1420, "plt": 48000, "hb": 10.3, "wbc": 4.1},
-        {"day": 32, "date": "2026-10-28", "anc": 1950, "plt": 65000, "hb": 11.2, "wbc": 5.4},
-    ]
-    for row in labs_p2:
-        save_clinical_observation({"patient_id": "PT-8104-BMT", "day_post_tx": row["day"], "recorded_date": row["date"], "metric_type": "Absolute Neutrophil Count (ANC)", "value": row["anc"], "unit": "cells/μL", "source": "Central Hematology Lab"}, db_path)
-        save_clinical_observation({"patient_id": "PT-8104-BMT", "day_post_tx": row["day"], "recorded_date": row["date"], "metric_type": "Platelets", "value": row["plt"], "unit": "/μL", "source": "Central Hematology Lab"}, db_path)
-        save_clinical_observation({"patient_id": "PT-8104-BMT", "day_post_tx": row["day"], "recorded_date": row["date"], "metric_type": "Hemoglobin", "value": row["hb"], "unit": "g/dL", "source": "Central Hematology Lab"}, db_path)
-        save_clinical_observation({"patient_id": "PT-8104-BMT", "day_post_tx": row["day"], "recorded_date": row["date"], "metric_type": "White Blood Cells (WBC)", "value": row["wbc"], "unit": "x10^3/μL", "source": "Central Hematology Lab"}, db_path)
-
-    # Seed observations for PT-4421-BMT (Aplasia)
-    labs_p3 = [
-        {"day": 0, "date": "2026-10-23", "anc": 500, "plt": 92000, "hb": 10.9, "wbc": 1.4},
-        {"day": 3, "date": "2026-10-26", "anc": 90, "plt": 28000, "hb": 8.7, "wbc": 0.3},
-        {"day": 5, "date": "2026-10-28", "anc": 40, "plt": 11000, "hb": 8.0, "wbc": 0.1},
-    ]
-    for row in labs_p3:
-        save_clinical_observation({"patient_id": "PT-4421-BMT", "day_post_tx": row["day"], "recorded_date": row["date"], "metric_type": "Absolute Neutrophil Count (ANC)", "value": row["anc"], "unit": "cells/μL", "source": "Central Hematology Lab"}, db_path)
-        save_clinical_observation({"patient_id": "PT-4421-BMT", "day_post_tx": row["day"], "recorded_date": row["date"], "metric_type": "Platelets", "value": row["plt"], "unit": "/μL", "source": "Central Hematology Lab"}, db_path)
-        save_clinical_observation({"patient_id": "PT-4421-BMT", "day_post_tx": row["day"], "recorded_date": row["date"], "metric_type": "Hemoglobin", "value": row["hb"], "unit": "g/dL", "source": "Central Hematology Lab"}, db_path)
-        save_clinical_observation({"patient_id": "PT-4421-BMT", "day_post_tx": row["day"], "recorded_date": row["date"], "metric_type": "White Blood Cells (WBC)", "value": row["wbc"], "unit": "x10^3/μL", "source": "Central Hematology Lab"}, db_path)
-
-    # Seed Sample Quantum Job (ibm_brisbane telemetry)
-    save_quantum_job({
-        "job_id": "qjob-bmt-9042-kernel-eval",
-        "backend_name": "ibm_brisbane",
-        "backend_type": "IBM Quantum Hardware (127-Qubit Eagle r3)",
-        "execution_mode": "qiskit_ibm_runtime_estimator",
-        "status": "COMPLETED",
-        "shots": 8192,
-        "circuit_depth": 48,
-        "circuit_width": 2,
-        "submitted_at": "2026-10-28T09:12:00Z",
-        "completed_at": "2026-10-28T09:16:32Z",
-        "execution_duration_ms": 272000,
-        "kernel_evaluation_duration_ms": 320,
-        "error_message": None,
-        "result_provenance": "ibm_brisbane:runtime:zne_error_mitigated"
-    }, db_path)
-
-    # Seed Sample Multi-Model Prediction Run for PT-9042-BMT
-    save_prediction_run({
-        "prediction_id": "PR-9042-20261028",
-        "patient_id": "PT-9042-BMT",
-        "models_executed": ["Logistic Regression", "Random Forest", "Classical RBF SVM", "Quantum-Kernel SVM"],
-        "predictions": {
-            "Logistic Regression": {"probability": 0.78, "predicted_engraftment": True, "confidence": "Moderate"},
-            "Random Forest": {"probability": 0.84, "predicted_engraftment": True, "confidence": "High"},
-            "Classical RBF SVM": {"probability": 0.82, "predicted_engraftment": True, "confidence": "High"},
-            "Quantum-Kernel SVM": {"probability": 0.94, "predicted_engraftment": True, "confidence": "High (Hilbert Kernel Fidelity 0.962)"}
-        },
-        "disagreement": {
-            "consensus": "Unanimous Positive Engraftment (All 4 Models Agree)",
-            "variance": 0.0048,
-            "outlier_model": None,
-            "disagreement_flag": False
-        },
-        "validation_status": "VALIDATED_CLINICALLY_SAFE",
-        "warnings": ["CMV High Risk Donor/Recipient Mismatch: Serial CMV PCR Surveillance Advised"],
-        "clinician_review_status": "APPROVED",
-        "reviewed_by": "Dr. Vance S., MD PhD",
-        "review_notes": "Concur with quantum kernel and RF predictions. ANC velocity confirms impending day +15 engraftment.",
-        "backend_provenance": "qiskit_machine_learning:zz_feature_map:ibm_brisbane"
-    }, db_path)
-
-# Seed on import
-seed_default_clinical_data()
+def purge_legacy_seed_data(db_path: str = DB_PATH) -> None:
+    with _connect(db_path) as conn:
+        marks = ",".join("?" for _ in _LEGACY_SEED_PATIENTS)
+        conn.execute(f"DELETE FROM clinical_observations WHERE patient_id IN ({marks})", _LEGACY_SEED_PATIENTS)
+        conn.execute(f"DELETE FROM prediction_runs WHERE patient_id IN ({marks})", _LEGACY_SEED_PATIENTS)
+        conn.execute(f"DELETE FROM audit_events WHERE patient_id IN ({marks})", _LEGACY_SEED_PATIENTS)
+        conn.execute(f"DELETE FROM patients WHERE patient_id IN ({marks})", _LEGACY_SEED_PATIENTS)
+        conn.execute(f"DELETE FROM quantum_jobs WHERE job_id IN ({','.join('?' for _ in _LEGACY_SEED_JOBS)})", _LEGACY_SEED_JOBS)
+        conn.execute(f"DELETE FROM prediction_runs WHERE prediction_id IN ({','.join('?' for _ in _LEGACY_SEED_PREDICTIONS)})", _LEGACY_SEED_PREDICTIONS)

@@ -5,19 +5,14 @@ import { addPatientObservation, fetchPatientProgress } from '../api';
 import { TrajectoryChart, TrajectoryMetric } from '../components/TrajectoryChart';
 import { Modal } from '../components/Modals';
 import { engraftmentDay } from '../lib/format';
+import { OBSERVATIONS_CHANGED, OBSERVATION_TYPES, ObservationKey, daysPostTransplant } from '../data/observations';
 
 interface PatientProgressViewProps {
   patient: Patient;
   role: UserRole;
 }
 
-const LAB_OPTIONS = {
-  anc: { label: 'Absolute Neutrophil Count (ANC)', unit: 'cells/μL', min: 0, max: 40000 },
-  plt: { label: 'Platelets', unit: '/μL', min: 0, max: 1500000 },
-  hb: { label: 'Hemoglobin', unit: 'g/dL', min: 2, max: 25 },
-  wbc: { label: 'White Blood Cells (WBC)', unit: 'x10^3/μL', min: 0, max: 200 }
-} as const;
-type LabKey = keyof typeof LAB_OPTIONS;
+const LAB_GROUPS = [...new Set(Object.values(OBSERVATION_TYPES).map(t => t.group))];
 
 const num = (v: number | string | undefined) => (v == null || v === '—' ? NaN : Number(v));
 const fmt = (v: number, digits = 0) => (isNaN(v) ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits }));
@@ -27,9 +22,15 @@ export const PatientProgressView: React.FC<PatientProgressViewProps> = ({ patien
   const [metric, setMetric] = useState<TrajectoryMetric>('anc');
   const [showTable, setShowTable] = useState(false);
   const [showLab, setShowLab] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setProgress(await fetchPatientProgress(patient));
+    try {
+      setProgress(await fetchPatientProgress(patient));
+      setLoadError(null);
+    } catch (e) {
+      setLoadError((e as Error).message);
+    }
   }, [patient]);
 
   useEffect(() => { load(); }, [load]);
@@ -51,7 +52,7 @@ export const PatientProgressView: React.FC<PatientProgressViewProps> = ({ patien
         <div>
           <div className="eyebrow">Recovery tracker</div>
           <h2>{isPatient ? 'Your blood count recovery' : `Engraftment trajectory · ${patient.name}`}</h2>
-          <p>{s?.status_description ?? 'Loading the latest counts…'}</p>
+          <p>{loadError ? `Could not load counts: ${loadError}` : s?.status_description ?? 'Loading the latest counts…'}</p>
         </div>
         {!isPatient && (
           <div className="actions">
@@ -66,12 +67,12 @@ export const PatientProgressView: React.FC<PatientProgressViewProps> = ({ patien
         <div className="card kpi">
           <span className="kpi-label">Neutrophils (ANC) <Velocity size={15} className="muted" aria-label={s?.velocity} /></span>
           <span className="kpi-value">{fmt(anc)}<small>cells/µL</small></span>
-          <span className="kpi-foot">{progress ? (progress.is_anc_engrafted ? `Engrafted Day +${engraftmentDay(progress, 'anc')}` : `Threshold 500 · projected Day +${progress.expected_anc_engraft_day}`) : ' '}</span>
+          <span className="kpi-foot">{progress ? (progress.is_anc_engrafted ? `≥ 500 since Day +${engraftmentDay(progress, 'anc')}` : 'Engraftment threshold 500') : ' '}</span>
         </div>
         <div className="card kpi">
           <span className="kpi-label">Platelets</span>
           <span className="kpi-value">{fmt(plt)}<small>/µL</small></span>
-          <span className="kpi-foot">{progress ? (progress.is_plt_engrafted ? `Engrafted Day +${engraftmentDay(progress, 'plt')}` : `Threshold 20,000 · projected Day +${progress.expected_plt_engraft_day}`) : ' '}</span>
+          <span className="kpi-foot">{progress ? (progress.is_plt_engrafted ? `≥ 20,000 since Day +${engraftmentDay(progress, 'plt')}` : 'Engraftment threshold 20,000') : ' '}</span>
         </div>
         <div className="card kpi">
           <span className="kpi-label">Hemoglobin</span>
@@ -90,7 +91,7 @@ export const PatientProgressView: React.FC<PatientProgressViewProps> = ({ patien
           <div className="card-header">
             <div>
               <div className="card-title">{metric === 'anc' ? 'Neutrophil recovery' : 'Platelet recovery'}</div>
-              <div className="card-subtitle">Log scale · observed draws against the recovery model and its 95% band</div>
+              <div className="card-subtitle">Log scale · recorded draws against a generic reference curve (not fitted to this patient)</div>
             </div>
             <div className="row">
               <div className="seg" role="tablist" aria-label="Count">
@@ -129,16 +130,13 @@ export const PatientProgressView: React.FC<PatientProgressViewProps> = ({ patien
               latestDay={latest}
               threshold={metric === 'anc' ? 500 : 20000}
               thresholdLabel={metric === 'anc' ? 'Engraftment 500' : 'Engraftment 20K'}
-              projectedDay={metric === 'anc'
-                ? (progress.is_anc_engrafted ? undefined : progress.expected_anc_engraft_day)
-                : (progress.is_plt_engrafted ? undefined : progress.expected_plt_engraft_day)}
             />
           )}
 
           <div className="chart-key" style={{ marginTop: '0.75rem' }}>
             <span><i className="key-dot" />Observed</span>
-            <span><i className="key-line model" />Recovery model</span>
-            <span><i className="key-band" />95% band</span>
+            <span><i className="key-line model" />Generic reference curve</span>
+            <span><i className="key-band" />Illustrative range</span>
             <span><i className="key-line threshold" />Engraftment threshold</span>
           </div>
         </section>
@@ -176,9 +174,9 @@ export const PatientProgressView: React.FC<PatientProgressViewProps> = ({ patien
       {showLab && (
         <RecordLabModal
           patient={patient}
-          defaultDay={latest}
+          defaultDay={Math.max(0, daysPostTransplant(patient))}
           onClose={() => setShowLab(false)}
-          onSaved={async () => { setShowLab(false); await load(); }}
+          onSaved={async () => { setShowLab(false); window.dispatchEvent(new Event(OBSERVATIONS_CHANGED)); await load(); }}
         />
       )}
     </div>
@@ -186,12 +184,12 @@ export const PatientProgressView: React.FC<PatientProgressViewProps> = ({ patien
 };
 
 const RecordLabModal: React.FC<{ patient: Patient; defaultDay: number; onClose: () => void; onSaved: () => void }> = ({ patient, defaultDay, onClose, onSaved }) => {
-  const [lab, setLab] = useState<LabKey>('anc');
+  const [lab, setLab] = useState<ObservationKey>('anc');
   const [day, setDay] = useState(String(defaultDay));
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const opt = LAB_OPTIONS[lab];
+  const opt = OBSERVATION_TYPES[lab];
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -215,7 +213,7 @@ const RecordLabModal: React.FC<{ patient: Patient; defaultDay: number; onClose: 
         metric_type: opt.label,
         value: v,
         unit: opt.unit,
-        source: 'Bedside point-of-care lab'
+        source: 'Manual entry'
       });
       onSaved();
     } catch (err: any) {
@@ -229,8 +227,14 @@ const RecordLabModal: React.FC<{ patient: Patient; defaultDay: number; onClose: 
       <form onSubmit={submit} noValidate>
         <div className="form-group">
           <label className="form-label" htmlFor="lab-type">Measurement</label>
-          <select id="lab-type" className="form-select" value={lab} onChange={e => setLab(e.target.value as LabKey)}>
-            {(Object.keys(LAB_OPTIONS) as LabKey[]).map(k => <option key={k} value={k}>{LAB_OPTIONS[k].label}</option>)}
+          <select id="lab-type" className="form-select" value={lab} onChange={e => setLab(e.target.value as ObservationKey)}>
+            {LAB_GROUPS.map(g => (
+              <optgroup key={g} label={g}>
+                {(Object.keys(OBSERVATION_TYPES) as ObservationKey[]).filter(k => OBSERVATION_TYPES[k].group === g).map(k => (
+                  <option key={k} value={k}>{OBSERVATION_TYPES[k].label} ({OBSERVATION_TYPES[k].unit})</option>
+                ))}
+              </optgroup>
+            ))}
           </select>
         </div>
         <div className="grid-2" style={{ gap: '0.75rem' }}>

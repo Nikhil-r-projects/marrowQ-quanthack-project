@@ -30,9 +30,87 @@ def _gpu_benchmark(payload: Dict[str, Any], progress: Progress) -> Dict[str, Any
     return {"capabilities": caps, "benchmark": statevector_benchmark(n_qubits, devices, progress)}
 
 
+def _gpu_simulate(payload: Dict[str, Any], progress: Progress) -> Dict[str, Any]:
+    """Computes genuine quantum kernel matrices on real UCI cohort patients."""
+    import numpy as np
+    from app.core.datasets.uci_bmt import load_cohort, CORE_FEATURES
+    from app.core.benchmark import build_preprocessor, split_feature_types, binary_target
+    from app.core.quantum.kernel_engine import GPUQuantumKernelEngine
+    from app.core.quantum.diagnostics import compute_kernel_diagnostics
+    from sklearn.decomposition import PCA
+    from sklearn.preprocessing import MinMaxScaler
+
+    n_patients = int(payload.get("n_patients", 24))
+    n_qubits = int(payload.get("n_qubits", 4))
+    bandwidth = float(payload.get("bandwidth", 1.0))
+    reps = int(payload.get("reps", 1))
+
+    progress(0.1, f"Loading UCI cohort (N={n_patients})...")
+    df = load_cohort()
+    df_sub = df.iloc[:n_patients].copy() if n_patients < len(df) else df.copy()
+
+    y = binary_target(df_sub["early_engraftment"])
+    X_raw = df_sub[CORE_FEATURES]
+
+    progress(0.3, "Fitting preprocessor & PCA projection...")
+    num, cat = split_feature_types(df_sub, CORE_FEATURES)
+    prep = build_preprocessor(num, cat)
+    X_trans = prep.fit_transform(X_raw)
+
+    n_components = min(n_qubits, X_trans.shape[1])
+    pca = PCA(n_components=n_components, random_state=42)
+    scaler = MinMaxScaler(feature_range=(0, np.pi))
+    X_pca = scaler.fit_transform(pca.fit_transform(X_trans))
+
+    progress(0.6, f"Simulating quantum statevectors on {n_components} qubits...")
+    engine = GPUQuantumKernelEngine(prefer_gpu=True)
+    K, meta = engine.evaluate(X_pca, n_qubits=n_components, reps=reps, bandwidth=bandwidth)
+
+    progress(0.9, "Calculating kernel concentration, geometric difference & alignment...")
+    diag = compute_kernel_diagnostics(K, y, X_original=X_pca)
+
+    progress(1.0, f"Completed quantum simulation on {meta['device']}")
+    return {
+        "dataset": "UCI Bone Marrow Transplant: Children",
+        "n_patients": len(df_sub),
+        "patient_ids": df_sub["patient_id"].tolist(),
+        "n_qubits": n_components,
+        "bandwidth": bandwidth,
+        "reps": reps,
+        "telemetry": meta,
+        "diagnostics": diag,
+        "kernel_matrix_preview": K[:8, :8].round(4).tolist() if len(K) >= 8 else K.round(4).tolist(),
+        "kernel_shape": list(K.shape),
+    }
+
+
+def _quantum_cv_sweep(payload: Dict[str, Any], progress: Progress) -> Dict[str, Any]:
+    from app.core.quantum.qsvm_cv import run_qubit_sweep
+    qubits_list = payload.get("qubits_list", [2, 4, 8, 12, 16])
+    n_splits = int(payload.get("n_splits", 5))
+    n_repeats = int(payload.get("n_repeats", 5))
+    return run_qubit_sweep(qubits_list=qubits_list, n_splits=n_splits, n_repeats=n_repeats, progress_callback=progress)
+
+
+def _compare_backends(payload: Dict[str, Any], progress: Progress) -> Dict[str, Any]:
+    from app.core.ibm_quantum import quantum_manager
+    shots = int(payload.get("shots", 1024))
+    n_qubits = int(payload.get("n_qubits", 4))
+    return quantum_manager.run_backends_comparison(shots=shots, n_qubits=n_qubits, progress_callback=progress)
+
+
+def _ibm_hardware_kernel(payload: Dict[str, Any], progress: Progress) -> Dict[str, Any]:
+    from app.core.ibm_quantum import quantum_manager
+    return quantum_manager.execute_hardware_kernel_job(payload, progress)
+
+
 # Job kinds this worker executes; later chunks register simulation and quantum handlers here.
 HANDLERS: Dict[str, Handler] = {
     "gpu_benchmark": _gpu_benchmark,
+    "gpu_simulate": _gpu_simulate,
+    "quantum_cv_sweep": _quantum_cv_sweep,
+    "compare_backends": _compare_backends,
+    "ibm_hardware_kernel": _ibm_hardware_kernel,
 }
 
 
@@ -84,7 +162,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="MarrowQ compute worker")
     parser.add_argument("--id", default=f"{socket.gethostname()}-worker", help="stable id, so interrupted jobs are requeued on restart")
     args = parser.parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    # Libraries such as the Qiskit transpiler log every pass at INFO; keep only our own progress lines.
+    logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s")
+    log.setLevel(logging.INFO)
 
     worker = Worker(args.id)
     for sig in (signal.SIGINT, signal.SIGTERM):

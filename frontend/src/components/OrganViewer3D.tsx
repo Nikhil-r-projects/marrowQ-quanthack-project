@@ -64,11 +64,59 @@ const MODELS: Record<OrganType, ModelSpec> = {
   }
 };
 
+// Sketchfab's Viewer API (not a bare embed URL) reports whether the model actually loaded, so an
+// outage or maintenance page falls back to the built-in model instead of showing in the viewer.
+const SKETCHFAB_API_URL = 'https://static.sketchfab.com/api/sketchfab-viewer-1.12.1.js';
+const SKETCHFAB_TIMEOUT_MS = 20000;
 // Hide Sketchfab's chrome that duplicates ours; animation_autoplay=0 keeps models whole (the liver
 // otherwise plays an exploded-vessel animation); dnt=1 keeps the embed from tracking viewers.
-const sketchfabEmbedUrl = (id: string) =>
-  `https://sketchfab.com/models/${id}/embed?autostart=1&preload=1&autospin=0.2&animation_autoplay=0&transparent=1&ui_theme=dark&dnt=1` +
-  '&ui_infos=0&ui_inspector=0&ui_settings=0&ui_vr=0&ui_ar=0&ui_help=0&ui_annotations=0&ui_stop=0&ui_hint=2';
+const SKETCHFAB_OPTIONS = {
+  autostart: 1, preload: 1, autospin: 0.2, animation_autoplay: 0, transparent: 1, ui_theme: 'dark', dnt: 1,
+  ui_infos: 0, ui_inspector: 0, ui_settings: 0, ui_vr: 0, ui_ar: 0, ui_help: 0, ui_annotations: 0, ui_stop: 0, ui_hint: 2
+};
+
+interface SketchfabApi { start(): void; addEventListener(event: 'viewerready', cb: () => void): void }
+interface SketchfabClient { init(uid: string, options: Record<string, unknown>): void }
+type SketchfabConstructor = new (version: string, iframe: HTMLIFrameElement) => SketchfabClient;
+
+let sketchfabScript: Promise<SketchfabConstructor> | null = null;
+
+function loadSketchfabApi(): Promise<SketchfabConstructor> {
+  sketchfabScript ??= new Promise((resolve, reject) => {
+    const tag = document.createElement('script');
+    tag.src = SKETCHFAB_API_URL;
+    tag.async = true;
+    tag.onload = () => {
+      const ctor = (window as unknown as { Sketchfab?: SketchfabConstructor }).Sketchfab;
+      if (ctor) resolve(ctor); else reject(new Error('Sketchfab API missing'));
+    };
+    tag.onerror = () => reject(new Error('Sketchfab API unreachable'));
+    document.head.appendChild(tag);
+  });
+  // Allow a retry later if this attempt failed.
+  sketchfabScript.catch(() => { sketchfabScript = null; });
+  return sketchfabScript;
+}
+
+/** Resolves once the Sketchfab viewer reports the model is on screen; rejects on error or timeout.
+ *  The timeout covers the script download too: during an outage that request can hang indefinitely. */
+function startSketchfab(iframe: HTMLIFrameElement, uid: string): Promise<void> {
+  const viewer = loadSketchfabApi().then(Sketchfab => new Promise<void>((resolve, reject) => {
+    new Sketchfab('1.12.1', iframe).init(uid, {
+      ...SKETCHFAB_OPTIONS,
+      success: (api: SketchfabApi) => {
+        api.start();
+        api.addEventListener('viewerready', () => resolve());
+      },
+      error: () => reject(new Error('Sketchfab model failed to load'))
+    });
+  }));
+  let timer = 0;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error('Sketchfab viewer timed out')), SKETCHFAB_TIMEOUT_MS);
+  });
+  return Promise.race([viewer, timeout]).finally(() => window.clearTimeout(timer));
+}
 
 const TARGET_SIZE = 2.2;
 const CAMERA_DISTANCE = 5;
@@ -162,7 +210,7 @@ function anchorPins(model: THREE.Object3D, metrics: OrganMetric[]): Map<string, 
   return anchors;
 }
 
-type LoadState = { status: 'loading'; progress: number } | { status: 'ready' } | { status: 'fallback' } | { status: 'embed'; ready: boolean };
+type LoadState = { status: 'loading'; progress: number } | { status: 'ready' } | { status: 'fallback'; reason?: string } | { status: 'embed'; ready: boolean };
 
 interface OrganViewer3DProps {
   organType: OrganType;
@@ -184,6 +232,7 @@ export const OrganViewer3D: React.FC<OrganViewer3DProps> = ({
 }) => {
   const stageRef = useRef<HTMLDivElement>(null);
   const canvasHostRef = useRef<HTMLDivElement>(null);
+  const embedRef = useRef<HTMLIFrameElement | null>(null);
   const pinEls = useRef(new Map<string, HTMLButtonElement>());
 
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -387,6 +436,15 @@ export const OrganViewer3D: React.FC<OrganViewer3DProps> = ({
             contentRef.current = null;
           }
           setLoad({ status: 'embed', ready: false });
+          // The iframe mounts on the next render; start the viewer once it exists.
+          const waitForFrame = async () => {
+            for (let i = 0; i < 60 && !embedRef.current && !cancelled; i++) await new Promise(r => requestAnimationFrame(r));
+            if (!embedRef.current) throw new Error('viewer frame missing');
+            await startSketchfab(embedRef.current, spec.sketchfabId!);
+          };
+          waitForFrame()
+            .then(() => { if (!cancelled) setLoad({ status: 'embed', ready: true }); })
+            .catch(() => mount(normalize(buildProceduralOrgan(organType)), true, { status: 'fallback', reason: 'Sketchfab is unavailable' }));
         } else {
           mount(normalize(buildProceduralOrgan(organType)), true, { status: 'fallback' });
         }
@@ -441,12 +499,11 @@ export const OrganViewer3D: React.FC<OrganViewer3DProps> = ({
       {isEmbed && spec.sketchfabId && (
         <iframe
           key={spec.sketchfabId}
-          className="organ-embed"
+          className={`organ-embed ${load.status === 'embed' && load.ready ? '' : 'pending'}`}
           title={`${spec.credit?.title ?? organType} (3D model on Sketchfab)`}
-          src={sketchfabEmbedUrl(spec.sketchfabId)}
+          ref={embedRef}
           allow="autoplay; fullscreen; xr-spatial-tracking"
           allowFullScreen
-          onLoad={() => setLoad({ status: 'embed', ready: true })}
         />
       )}
 
@@ -503,7 +560,7 @@ export const OrganViewer3D: React.FC<OrganViewer3DProps> = ({
 
       {load.status === 'fallback' && (
         <span className="chip chip-neutral viewer-placeholder" title={`Add ${MODELS[organType].url.replace('/models/', '')} to public/models to show the detailed model`}>
-          Placeholder model
+          Placeholder model{load.reason ? ` · ${load.reason}` : ''}
         </span>
       )}
 

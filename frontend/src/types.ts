@@ -128,9 +128,44 @@ export interface Patient {
   hla_match?: string;
   status: string;
   created_at: string;
-  primary_organ_type?: OrganType;
-  organ_label?: string;
-  organ_diagnosis?: string;
+  /** 'clinical' = admitted through intake; 'example' = pre-transplant data copied from a UCI cohort record. */
+  source: 'clinical' | 'example';
+  source_record?: string | null;
+  pretransplant?: Record<string, string | number> | null;
+}
+
+/** One variable of the UCI cohort data dictionary (backend/app/core/datasets/uci_bmt.py). */
+export interface CohortVariable {
+  name: string;
+  label: string;
+  description: string;
+  kind: 'numeric' | 'categorical' | 'binary';
+  phase: 'pre_transplant' | 'outcome' | 'id';
+  unit?: string | null;
+  categories?: string[] | null;
+  observed_min?: number;
+  observed_max?: number;
+  missing?: number;
+}
+
+export interface CohortOverview {
+  dataset_id: string;
+  citation: string;
+  license: string;
+  source_url: string;
+  summary: {
+    n_patients: number;
+    recipient_age_range: [number, number];
+    anc_recovery_median_day: number;
+    anc_recovery_iqr: [number, number];
+    anc_never_recovered: number;
+    early_engraftment_rate: number;
+    recovered_by_day: Record<string, number>;
+    log_cd34_vs_recovery_day_r: number;
+  };
+  quality_notes: string[];
+  required_for_intake: string[];
+  dictionary: CohortVariable[];
 }
 
 export interface ClinicalObservation {
@@ -280,22 +315,23 @@ export interface OrchestrationResult {
 export interface HospitalOverview {
   cohort_summary: {
     total_active_patients: number;
-    impending_engraftments: number;
+    example_patients: number;
     pending_clinician_reviews: number;
     allogeneic_count: number;
     autologous_count: number;
   };
   quantum_service_health: {
-    active_backends_online: number;
+    backends_available: number;
+    hardware_backends_available: number;
     total_quantum_jobs_executed: number;
     default_backend: string;
-    hardware_readiness: string;
+    ibm_connected: boolean;
   };
   service_health: {
     api_status: string;
     database: string;
-    orchestrator_agents_active: number;
-    uptime_pct: number;
+    workers_online: number;
+    gpu: string | null;
   };
 }
 
@@ -326,4 +362,92 @@ export interface QuantumExperimentResult {
   };
   provenance: string;
   leakage_safeguard: string;
+}
+
+
+export interface QubitSweepRow {
+  qubits: number;
+  roc_auc: number;
+  roc_auc_ci: [number, number] | null;
+  balanced_accuracy: number;
+  balanced_accuracy_ci: [number, number] | null;
+  brier_score: number;
+  off_diagonal_variance: number;
+  geometric_difference_vs_rbf: number;
+  kernel_target_alignment: number;
+  is_concentrated: boolean;
+  best_bandwidth: number;
+  best_C: number;
+  training_time_seconds: number;
+  metric: ModelMetric;
+}
+
+export interface QuantumSweepResult {
+  dataset: string;
+  target: string;
+  classical_baseline_auc: number;
+  classical_baseline_ci: [number, number];
+  sweep_table: QubitSweepRow[];
+  best_qubit_setting: QubitSweepRow | null;
+}
+
+export interface BackendComparisonItem {
+  backend_type: string;
+  is_simulator: boolean;
+  frobenius_error_vs_ideal: number | null;
+  alignment: number | null;
+  test_auc: number | null;
+  elapsed_seconds?: number;
+  diagonal_attenuation?: number;
+  matrix_preview?: number[][];
+  available?: boolean;
+  status?: string;
+  message?: string;
+  backend_name?: string | null;
+  device_provenance?: string;
+}
+
+export interface BackendsComparisonResult {
+  subset: string;
+  n_qubits: number;
+  shots: number;
+  ideal: BackendComparisonItem;
+  noisy_simulation: BackendComparisonItem;
+  hardware: BackendComparisonItem;
+}
+
+export interface GPUSimulateJobResult {
+  dataset: string;
+  n_patients: number;
+  patient_ids: string[];
+  n_qubits: number;
+  bandwidth: number;
+  reps: number;
+  telemetry: {
+    device: string;
+    matmul_accelerator: string;
+    n_qubits: number;
+    reps: number;
+    bandwidth: number;
+    elapsed_seconds: number;
+    samples_shape: [number, number];
+  };
+  diagnostics: {
+    off_diagonal_variance: number;
+    off_diagonal_mean: number;
+    kernel_target_alignment: number;
+    geometric_difference_vs_rbf: number;
+    is_concentrated: boolean;
+  };
+  kernel_matrix_preview: number[][];
+  kernel_shape: number[];
+}
+
+export interface BudgetEstimateResult {
+  total_circuits: number;
+  shots: number;
+  estimated_qpu_seconds: number;
+  max_allowed_budget_seconds: number;
+  within_budget: boolean;
+  refusal_reason: string | null;
 }

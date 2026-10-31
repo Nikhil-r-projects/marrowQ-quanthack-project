@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from app.core.database import save_prediction_run, log_audit_event, get_patient, get_patient_observations
 from app.core.trajectory import compute_patient_trajectory
 from app.core.ibm_quantum import quantum_manager
+from app.core.datasets import uci_bmt
+from app.core.patients import cohort as patient_cohort
 
 class ClinicalAgentResponse:
     def __init__(
@@ -59,9 +61,6 @@ class ClinicalDataQualityAgent:
         if age < 0 or age > 110:
             errors.append(f"Invalid patient age: {age} years outside human clinical bounds [0, 110]")
             
-        cd34_dose = patient_record.get("cell_dose_cd34", 5.0)
-        if cd34_dose < 0.5 or cd34_dose > 25.0:
-            warnings.append(f"Atypical CD34+ cell dose: {cd34_dose} x10^6/kg (standard target: 2.0 - 8.0 x10^6/kg)")
             
         # 3. Lab Measurements validation
         if "anc" in current_labs:
@@ -78,10 +77,16 @@ class ClinicalDataQualityAgent:
             elif plt < 20000:
                 warnings.append(f"Severe thrombocytopenia: Platelet count {plt}/μL (transfusion precaution)")
                 
-        # 4. Out-of-Distribution (OOD) check
+        # 4. Out-of-distribution check against the cohort the models were trained on (UCI, n = 187).
         is_ood = False
-        if "Myeloid" not in patient_record.get("disease", "") and "Lymphoblastic" not in patient_record.get("disease", "") and "MDS" not in patient_record.get("disease", ""):
-            warnings.append("Rare diagnostic subtype: Input distribution differs from primary CIBMTR leukemia training cohort")
+        pre = patient_record.get("pretransplant") or {}
+        if pre:
+            _, _, range_warnings = uci_bmt.validate_pretransplant(pre, patient_cohort())
+            if range_warnings:
+                warnings.extend(range_warnings)
+                is_ood = True
+        if patient_record.get("disease") not in (uci_bmt.DATA_DICTIONARY["disease"].categories or []):
+            warnings.append(f"Diagnosis '{patient_record.get('disease')}' is not represented in the UCI training cohort; model outputs are extrapolations.")
             is_ood = True
 
         status = "FAILED" if errors else ("WARNING" if warnings else "SUCCESS")
@@ -112,7 +117,8 @@ class ClinicalFeatureEngineeringAgent:
         cd34 = float(patient_record.get("cell_dose_cd34", 5.0))
         anc = float(current_labs.get("anc", 250.0))
         plt = float(current_labs.get("platelets", 35000.0))
-        chimerism = float(patient_record.get("chimerism_donor_pct", 95.0))
+        # Chimerism is only known once measured; never default it.
+        chimerism = patient_record.get("chimerism_donor_pct")
         
         # Scaling to [0, 2π] for quantum feature map encoding
         feature_vector_classical = [age, cd34, anc, plt, chimerism]
@@ -120,7 +126,7 @@ class ClinicalFeatureEngineeringAgent:
         # 2D PCA projection for ZZFeatureMap (2 qubits)
         # Scaled strictly in [0, 2pi]
         q_feat1 = np.clip(((anc / 2000.0) + (cd34 / 10.0)) * np.pi, 0.0, 2 * np.pi)
-        q_feat2 = np.clip(((chimerism / 100.0) + (1.0 - age / 80.0)) * np.pi, 0.0, 2 * np.pi)
+        q_feat2 = np.clip(((chimerism / 100.0 if chimerism is not None else 0.0) + (1.0 - age / 80.0)) * np.pi, 0.0, 2 * np.pi)
         feature_vector_quantum = [round(float(q_feat1), 4), round(float(q_feat2), 4)]
 
         return ClinicalAgentResponse(
@@ -319,43 +325,78 @@ class IndependentPredictionValidationAgent:
 
 # --- AGENT 6: Evidence & Clinical Context Agent ---
 class EvidenceAndClinicalContextAgent:
+    """Every statement is computed from the UCI cohort or the patient's own record; nothing is quoted from memory."""
     AGENT_ID = "evidence_clinical_context_agent"
 
+    @staticmethod
+    def _median_day(frame) -> Optional[float]:
+        days = frame["anc_recovery_day"].dropna()
+        return float(days.median()) if len(days) else None
+
     def run(self, task_id: str, patient_record: Dict[str, Any], current_labs: Dict[str, float]) -> ClinicalAgentResponse:
+        df = patient_cohort()
+        source = f"UCI BMT children cohort (n = {len(df)}), computed"
+        pre = patient_record.get("pretransplant") or {}
         evidence_factors = []
-        
-        cd34 = patient_record.get("cell_dose_cd34", 5.0)
-        if cd34 >= 5.0:
+
+        cd34 = patient_record.get("cell_dose_cd34")
+        if cd34 is not None:
+            above, below = df[df.cd34_dose >= cd34], df[df.cd34_dose < cd34]
+            m_above, m_below = self._median_day(above), self._median_day(below)
+            if m_above is not None and m_below is not None:
+                evidence_factors.append({
+                    "factor": "CD34+ cell dose",
+                    "observation": f"{cd34:g} ×10⁶/kg infused ({(df.cd34_dose < cd34).mean() * 100:.0f}th percentile of the cohort)",
+                    "clinical_impact": f"Cohort recipients at or above this dose recovered neutrophils at a median of Day +{m_above:g} (n = {len(above)}), versus Day +{m_below:g} below it (n = {len(below)}).",
+                    "reference_registry": source,
+                })
+
+        graft = pre.get("stem_cell_source")
+        if graft:
+            same = df[df.stem_cell_source == graft]
+            m = self._median_day(same)
+            if m is not None:
+                evidence_factors.append({
+                    "factor": "Stem-cell source",
+                    "observation": graft,
+                    "clinical_impact": f"Median neutrophil recovery with this source in the cohort: Day +{m:g} (n = {len(same)}).",
+                    "reference_registry": source,
+                })
+
+        hla = pre.get("hla_match") or patient_record.get("hla_match")
+        if hla:
+            same = df[df.hla_match == hla]
+            m = self._median_day(same)
+            if m is not None:
+                evidence_factors.append({
+                    "factor": "HLA match",
+                    "observation": hla,
+                    "clinical_impact": f"Median neutrophil recovery for {hla} transplants in the cohort: Day +{m:g} (n = {len(same)}).",
+                    "reference_registry": source,
+                })
+
+        anc_draws = [o for o in patient_record.get("observations", []) if "ANC" in o["metric_type"]]
+        if anc_draws:
+            last = anc_draws[-1]
+            trend = ""
+            if len(anc_draws) > 1:
+                prev = anc_draws[-2]
+                trend = f"; {last['value'] - prev['value']:+,.0f} since Day +{prev['day_post_tx']}"
             evidence_factors.append({
-                "factor": "Optimal CD34+ Inoculum",
-                "observation": f"{cd34} x10^6/kg CD34+ infused",
-                "clinical_impact": "Accelerates leukocyte reconstitution by 2.4 days compared to < 3.0 threshold",
-                "reference_registry": "CIBMTR Guidelines (Hematopoiesis 2023)"
+                "factor": "Neutrophil count",
+                "observation": f"{last['value']:,.0f} cells/μL on Day +{last['day_post_tx']}{trend}",
+                "clinical_impact": "At or above the 500/μL engraftment threshold." if last["value"] >= 500 else "Below the 500/μL engraftment threshold; engraftment needs three consecutive daily counts ≥ 500.",
+                "reference_registry": "Patient record · EBMT neutrophil engraftment definition",
             })
-        else:
+
+        chimerism = patient_record.get("chimerism_donor_pct")
+        if chimerism is not None:
             evidence_factors.append({
-                "factor": "Sub-optimal CD34+ Inoculum",
-                "observation": f"{cd34} x10^6/kg CD34+ infused",
-                "clinical_impact": "Elevated risk of delayed neutrophil engraftment beyond Day +21",
-                "reference_registry": "CIBMTR Registry"
+                "factor": "Donor chimerism",
+                "observation": f"{chimerism}% donor DNA in peripheral blood",
+                "clinical_impact": "Full donor chimerism (≥ 95%)." if chimerism >= 95 else "Mixed chimerism (< 95%): repeat testing is usual.",
+                "reference_registry": "Patient record",
             })
-            
-        anc = current_labs.get("anc", 250)
-        if anc > 300:
-            evidence_factors.append({
-                "factor": "Neutrophil Recovery Surge",
-                "observation": f"Current ANC: {anc} cells/μL (delta +140 in past 48h)",
-                "clinical_impact": "Consistent with marrow sinusoidal repopulation; high probability of Day +15 milestone attainment",
-                "reference_registry": "EBMT Engraftment Criteria"
-            })
-            
-        chimerism = patient_record.get("chimerism_donor_pct", 95.0)
-        evidence_factors.append({
-            "factor": "Donor Chimerism Stability",
-            "observation": f"{chimerism}% Donor DNA in peripheral blood",
-            "clinical_impact": "Confirms robust donor allograft survival with zero signs of primary graft rejection",
-            "reference_registry": "ASHI Chimerism Standards"
-        })
 
         return ClinicalAgentResponse(
             agent_id=self.AGENT_ID,
@@ -363,10 +404,11 @@ class EvidenceAndClinicalContextAgent:
             status="SUCCESS",
             output_data={
                 "evidence_items": evidence_factors,
-                "limitations": "Model-derived hypotheses based on retrospective CIBMTR registry statistics. Not a substitute for primary bone marrow biopsy."
+                "limitations": "Associations in a single-centre paediatric cohort (n = 187); they describe that cohort, not causal effects for this patient.",
             },
-            confidence=0.92
+            confidence=None,
         )
+
 
 # --- AGENT 7: Recovery Trajectory Agent ---
 class RecoveryTrajectoryAgent:
@@ -409,7 +451,7 @@ class ClinicalReportAgent:
         # 1. Doctor / Hematologist Technical Report
         doctor_report = (
             f"CLINICAL DECISION SUPPORT SUMMARY - {p_id} ({p_name})\n"
-            f"Diagnosis: {patient_record.get('disease')} | Day +{patient_record.get('days_post_tx', 14)} Post-Transplant\n"
+            f"Diagnosis: {patient_record.get('disease')} | Day +{patient_record['days_post_tx']} Post-Transplant\n"
             f"Status: {consensus}\n\n"
             f"MULTI-MODEL SYNTHESIS:\n"
             f"• Ensemble Reconstitution Likelihood: {round(mean_prob * 100, 1)}% (Variance σ² = {val_agent_resp.output_data.get('inter_model_variance')})\n"
@@ -417,18 +459,19 @@ class ClinicalReportAgent:
             f"• Quantum-Kernel SVM (ZZFeatureMap): {quantum_resp.output_data.get('probability', 0.0) * 100:.1f}% "
             f"(Fidelity overlap: {quantum_resp.output_data.get('fidelity_to_engraftment_state', 0.0)})\n"
             f"• Backend Provenance: {quantum_resp.output_data.get('backend_used')} ({quantum_resp.output_data.get('provenance')})\n\n"
-            f"RECOMMENDATION:\n"
-            f"Engraftment trajectory remains accelerated. Maintain standard G-CSF support and serial CMV PCR monitoring."
+            f"LATEST COUNTS: ANC {patient_record['current_anc']:,.0f}/μL · Platelets {patient_record['current_plt']:,.0f}/μL\n\n"
+            f"Draft for hematologist review. No treatment recommendation is generated."
         )
         
         # 2. Patient-Friendly Recovery Explanation (Plain language, supportive)
+        anc, plt = patient_record["current_anc"], patient_record["current_plt"]
         patient_report = (
-            f"Hello {p_name.split()[0]},\n\n"
-            f"Here is your transplant recovery update for Day +{patient_record.get('days_post_tx', 14)}:\n\n"
-            f"• White Blood Cells (Infection Fighters): Your neutrophil count has risen to 420 cells/μL, which is great progress. You are approaching the 500 mark where your new immune system takes over.\n"
-            f"• Platelets: Recovering steadily at 18,500/μL as your donor stem cells continue settling into your bone marrow.\n"
-            f"• Overall Status: All clinical recovery models indicate that your body is right on schedule for complete engraftment over the next 24 to 48 hours.\n\n"
-            f"Continue to take your prescribed protective medications and report any chills or temperature spikes to your nurse."
+            f"Here is your transplant recovery update for Day +{patient_record['days_post_tx']}:\n\n"
+            + (f"• Infection-fighting white cells (neutrophils): your latest count is {anc:,.0f}, above the 500 mark doctors look for.\n"
+               if anc >= 500 else
+               f"• Infection-fighting white cells (neutrophils): your latest count is {anc:,.0f}. Doctors are waiting for it to reach 500.\n")
+            + f"• Platelets, which help your blood clot: your latest count is {plt:,.0f}.\n\n"
+            "Your transplant team reviews every result. Keep taking your protective medicines and tell your nurse straight away about a temperature of 38°C or higher, chills, or unusual bleeding."
         )
 
         return ClinicalAgentResponse(
@@ -475,16 +518,20 @@ class MultiAgentOrchestrator:
             
         observations = get_patient_observations(patient_id)
         
-        # Resolve current labs if not provided
+        # Resolve current labs from recorded observations (ordered by day, so the last one wins).
+        # A review needs real counts: nothing is substituted when they are missing.
         if not current_labs:
-            latest_anc = 420.0
-            latest_plt = 18500.0
+            latest_anc = latest_plt = None
             for obs in observations:
                 if "ANC" in obs["metric_type"]:
                     latest_anc = obs["value"]
                 elif "Platelet" in obs["metric_type"]:
                     latest_plt = obs["value"]
+            if latest_anc is None or latest_plt is None:
+                return {"task_id": task_id, "status": "FAILED", "error": "Record at least one neutrophil (ANC) and one platelet count before running a clinical review."}
             current_labs = {"anc": latest_anc, "platelets": latest_plt}
+        days_post_tx = (datetime.now(timezone.utc).date() - datetime.fromisoformat(patient["transplant_date"][:10]).date()).days
+        patient = {**patient, "days_post_tx": days_post_tx, "current_anc": current_labs["anc"], "current_plt": current_labs["platelets"], "observations": observations}
             
         agent_trail = []
         
