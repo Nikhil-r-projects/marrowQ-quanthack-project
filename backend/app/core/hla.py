@@ -335,3 +335,140 @@ def compute_donor_compatibility(
         "provenance": "MarrowQ_HLA_Engine_v1.0"
     }
 
+
+
+
+# ==============================================================================
+# NON-HLA DONOR FACTORS & TRANSPLANT IMMUNOGENETICS
+# ==============================================================================
+def evaluate_non_hla_donor_factors(
+    donor_age: float,
+    recipient_cmv: str,  # "POSITIVE" or "NEGATIVE"
+    donor_cmv: str,      # "POSITIVE" or "NEGATIVE"
+    recipient_abo: str,  # "A", "B", "AB", "O"
+    donor_abo: str,      # "A", "B", "AB", "O"
+    graft_source: str = "PBSC"  # "PBSC", "BM", "CB"
+) -> Dict[str, Any]:
+    """
+    Evaluates EBMT non-HLA donor prognostic factors: age, CMV concordance, and ABO compatibility.
+    """
+    # 1. Donor Age Scoring (CIBMTR/EBMT standard: Younger donor <30 is single most important non-HLA factor)
+    if donor_age < 30.0:
+        age_tier = "OPTIMAL (Age < 30)"
+        age_comment = "Younger donor associated with superior OS and lower non-relapse mortality."
+    elif donor_age <= 45.0:
+        age_tier = "ACCEPTABLE (Age 30-45)"
+        age_comment = "Standard age range; modest increase in chronic GVHD risk compared to <30."
+    else:
+        age_tier = "SUBOPTIMAL (Age > 45)"
+        age_comment = "Older donor associated with increased graft failure, chronic GVHD, and non-relapse mortality."
+
+    # 2. CMV Serostatus Concordance
+    r_cmv = recipient_cmv.upper().strip()
+    d_cmv = donor_cmv.upper().strip()
+
+    if r_cmv == "NEGATIVE" and d_cmv == "NEGATIVE":
+        cmv_risk = "LOW_RISK (D-/R-)"
+        cmv_mgmt = "Lowest risk of CMV reactivation. Transfuse only CMV-seronegative or leukoreduced blood products."
+    elif r_cmv == "POSITIVE" and d_cmv == "POSITIVE":
+        cmv_risk = "INTERMEDIATE_PROTECTED (D+/R+)"
+        cmv_mgmt = "Recipient at risk for reactivation; donor memory T-cells provide protective cellular immunity. Weekly CMV PCR."
+    elif r_cmv == "NEGATIVE" and d_cmv == "POSITIVE":
+        cmv_risk = "INTERMEDIATE_PRIMARY (D+/R-)"
+        cmv_mgmt = "Risk of primary CMV transmission from graft. Prophylactic letermovir or weekly PCR surveillance."
+    else:  # R+ and D-
+        cmv_risk = "HIGH_RISK_REACTIVATION (D-/R+)"
+        cmv_mgmt = "Highest risk of severe CMV reactivation without donor memory T-cell immunity. Mandatory Letermovir prophylaxis and biweekly PCR."
+
+    # 3. ABO Compatibility Evaluation
+    r_abo = recipient_abo.upper().strip()
+    d_abo = donor_abo.upper().strip()
+
+    # Define isohemagglutinins
+    # O has anti-A, anti-B
+    # A has anti-B
+    # B has anti-A
+    # AB has neither
+    if r_abo == d_abo:
+        abo_status = "ABO_IDENTICAL"
+        abo_mgmt = "No immunohematologic incompatibility. Standard transfusion support."
+    elif (r_abo == "O" and d_abo in ["A", "B", "AB"]) or (r_abo in ["A", "B"] and d_abo == "AB"):
+        abo_status = "MAJOR_ABO_INCOMPATIBILITY"
+        abo_mgmt = "Recipient has antibodies against donor RBCs. Risk of acute hemolysis and delayed erythroid engraftment (PRCA). Monitor isohemagglutinin titers; consider red cell depletion of graft if titer >= 1:32."
+    elif (d_abo == "O" and r_abo in ["A", "B", "AB"]) or (d_abo in ["A", "B"] and r_abo == "AB"):
+        abo_status = "MINOR_ABO_INCOMPATIBILITY"
+        abo_mgmt = "Donor graft contains antibodies against recipient RBCs. Risk of Passenger Lymphocyte Syndrome (acute delayed hemolysis at day 7-14). Avoid transfusing donor-incompatible RBCs."
+    else:
+        abo_status = "BIDIRECTIONAL_ABO_INCOMPATIBILITY"
+        abo_mgmt = "Both recipient and donor have mutual isohemagglutinins. Risk of both acute hemolysis and passenger lymphocyte syndrome. Requires dual RBC and plasma volume reduction."
+
+    # 4. Graft Source Characteristics
+    source_upper = graft_source.upper().strip()
+    if "PBSC" in source_upper:
+        graft_summary = "PBSC: Rapid neutrophil (14d) and platelet (16d) engraftment; higher incidence of extensive chronic GVHD."
+    elif "BM" in source_upper:
+        graft_summary = "Bone Marrow: Intermediate engraftment (18.5d); lower incidence of chronic GVHD; preferred in SAA and pediatric non-malignant diseases."
+    else:
+        graft_summary = "Cord Blood: Tolerates 1-2 HLA mismatches; delayed engraftment (24d); lowest incidence of chronic GVHD."
+
+    return {
+        "donor_age_assessment": {
+            "donor_age": donor_age,
+            "tier": age_tier,
+            "clinical_impact": age_comment
+        },
+        "cmv_concordance": {
+            "recipient_cmv": r_cmv,
+            "donor_cmv": d_cmv,
+            "risk_tier": cmv_risk,
+            "clinical_management": cmv_mgmt
+        },
+        "abo_compatibility": {
+            "recipient_abo": r_abo,
+            "donor_abo": d_abo,
+            "incompatibility_type": abo_status,
+            "management_protocol": abo_mgmt
+        },
+        "graft_source_kinetics": {
+            "selected_source": graft_source,
+            "biological_profile": graft_summary
+        },
+        "evidence_standard": "EBMT / CIBMTR Unrelated Donor Consensus Recommendations"
+    }
+
+
+# ==============================================================================
+# SOLID-ORGAN COMPATIBILITY WORKFLOW (KIDNEY TRANSPLANT)
+# ==============================================================================
+def evaluate_solid_organ_crossmatch(
+    recipient_pra_pct: float,
+    donor_specific_antibodies: List[Dict[str, Any]],
+    recipient_blood_group: str,
+    donor_blood_group: str
+) -> Dict[str, Any]:
+    """
+    Evaluates solid-organ (Kidney) compatibility: Virtual Crossmatch and Calculated PRA (CPRA).
+    """
+    has_strong_dsa = any(d.get("mfi", 0) >= 5000 for d in donor_specific_antibodies)
+    has_mod_dsa = any(2000 <= d.get("mfi", 0) < 5000 for d in donor_specific_antibodies)
+
+    if has_strong_dsa:
+        xm_result = "VIRTUAL_CROSSMATCH_POSITIVE (High Immunologic Risk)"
+        rec = "Strong DSA detected (MFI >= 5000). Hyperacute / acute antibody-mediated rejection (ABMR) risk. Desensitization or alternative donor required."
+    elif has_mod_dsa:
+        xm_result = "VIRTUAL_CROSSMATCH_BORDERLINE"
+        rec = "Moderate DSA (MFI 2000-5000). Requires physical flow crossmatch (FCXM), induction with anti-thymocyte globulin (ATG), and post-op DSA monitoring."
+    else:
+        xm_result = "VIRTUAL_CROSSMATCH_NEGATIVE"
+        rec = "Negative virtual crossmatch. Standard immunologic risk."
+
+    is_abo_incompatible = recipient_blood_group.upper() != donor_blood_group.upper() and recipient_blood_group.upper() != "AB"
+
+    return {
+        "organ": "Kidney (Renal Allograft)",
+        "calculated_pra_percentage": recipient_pra_pct,
+        "virtual_crossmatch_status": xm_result,
+        "is_abo_incompatible": is_abo_incompatible,
+        "immunological_recommendation": rec,
+        "evidence_standard": "AST / KDIGO Kidney Transplant Guidelines"
+    }

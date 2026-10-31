@@ -438,3 +438,267 @@ def evaluate_cardiovascular_risk(
         "evidence_standard": "ACC/AHA 2019 Primary Prevention Guideline"
     }
 
+
+# ==============================================================================
+# 8. ACUTE LYMPHOBLASTIC LEUKEMIA (ALL)
+# ==============================================================================
+def evaluate_all(
+    blast_pct: float,
+    immunophenotype: str = "B-ALL",
+    cytogenetics: str = "46,XX",
+    mutations: Optional[List[str]] = None,
+    mrd_status: str = "NEGATIVE"
+) -> Dict[str, Any]:
+    """
+    Evaluates ALL lineage, cytogenetic risk (Ph+ vs Ph-like), and targeted therapies.
+    """
+    cyto_upper = cytogenetics.upper()
+    muts = [m.upper() for m in (mutations or [])]
+
+    is_ph_pos = any(c in cyto_upper for c in ["T(9;22)", "BCR-ABL1", "BCR/ABL", "PHILADELPHIA"])
+    is_ph_like = any(m in muts for m in ["CRLF2", "JAK2", "ABL1", "PDGFRB"])
+    is_kmt2a = any(c in cyto_upper for c in ["KMT2A", "MLL", "T(4;11)"])
+    is_hyperdiploid = "HYPERDIPLOID" in cyto_upper or ">50" in cyto_upper
+    is_hypodiploid = "HYPODIPLOID" in cyto_upper or "<44" in cyto_upper
+
+    if is_ph_pos:
+        risk_tier = "HIGH_RISK_PH_POSITIVE"
+        targeted = ["TKI addition (Dasatinib 140mg daily or Ponatinib 30mg daily) + Chemotherapy", "Blinatumomab", "Allogeneic HSCT in CR1"]
+    elif is_kmt2a or is_hypodiploid or is_ph_like:
+        risk_tier = "HIGH_RISK_GENETIC"
+        targeted = ["Allogeneic HSCT in CR1 strongly recommended", "Inotuzumab ozogamicin or Blinatumomab for MRD+"]
+    elif is_hyperdiploid:
+        risk_tier = "FAVORABLE_STANDARD_RISK"
+        targeted = ["Multi-agent chemotherapy (pediatric-inspired protocol)", "Avoid upfront HSCT if MRD-negative"]
+    else:
+        risk_tier = "INTERMEDIATE_RISK"
+        targeted = ["Standard multi-agent induction/consolidation", "Risk-stratified by end-of-induction MRD"]
+
+    return {
+        "disease": "Acute Lymphoblastic Leukemia (ALL)",
+        "lineage": immunophenotype,
+        "risk_tier": risk_tier,
+        "is_ph_positive": is_ph_pos,
+        "mrd_status": mrd_status,
+        "targeted_therapies": targeted,
+        "evidence_standard": "NCCN ALL Guidelines v1.2024 / WHO 2022"
+    }
+
+
+# ==============================================================================
+# 9. CHRONIC MYELOID LEUKEMIA (CML)
+# ==============================================================================
+def evaluate_cml(
+    spleen_cm_below_costal_margin: float,
+    platelets_thous: float,
+    blast_pct_peripheral: float,
+    age: float,
+    bcr_abl1_is_pct: float = 0.5
+) -> Dict[str, Any]:
+    """
+    Calculates Sokal Score and European Treatment and Outcome Study (ELTS) score for CML.
+    """
+    # Sokal formula: exp( 0.0116*(age - 43.4) + 0.0345*(spleen - 7.51) + 0.188*((platelets/700)^2 - 0.563) + 0.0887*(blasts - 2.10) )
+    spl = max(0.0, spleen_cm_below_costal_margin)
+    sokal_raw = 0.0116 * (age - 43.4) + 0.0345 * (spl - 7.51) + 0.188 * (((platelets_thous / 700.0) ** 2) - 0.563) + 0.0887 * (blast_pct_peripheral - 2.10)
+    sokal_score = round(float(math.exp(sokal_raw)), 2)
+
+    if sokal_score < 0.8:
+        sokal_tier = "LOW_RISK"
+    elif sokal_score <= 1.2:
+        sokal_tier = "INTERMEDIATE_RISK"
+    else:
+        sokal_tier = "HIGH_RISK"
+
+    # Molecular response tracking
+    # Major Molecular Response (MMR) is BCR-ABL1 IS <= 0.1%
+    # Deep Molecular Response (MR4.0) is <= 0.01%
+    if bcr_abl1_is_pct <= 0.01:
+        mol_status = "DEEP_MOLECULAR_RESPONSE (MR4.0 / MR4.5) - TFR candidate"
+    elif bcr_abl1_is_pct <= 0.10:
+        mol_status = "MAJOR_MOLECULAR_RESPONSE (MMR / MR3.0) - Optimal milestone"
+    elif bcr_abl1_is_pct <= 1.0:
+        mol_status = "PARTIAL_MOLECULAR_RESPONSE - Warning milestone at 12m"
+    else:
+        mol_status = "MOLECULAR_FAILURE - Evaluate adherence and ABL1 kinase domain mutation (T315I)"
+
+    return {
+        "disease": "Chronic Myeloid Leukemia (CML)",
+        "sokal_score": sokal_score,
+        "sokal_risk_tier": sokal_tier,
+        "bcr_abl1_is_percentage": bcr_abl1_is_pct,
+        "molecular_milestone_status": mol_status,
+        "first_line_tki_options": ["Imatinib 400mg", "Dasatinib 100mg", "Nilotinib 300mg BID", "Bosutinib 400mg"],
+        "evidence_standard": "ELN 2020 CML Recommendations (Baccarani et al., Leukemia 2020)"
+    }
+
+
+# ==============================================================================
+# 10. CHRONIC LYMPHOCYTIC LEUKEMIA (CLL) - CLL-IPI
+# ==============================================================================
+def evaluate_cll(
+    tp53_disrupted: bool,
+    ighv_unmutated: bool,
+    beta2_microglobulin_mg_l: float,
+    clinical_stage_advanced: bool,  # Rai III-IV or Binet C
+    age: float
+) -> Dict[str, Any]:
+    """
+    International Prognostic Index for CLL (CLL-IPI Working Group, Lancet Oncol 2016).
+    """
+    points = 0
+    if tp53_disrupted:
+        points += 4
+    if ighv_unmutated:
+        points += 2
+    if beta2_microglobulin_mg_l > 3.5:
+        points += 2
+    if clinical_stage_advanced:
+        points += 1
+    if age > 65.0:
+        points += 1
+
+    if points <= 1:
+        risk_group = "LOW_RISK (5-year OS ~93%)"
+        rec = "Watch and wait; treatment not indicated unless active disease criteria met."
+    elif points <= 3:
+        risk_group = "INTERMEDIATE_RISK (5-year OS ~79%)"
+        rec = "Targeted therapy when indicated."
+    elif points <= 6:
+        risk_group = "HIGH_RISK (5-year OS ~63%)"
+        rec = "BTK inhibitor (Acalabrutinib, Zanubrutinib) or BCL-2 inhibitor (Venetoclax + Obinutuzumab)."
+    else:
+        risk_group = "VERY_HIGH_RISK (5-year OS ~23%)"
+        rec = "Chemoimmunotherapy contraindicated; continuous BTKi or Venetoclax-based regimen. Consider allogeneic HSCT / CAR-T."
+
+    return {
+        "disease": "Chronic Lymphocytic Leukemia (CLL)",
+        "cll_ipi_score": points,
+        "cll_ipi_risk_group": risk_group,
+        "therapeutic_recommendation": rec,
+        "evidence_standard": "Lancet Oncology 2016 (CLL-IPI Working Group)"
+    }
+
+
+# ==============================================================================
+# 11. MYELOPROLIFERATIVE NEOPLASMS (MPN) - DIPSS
+# ==============================================================================
+def evaluate_myelofibrosis_dipss(
+    age: float,
+    wbc_thous: float,
+    hb_g_dl: float,
+    circulating_blasts_pct: float,
+    constitutional_symptoms: bool,
+    driver_mutation: str = "JAK2 V617F"
+) -> Dict[str, Any]:
+    """
+    Dynamic International Prognostic Scoring System (DIPSS) for Primary Myelofibrosis (Passamonti et al., Blood 2010).
+    """
+    score = 0
+    if age > 65.0:
+        score += 1
+    if wbc_thous > 25.0:
+        score += 1
+    if hb_g_dl < 10.0:
+        score += 2  # Anemia has double weight in DIPSS
+    if circulating_blasts_pct >= 1.0:
+        score += 1
+    if constitutional_symptoms:
+        score += 1
+
+    if score == 0:
+        dipss_tier = "LOW_RISK (Median survival not reached)"
+    elif score <= 2:
+        dipss_tier = "INTERMEDIATE-1 (Median survival ~14.2 years)"
+    elif score <= 4:
+        dipss_tier = "INTERMEDIATE-2 (Median survival ~4.0 years) - Allogeneic HSCT candidate"
+    else:
+        dipss_tier = "HIGH_RISK (Median survival ~1.5 years) - Urgent Allogeneic HSCT evaluation"
+
+    return {
+        "disease": "Primary Myelofibrosis (MPN)",
+        "dipss_score": score,
+        "dipss_risk_tier": dipss_tier,
+        "driver_mutation": driver_mutation,
+        "targeted_therapy": "JAK1/2 inhibitor (Ruxolitinib 15-20mg BID for splenomegaly / symptoms; Fedratinib)",
+        "transplant_indication": score >= 3,
+        "evidence_standard": "Passamonti et al., Blood 2010 (DIPSS)"
+    }
+
+
+# ==============================================================================
+# 12. MULTIPLE MYELOMA - REVISED ISS (R-ISS)
+# ==============================================================================
+def evaluate_multiple_myeloma_riss(
+    serum_beta2_microglobulin_mg_l: float,
+    serum_albumin_g_dl: float,
+    high_risk_fish: bool,  # t(4;14), t(14;16), or del(17p)
+    elevated_ldh: bool
+) -> Dict[str, Any]:
+    """
+    Revised International Staging System (R-ISS) for Multiple Myeloma (Palumbo et al., JCO 2015).
+    """
+    # ISS Stage I: B2M < 3.5 and Albumin >= 3.5
+    # ISS Stage III: B2M >= 5.5
+    # ISS Stage II: Neither
+    is_iss_1 = serum_beta2_microglobulin_mg_l < 3.5 and serum_albumin_g_dl >= 3.5
+    is_iss_3 = serum_beta2_microglobulin_mg_l >= 5.5
+
+    if is_iss_1 and not high_risk_fish and not elevated_ldh:
+        stage = "R-ISS STAGE I (5-year OS ~82%, PFS ~55%)"
+        tier = "STAGE_I"
+    elif is_iss_3 and (high_risk_fish or elevated_ldh):
+        stage = "R-ISS STAGE III (5-year OS ~40%, PFS ~24%)"
+        tier = "STAGE_III"
+    else:
+        stage = "R-ISS STAGE II (5-year OS ~62%, PFS ~36%)"
+        tier = "STAGE_II"
+
+    return {
+        "disease": "Multiple Myeloma",
+        "r_iss_stage": stage,
+        "stage_tier": tier,
+        "high_risk_cytogenetics": high_risk_fish,
+        "elevated_ldh": elevated_ldh,
+        "first_line_therapy": "Dara-VRd (Daratumumab + Bortezomib + Lenalidomide + Dexamethasone) followed by ASCT in eligible patients",
+        "evidence_standard": "Palumbo et al., J Clin Oncol 2015 (R-ISS)"
+    }
+
+
+# ==============================================================================
+# 13. NEUROLOGY: IMMUNE EFFECTOR CELL-ASSOCIATED NEUROTOXICITY (ICANS)
+# ==============================================================================
+def evaluate_icans_neurotoxicity(
+    ice_score: int,  # Immune Effector Cell Encephalopathy score (0 to 10)
+    depressed_level_of_consciousness: bool = False,
+    seizures: bool = False,
+    motor_weakness: bool = False,
+    elevated_icp_papilledema: bool = False
+) -> Dict[str, Any]:
+    """
+    ASTCT Consensus Grading for ICANS (Lee et al., Biol Blood Marrow Transplant 2019).
+    """
+    if seizures or elevated_icp_papilledema or ice_score == 0:
+        grade = "GRADE_4 (Severe / Life-Threatening)"
+        mgmt = "ICU transfer, Dexamethasone 20mg IV q6h or Methylprednisolone 1000mg/day, levetiracetam, urgent neurology consult."
+    elif motor_weakness or (1 <= ice_score <= 2):
+        grade = "GRADE_3 (Severe)"
+        mgmt = "Dexamethasone 10-20mg IV q6h, continuous EEG monitoring, repeat neuro imaging."
+    elif (3 <= ice_score <= 6):
+        grade = "GRADE_2 (Moderate)"
+        mgmt = "Dexamethasone 10mg IV q12h or Dexamethasone 10mg PO q6h, aspiration precautions."
+    elif (7 <= ice_score <= 9) or depressed_level_of_consciousness:
+        grade = "GRADE_1 (Mild)"
+        mgmt = "Supportive care, ICE score q4h, hold sedating medications."
+    else:
+        grade = "GRADE_0 (No ICANS)"
+        mgmt = "Routine baseline neurological surveillance."
+
+    return {
+        "specialty": "Neurology / Cellular Therapy",
+        "syndrome": "Immune Effector Cell-Associated Neurotoxicity Syndrome (ICANS)",
+        "ice_score": ice_score,
+        "icans_grade": grade,
+        "management_protocol": mgmt,
+        "evidence_standard": "ASTCT 2019 Consensus Guidelines"
+    }

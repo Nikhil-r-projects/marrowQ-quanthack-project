@@ -8,6 +8,7 @@ import numpy as np
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
 from typing import Dict, Any, List, Optional
+from pydantic import BaseModel
 
 from app.schemas import (
     DatasetProfileResponse, ExperimentCreateRequest, ExperimentResponse,
@@ -798,3 +799,102 @@ def get_hospital_operational_overview():
             "gpu": next((w["capabilities"].get("gpu_name") for w in workers if w["online"] and w["capabilities"].get("cuda")), None),
         },
     }
+
+
+
+# =========================================================================
+# MULTI-ENDPOINT BENCHMARK, QUANTUM DIAGNOSTICS & CLINICAL WORKFLOWS
+# =========================================================================
+
+@router.get("/quantum/multi-benchmark/{endpoint}")
+def get_quantum_multi_benchmark(endpoint: str = "early_engraftment", n_splits: int = 3, n_qubits: int = 3):
+    """
+    Evaluates 8 comparative models (Logistic Regression, Random Forest, RBF SVM,
+    Fidelity QSVM, Projected Quantum Kernel, Neural Quantum Kernel, VQC, and Hybrid Stacking)
+    on identical folds for the specified endpoint.
+    """
+    from app.core.quantum.multi_benchmark import run_benchmark_for_endpoint
+    return run_benchmark_for_endpoint(endpoint=endpoint, n_splits=n_splits, n_qubits=n_qubits)
+
+
+@router.get("/quantum/diagnostics")
+def get_quantum_kernel_diagnostics(n_qubits: int = 3, gamma: float = 0.5):
+    """
+    Returns full kernel diagnostics (heatmap, eigenvalue spectrum, condition number,
+    concentration, and alignment) for both Fidelity and Projected Quantum Kernels.
+    """
+    from app.core.datasets.uci_bmt import load_cohort
+    from app.core.quantum.biological_feature_map import BiologicalFeatureMap
+    from app.core.quantum.pqk import ProjectedQuantumKernel
+    from app.core.quantum.diagnostics import compute_kernel_diagnostics
+
+    df = load_cohort()
+    bmap = BiologicalFeatureMap(n_qubits=n_qubits)
+    X = bmap.fit(df).transform(df)
+    y = (pd.to_numeric(df.get("early_engraftment", 1), errors="coerce").fillna(1) > 0).astype(int).values
+
+    pqk = ProjectedQuantumKernel(n_qubits=n_qubits, gamma=gamma)
+    K_pqk = pqk.compute_kernel(X[:50])
+    diag = compute_kernel_diagnostics(K_pqk, y[:50])
+    return {
+        "architecture": "Projected Quantum Kernel",
+        "n_qubits": n_qubits,
+        "gamma": gamma,
+        "diagnostics": diag,
+    }
+
+
+class TreatmentComparisonRequest(BaseModel):
+    disease: str = "AML"
+    risk_category: str = "ADVERSE"
+    patient_age: float = 58.0
+    ecog_ps: int = 1
+    lvef_pct: float = 60.0
+    dlco_pct: float = 75.0
+    egfr_ml_min: float = 85.0
+    total_bilirubin_mg_dl: float = 1.0
+    comorbidities: Optional[List[str]] = None
+
+
+@router.post("/treatment/compare")
+def compare_treatment_regimens(req: TreatmentComparisonRequest):
+    """Compares curative vs low-intensity regimens, HCT-CI score, and organ contraindications."""
+    from app.core.treatment_intelligence import TreatmentComparisonEngine
+    engine = TreatmentComparisonEngine()
+    return engine.evaluate_treatment_options(
+        disease=req.disease,
+        risk_category=req.risk_category,
+        patient_age=req.patient_age,
+        ecog_ps=req.ecog_ps,
+        lvef_pct=req.lvef_pct,
+        dlco_pct=req.dlco_pct,
+        egfr_ml_min=req.egfr_ml_min,
+        total_bilirubin_mg_dl=req.total_bilirubin_mg_dl,
+        comorbidities=req.comorbidities,
+    )
+
+
+@router.get("/patient/{patient_id}/timeline")
+def get_patient_timeline(patient_id: str):
+    """Returns unified chronological clinical timeline for allogeneic HSCT recipient."""
+    from app.core.patient_timeline import build_unified_patient_timeline
+    return build_unified_patient_timeline(patient_id=patient_id)
+
+
+class LongitudinalTrackRequest(BaseModel):
+    graft_source: str = "PBSC"
+    cd34_dose: float = 5.0
+    recipient_age: float = 12.0
+    daily_observations: List[Dict[str, Any]]
+
+
+@router.post("/survival/longitudinal-track")
+def track_longitudinal_recovery(req: LongitudinalTrackRequest):
+    """Compares observed daily peripheral counts against graft-source calibrated sigmoid kinetics."""
+    from app.core.longitudinal_tracker import LongitudinalTracker
+    tracker = LongitudinalTracker(
+        graft_source=req.graft_source,
+        cd34_dose=req.cd34_dose,
+        recipient_age=req.recipient_age,
+    )
+    return tracker.track_observations(req.daily_observations)

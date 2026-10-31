@@ -101,24 +101,84 @@ CPIC_RULES = [
     {
         "gene": "UGT1A1",
         "drug": "Irinotecan",
-        "therapeutic_area": "Colorectal Oncology",
+        "therapeutic_area": "GI Oncology / Colorectal",
         "evidence_level": "CPIC_Level_A",
         "phenotypes": {
             "PM": {
-                "implication": "UGT1A1 *28/*28 homozygous genotype. Impaired SN-38 glucuronidation causing severe diarrhea and neutropenia.",
-                "recommendation": "Reduce starting dose by 25-30% for doses >180 mg/m²."
+                "implication": "UGT1A1*28 homozygous (*28/*28) poor metabolizer. Impaired glucuronidation of SN-38 leading to severe diarrhea and neutropenia.",
+                "recommendation": "Reduce starting dose by 30% for irinotecan regimens > 180 mg/m²."
             }
         }
     },
     {
-        "gene": "HLA-B",
+        "gene": "HLA-B*57:01",
         "drug": "Abacavir",
-        "therapeutic_area": "Infectious Disease / Antiviral",
+        "therapeutic_area": "Infectious Disease / HIV Prophylaxis",
         "evidence_level": "CPIC_Level_A",
         "phenotypes": {
             "POSITIVE": {
                 "implication": "Carriage of HLA-B*57:01 allele is associated with high risk of life-threatening hypersensitivity reaction.",
                 "recommendation": "ABACAVIR IS CONTRAINDICATED. Never administer or re-challenge."
+            }
+        }
+    },
+    {
+        "gene": "CYP2D6",
+        "drug": "Ondansetron / Tamoxifen / Codeine",
+        "therapeutic_area": "Supportive Care / Oncology / Analgesia",
+        "evidence_level": "CPIC_Level_A",
+        "phenotypes": {
+            "PM": {
+                "implication": "Absent CYP2D6 enzyme activity. Inability to convert codeine/tramadol to active morphine; reduced tamoxifen bioactivation into endoxifen.",
+                "recommendation": "Avoid codeine/tramadol (lack of efficacy); use morphine or non-opioid. For breast cancer, switch tamoxifen to an Aromatase Inhibitor (e.g. Anastrozole, Letrozole)."
+            },
+            "UM": {
+                "implication": "Ultra-rapid conversion of codeine/tramadol leading to high risk of fatal opioid intoxication. Reduced antiemetic efficacy with ondansetron.",
+                "recommendation": "Avoid codeine/tramadol due to life-threatening respiratory depression risk. For nausea, use granisetron or palonosetron (not CYP2D6 dependent)."
+            },
+            "NM": {
+                "implication": "Normal CYP2D6 metabolic activity.",
+                "recommendation": "Standard weight-based dosing."
+            }
+        }
+    },
+    {
+        "gene": "CYP2C9_VKORC1",
+        "drug": "Warfarin",
+        "therapeutic_area": "Anticoagulation / Thrombosis",
+        "evidence_level": "CPIC_Level_A",
+        "phenotypes": {
+            "PM": {
+                "implication": "CYP2C9*3/*3 or VKORC1 -1639A/A genotype. Extreme sensitivity to S-warfarin with dramatically reduced clearance and high bleeding hazard.",
+                "recommendation": "Estimated starting dose: 0.5 - 2.0 mg daily (or consider Direct Oral Anticoagulant DOAC if renal function preserved). Frequent INR monitoring."
+            },
+            "IM": {
+                "implication": "Intermediate warfarin clearance.",
+                "recommendation": "Estimated starting dose: 3.0 - 4.5 mg daily. Titrate to target INR 2.0-3.0."
+            },
+            "NM": {
+                "implication": "Standard warfarin sensitivity (CYP2C9*1/*1, VKORC1 G/G).",
+                "recommendation": "Standard initial dosing (5.0 mg daily) with routine INR titration."
+            }
+        }
+    },
+    {
+        "gene": "SLCO1B1",
+        "drug": "Simvastatin / Atorvastatin",
+        "therapeutic_area": "Cardiovascular / Lipid Management",
+        "evidence_level": "CPIC_Level_A",
+        "phenotypes": {
+            "PM": {
+                "implication": "SLCO1B1 521CC poor transporter function. High systemic statin exposure and markedly increased risk of statin-associated musculoskeletal symptoms (SAMS) and rhabdomyolysis.",
+                "recommendation": "Avoid simvastatin 40-80mg. Prescribe lower dose pravastatin or rosuvastatin (starting <= 10mg daily), or ezetimibe."
+            },
+            "IM": {
+                "implication": "Intermediate transporter function.",
+                "recommendation": "Limit simvastatin to <= 20mg daily, or select alternative statin."
+            },
+            "NM": {
+                "implication": "Normal hepatic uptake transporter function.",
+                "recommendation": "Standard starting dose according to ACC/AHA guidelines."
             }
         }
     }
@@ -131,11 +191,6 @@ def evaluate_patient_pharmacogenomics(
 ) -> Dict[str, Any]:
     """
     Evaluates patient genotypes against CPIC Level A & B drug-gene guidelines.
-    Returns:
-    - Detected metabolic phenotypes
-    - High-risk drug alerts
-    - Actionable dose adjustment recommendations
-    - Contraindications
     """
     alerts = []
     meds_lower = [m.lower() for m in (intended_medications or [])]
@@ -143,9 +198,17 @@ def evaluate_patient_pharmacogenomics(
     for rule in CPIC_RULES:
         gene = rule["gene"]
         drug = rule["drug"]
-        pheno = patient_genotype.get(gene, "NM").upper()
+        pheno = patient_genotype.get(gene)
+        if not pheno:
+            gene_base = gene.split('*')[0]
+            pheno = patient_genotype.get(gene_base)
+        if not pheno:
+            for k, v in patient_genotype.items():
+                if k.upper() in gene.upper() or gene.upper() in k.upper():
+                    pheno = v
+                    break
+        pheno = (pheno or "NM").upper()
 
-        # If intended medications specified, check if relevant
         is_relevant = True
         if meds_lower:
             is_relevant = any(d.lower() in drug.lower() for d in meds_lower)
@@ -180,3 +243,48 @@ def evaluate_patient_pharmacogenomics(
         "governance_notice": "CPIC Level A evidence-backed clinical decision support. Always verify complete metabolic profile."
     }
 
+
+def adjust_medication_for_organ_clearance(
+    medication_name: str,
+    standard_dose_mg: float,
+    egfr_ml_min: Optional[float] = None,
+    total_bilirubin_mg_dl: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Evaluates interactive renal and hepatic dosage modifications."""
+    alerts = []
+    adjusted_dose = standard_dose_mg
+    med = medication_name.lower().strip()
+
+    # Renal adjustments
+    if egfr_ml_min is not None:
+        if egfr_ml_min < 30.0:
+            if "fludarabine" in med:
+                adjusted_dose = standard_dose_mg * 0.50
+                alerts.append("Severe Renal Impairment (eGFR < 30): Reduce Fludarabine dose by 50% to prevent fatal neurotoxicity.")
+            elif "methotrexate" in med:
+                adjusted_dose = standard_dose_mg * 0.50
+                alerts.append("Severe Renal Impairment (eGFR < 30): Reduce Methotrexate dose by 50%; ensure vigorous hydration and alkalinization.")
+            elif "acyclovir" in med:
+                adjusted_dose = standard_dose_mg * 0.40
+                alerts.append("Renal Clearance Alert: Adjust Acyclovir dosing interval to q12-24h.")
+        elif egfr_ml_min < 60.0:
+            if "fludarabine" in med:
+                adjusted_dose = standard_dose_mg * 0.80
+                alerts.append("Moderate Renal Impairment (eGFR 30-59): Reduce Fludarabine dose by 20%.")
+
+    # Hepatic adjustments
+    if total_bilirubin_mg_dl is not None and total_bilirubin_mg_dl > 2.0:
+        if "busulfan" in med:
+            alerts.append("Hepatic Dysfunction Alert: Total Bilirubin > 2.0 mg/dL increases risk of Sinusoidal Obstruction Syndrome (VOD). Mandatory therapeutic drug monitoring (TDM).")
+        if "cyclosporine" in med or "tacrolimus" in med:
+            alerts.append("Hepatic Clearance Alert: Calcineurin inhibitor clearance impaired. Monitor trough levels daily.")
+
+    return {
+        "medication": medication_name,
+        "standard_dose_mg": standard_dose_mg,
+        "recommended_dose_mg": round(adjusted_dose, 1),
+        "dose_modified": adjusted_dose != standard_dose_mg,
+        "organ_clearance_alerts": alerts,
+        "renal_egfr": egfr_ml_min,
+        "serum_bilirubin": total_bilirubin_mg_dl,
+    }

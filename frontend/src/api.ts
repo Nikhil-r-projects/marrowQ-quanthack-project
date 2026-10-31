@@ -356,3 +356,30 @@ export const evaluatePGx = (payload: { genotypes: Record<string, string>; intend
 export const evaluateHLA = (payload: any) =>
   post<any>('/v2/hla/evaluate', payload);
 
+
+
+// ---- Advanced Quantum Research Suite & Expanded Clinical Workflows ----
+
+export const fetchQuantumMultiBenchmark = (endpoint: string = 'early_engraftment', splits: number = 3, qubits: number = 3) =>
+  request<any>(`/quantum/multi-benchmark/${endpoint}?n_splits=${splits}&n_qubits=${qubits}`);
+
+export const fetchQuantumKernelDiagnostics = (qubits: number = 3, gamma: number = 0.5) =>
+  request<any>(`/quantum/diagnostics?n_qubits=${qubits}&gamma=${gamma}`);
+
+export const compareTreatmentOptions = (payload: any) =>
+  post<any>('/treatment/compare', payload);
+
+export const fetchPatientTimeline = (patientId: string) =>
+  request<any>(`/patient/${patientId}/timeline`);
+
+export const analyzeFlowSample = (payload: { patient_id?: string; fcs_base64?: string }) =>
+  post<any>('/v2/biological/flow/analyze', payload);
+
+export const analyzeSmearPathology = (payload: { patient_id?: string; manual_cellularity_pct?: number; manual_blasts_pct?: number }) =>
+  post<any>('/v2/biological/pathology/smear-analyze', payload);
+
+export const curateGenomicVariant = (payload: { gene_symbol: string; variant_desc: string; vaf?: number; read_depth?: number; co_occurring_genes?: string[] }) =>
+  post<any>('/v2/biological/genomics/curate', payload);
+
+export const trackLongitudinalRecovery = (payload: any) =>
+  post<any>('/survival/longitudinal-track', payload);

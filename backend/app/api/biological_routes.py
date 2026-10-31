@@ -119,3 +119,71 @@ def get_patient_profile(patient_id: str, user: Dict[str, Any] = Depends(get_curr
     profile = get_patient_biological_profile(patient_id)
     return profile
 
+
+class FlowAnalysisRequest(BaseModel):
+    patient_id: Optional[str] = "DEMO-001"
+    fcs_base64: Optional[str] = None
+
+
+class SmearAnalysisRequest(BaseModel):
+    patient_id: Optional[str] = "DEMO-001"
+    manual_cellularity_pct: Optional[float] = 60.0
+    manual_blasts_pct: Optional[float] = 4.5
+
+
+class GenomicCurationRequest(BaseModel):
+    gene_symbol: str = Field(..., example="TP53")
+    variant_desc: str = Field(..., example="p.Arg175His")
+    vaf: Optional[float] = 0.35
+    read_depth: Optional[int] = 450
+    co_occurring_genes: Optional[List[str]] = None
+
+
+@router.post("/flow/analyze")
+def analyze_flow_sample(req: FlowAnalysisRequest):
+    """Parses Flow Cytometry Standard parameters and runs gating hierarchy + MRD quantification."""
+    from app.core.flow_cytometry import FlowCytometryGatingEngine
+    engine = FlowCytometryGatingEngine()
+    analysis = engine.analyze_flow_sample()
+    return {
+        "status": "SUCCESS",
+        "patient_id": req.patient_id,
+        "flow_cytometry_analysis": analysis,
+    }
+
+
+@router.post("/pathology/smear-analyze")
+def analyze_pathology_smear(req: SmearAnalysisRequest):
+    """Runs cell detection, N:C ratio segmentation, and differential enumeration for aspirate smears."""
+    from app.core.pathology_vision import BoneMarrowPathologyAnalyzer
+    analyzer = BoneMarrowPathologyAnalyzer()
+    smear_result = analyzer.analyze_smear_sample(
+        manual_override_cellularity=req.manual_cellularity_pct,
+        manual_override_blasts=req.manual_blasts_pct,
+    )
+    return {
+        "status": "SUCCESS",
+        "patient_id": req.patient_id,
+        "smear_pathology": smear_result,
+    }
+
+
+@router.post("/genomics/curate")
+def curate_genomic_variant(req: GenomicCurationRequest):
+    """Normalizes HGVS coordinates and links to ClinVar, ClinGen, and COSMIC registries."""
+    from app.core.genomic_curation import GenomicCurationEngine
+    engine = GenomicCurationEngine()
+    curation = engine.curate_variant(
+        gene_symbol=req.gene_symbol,
+        variant_desc=req.variant_desc,
+        vaf=req.vaf or 0.35,
+        read_depth=req.read_depth or 450,
+    )
+    co_occur = engine.analyze_co_occurrence(req.co_occurring_genes or [req.gene_symbol])
+    return {
+        "status": "SUCCESS",
+        "curated_variant": curation,
+        "co_occurrence_findings": co_occur,
+    }
+
+

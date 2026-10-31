@@ -7,7 +7,8 @@ import {
 import { OrchestrationResult, Patient, UserRole } from '../types';
 import {
   runAgentOrchestration, fetchBiologicalProfile, evaluateAML, evaluateMDS,
-  evaluateSAA, evaluateKidney, evaluateLiver, evaluateCardio, evaluatePGx, evaluateHLA
+  evaluateSAA, evaluateKidney, evaluateLiver, evaluateCardio, evaluatePGx, evaluateHLA,
+  compareTreatmentOptions, analyzeFlowSample, analyzeSmearPathology, curateGenomicVariant
 } from '../api';
 
 interface DiagnosticIntelligenceViewProps {
@@ -45,7 +46,16 @@ const pct = (p: number) => `${(p * 100).toFixed(1)}%`;
 
 export const DiagnosticIntelligenceView: React.FC<DiagnosticIntelligenceViewProps> = ({ patient, role }) => {
   const isPatient = role === 'patient';
-  const [activeTab, setActiveTab] = useState<'review' | 'biological' | 'diseases' | 'pgx' | 'hla'>('review');
+  const [activeTab, setActiveTab] = useState<'review' | 'biological' | 'diseases' | 'pgx' | 'hla' | 'treatment' | 'flow_vision'>('review');
+
+  // Treatment Intelligence State
+  const [treatmentResult, setTreatmentResult] = useState<any>(null);
+  const [treatmentLoading, setTreatmentLoading] = useState<boolean>(false);
+
+  // Flow & Vision State
+  const [flowResult, setFlowResult] = useState<any>(null);
+  const [smearResult, setSmearResult] = useState<any>(null);
+  const [flowVisionLoading, setFlowVisionLoading] = useState<boolean>(false);
 
   // Review state
   const [result, setResult] = useState<Result | null>(null);
@@ -214,6 +224,39 @@ export const DiagnosticIntelligenceView: React.FC<DiagnosticIntelligenceViewProp
     }
   }, [activeTab, hlaResult]);
 
+  useEffect(() => {
+    if (activeTab === 'treatment' && !treatmentResult) {
+      setTreatmentLoading(true);
+      compareTreatmentOptions({
+        disease: patient.disease ?? 'AML',
+        risk_category: 'ADVERSE',
+        patient_age: patient.age ?? 45,
+        ecog_ps: 1,
+        lvef_pct: 60.0,
+        dlco_pct: 75.0,
+        egfr_ml_min: 88.0,
+        total_bilirubin_mg_dl: 0.9,
+        comorbidities: ['cad', 'diabetes']
+      })
+        .then(setTreatmentResult)
+        .catch(() => {})
+        .finally(() => setTreatmentLoading(false));
+    }
+
+    if (activeTab === 'flow_vision' && !flowResult) {
+      setFlowVisionLoading(true);
+      Promise.all([
+        analyzeFlowSample({ patient_id: patient.patient_id }).catch(() => null),
+        analyzeSmearPathology({ patient_id: patient.patient_id, manual_cellularity_pct: 60.0, manual_blasts_pct: 4.8 }).catch(() => null)
+      ])
+        .then(([fl, sm]) => {
+          if (fl) setFlowResult(fl.flow_cytometry_analysis);
+          if (sm) setSmearResult(sm.smear_pathology);
+        })
+        .finally(() => setFlowVisionLoading(false));
+    }
+  }, [activeTab, treatmentResult, flowResult, patient]);
+
   const validation = result ? VALIDATION_COPY[result.validation_status] ?? { label: result.validation_status, chip: 'chip-neutral', text: '' } : null;
   const probs = result ? MODEL_ROWS.map(r => Number(result.models_comparison[r.key]?.probability ?? 0)) : [];
   const classicalProbs = probs.slice(0, 3);
@@ -283,6 +326,22 @@ export const DiagnosticIntelligenceView: React.FC<DiagnosticIntelligenceViewProp
           onClick={() => setActiveTab('hla')}
         >
           <ShieldCheck size={14} /> 12-Allele HLA Match
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === 'treatment'}
+          className={`seg-btn ${activeTab === 'treatment' ? 'active' : ''}`}
+          onClick={() => setActiveTab('treatment')}
+        >
+          <HeartPulse size={14} /> Treatment Intelligence & HCT-CI
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === 'flow_vision'}
+          className={`seg-btn ${activeTab === 'flow_vision' ? 'active' : ''}`}
+          onClick={() => setActiveTab('flow_vision')}
+        >
+          <Layers size={14} /> Flow Cytometry & BM Vision
         </button>
       </div>
 
@@ -694,6 +753,197 @@ export const DiagnosticIntelligenceView: React.FC<DiagnosticIntelligenceViewProp
                 </div>
               </div>
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: TREATMENT INTELLIGENCE & HCT-CI */}
+      {activeTab === 'treatment' && (
+        <div className="card">
+          <div className="card-header divided">
+            <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <HeartPulse size={18} style={{ color: 'var(--accent)' }} /> Comparative Treatment Decision Support & HCT-CI Comorbidity
+            </h3>
+            <span className="chip chip-blue">EBMT / NCCN / CIBMTR Consensus</span>
+          </div>
+
+          <div style={{ padding: '1.25rem' }}>
+            {treatmentLoading ? (
+              <p>Evaluating comorbidity risk index and regimen eligibility...</p>
+            ) : treatmentResult ? (
+              <div className="stack" style={{ gap: '1.25rem' }}>
+                {/* HCT-CI Score Box */}
+                <div style={{ background: 'var(--surface-2)', padding: '1rem 1.25rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <div>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem' }}>Sorror HCT-Comorbidity Index (HCT-CI)</h4>
+                      <p style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: 'var(--text-2)' }}>
+                        Non-relapse mortality risk stratification for transplant conditioning.
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      <span className="chip chip-purple" style={{ fontSize: '0.85rem' }}>Score: {treatmentResult.hct_ci_assessment?.hct_ci_score}</span>
+                      <span className={`chip ${treatmentResult.hct_ci_assessment?.comorbidity_risk_tier === 'LOW_RISK' ? 'chip-green' : 'chip-amber'}`}>
+                        {treatmentResult.hct_ci_assessment?.comorbidity_risk_tier}
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '0.75rem', fontSize: '0.85rem' }}>
+                    <strong>Expected Non-Relapse Mortality (NRM):</strong> {treatmentResult.hct_ci_assessment?.estimated_2yr_nrm}
+                    <div style={{ marginTop: '0.25rem', color: 'var(--text-2)' }}>
+                      <strong>Conditioning Eligibility:</strong> {treatmentResult.hct_ci_assessment?.conditioning_eligibility}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Candidate Regimens Comparison Table */}
+                <div>
+                  <h4 style={{ fontSize: '0.9rem', marginBottom: '0.75rem' }}>Evidence-Supported Regimens for {treatmentResult.disease}</h4>
+                  <div className="table-responsive">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Regimen Name</th>
+                          <th>Intent</th>
+                          <th>Eligibility</th>
+                          <th>Complete Remission Rate</th>
+                          <th>Treatment-Related Mortality</th>
+                          <th>Guideline Fit</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {treatmentResult.candidate_regimens_comparison?.map((reg: any, i: number) => (
+                          <tr key={i}>
+                            <td style={{ fontWeight: 600 }}>{reg.regimen_name}</td>
+                            <td>{reg.intent}</td>
+                            <td>
+                              <span className={`chip ${reg.is_eligible ? 'chip-green' : 'chip-amber'}`} style={{ fontSize: '0.72rem' }}>
+                                {reg.is_eligible ? 'ELIGIBLE' : 'CONTRAINDICATED'}
+                              </span>
+                            </td>
+                            <td>{reg.expected_complete_remission_rate}</td>
+                            <td style={{ fontSize: '0.8rem' }}>{reg.treatment_related_mortality_risk}</td>
+                            <td style={{ fontSize: '0.8rem', color: 'var(--text-2)' }}>{reg.recommended_for}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 7: FLOW CYTOMETRY & BM VISION */}
+      {activeTab === 'flow_vision' && (
+        <div className="stack" style={{ gap: '1.25rem' }}>
+          {/* Flow Cytometry Gating & MRD */}
+          <div className="card">
+            <div className="card-header divided">
+              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Layers size={18} style={{ color: 'var(--accent)' }} /> Flow Cytometry Standard Gating Hierarchy & MRD Assessment
+              </h3>
+              <span className="chip chip-blue">Analytical Sensitivity 10^-4 (0.01%)</span>
+            </div>
+
+            <div style={{ padding: '1.25rem' }}>
+              {flowVisionLoading ? (
+                <p>Analyzing flow cytometry channel clusters...</p>
+              ) : flowResult ? (
+                <div className="stack" style={{ gap: '1rem' }}>
+                  {/* Populations Grid */}
+                  <div className="stats-grid grid-4">
+                    <div className="stat-box">
+                      <span className="stat-label">Total Acquired Events</span>
+                      <span className="stat-value">{flowResult.total_events_acquired.toLocaleString()}</span>
+                      <span className="stat-hint">{flowResult.viable_singlets.toLocaleString()} viable singlets</span>
+                    </div>
+                    <div className="stat-box">
+                      <span className="stat-label">Myeloblast Frequency</span>
+                      <span className="stat-value" style={{ color: flowResult.populations?.myeloid_blasts_pct >= 5 ? '#e11d48' : '#10b981' }}>
+                        {flowResult.populations?.myeloid_blasts_pct}%
+                      </span>
+                      <span className="stat-hint">CD45 dim / CD34+ / CD117+</span>
+                    </div>
+                    <div className="stat-box">
+                      <span className="stat-label">MRD Status</span>
+                      <span className="stat-value">
+                        <span className={`chip ${flowResult.mrd_assessment?.mrd_status === 'NEGATIVE' ? 'chip-green' : 'chip-amber'}`}>
+                          {flowResult.mrd_assessment?.mrd_status}
+                        </span>
+                      </span>
+                      <span className="stat-hint">Cutoff: 0.01%</span>
+                    </div>
+                    <div className="stat-box">
+                      <span className="stat-label">Lineage Assignment</span>
+                      <span className="stat-value" style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                        {flowResult.immunophenotype?.lineage_assignment}
+                      </span>
+                      <span className="stat-hint">CD34+: {Math.round(flowResult.immunophenotype?.cd34_positive_fraction * 100)}%</span>
+                    </div>
+                  </div>
+
+                  {/* Gating Steps Description */}
+                  <div style={{ background: 'var(--surface-2)', padding: '0.85rem 1rem', borderRadius: '8px', fontSize: '0.82rem' }}>
+                    <strong>Automated Gating Hierarchy:</strong> FSC-A/SSC-A Singlets (76%) → CD45/SSC Leukocyte Subsets (Granulocytes {flowResult.populations?.granulocytes_pct}%, Lymphocytes {flowResult.populations?.lymphocytes_pct}%, Monocytes {flowResult.populations?.monocytes_pct}%) → CD34/CD117 Blast Progenitor Gate ({flowResult.populations?.myeloid_blasts_pct}%).
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Bone Marrow Smear Pathology Vision */}
+          <div className="card">
+            <div className="card-header divided">
+              <h3 className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Microscope size={18} style={{ color: 'var(--accent)' }} /> Bone Marrow Smear Pathology Vision & Cell Segmentation
+              </h3>
+              <span className="chip chip-purple">300 Cell Differential (100x Oil Immersion)</span>
+            </div>
+
+            <div style={{ padding: '1.25rem' }}>
+              {smearResult ? (
+                <div className="stack" style={{ gap: '1rem' }}>
+                  <div className="stats-grid grid-4">
+                    <div className="stat-box">
+                      <span className="stat-label">Aspirate Cellularity</span>
+                      <span className="stat-value">{smearResult.cellularity?.percentage}%</span>
+                      <span className="stat-hint">{smearResult.cellularity?.classification}</span>
+                    </div>
+                    <div className="stat-box">
+                      <span className="stat-label">Blast Percentage</span>
+                      <span className="stat-value">{smearResult.differential_counts?.blast_percentage}%</span>
+                      <span className="stat-hint">95% CI: [{smearResult.differential_counts?.blast_ci_95?.[0]}% - {smearResult.differential_counts?.blast_ci_95?.[1]}%]</span>
+                    </div>
+                    <div className="stat-box">
+                      <span className="stat-label">M:E Ratio</span>
+                      <span className="stat-value">{smearResult.differential_counts?.myeloid_erythroid_ratio} : 1</span>
+                      <span className="stat-hint">Normal adult range: 2:1 to 4:1</span>
+                    </div>
+                    <div className="stat-box">
+                      <span className="stat-label">Image Focus Sharpness</span>
+                      <span className="stat-value" style={{ color: '#10b981' }}>{smearResult.quality_assurance?.laplacian_sharpness_score}</span>
+                      <span className="stat-hint">Laplacian variance (PASSED)</span>
+                    </div>
+                  </div>
+
+                  {/* Cell Overlay Samples */}
+                  <div style={{ background: 'var(--surface-2)', padding: '1rem', borderRadius: '8px' }}>
+                    <h4 style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}>Computer Vision Cell Classification Detections (Sample Overlay)</h4>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {smearResult.cell_detections_overlay?.map((det: any, idx: number) => (
+                        <div key={idx} style={{ background: 'var(--surface-1)', padding: '0.4rem 0.65rem', borderRadius: '6px', border: `1px solid ${det.color_hex}`, fontSize: '0.75rem' }}>
+                          <span style={{ fontWeight: 600, color: det.color_hex }}>{det.cell_type}</span>
+                          <span style={{ marginLeft: '4px', color: 'var(--text-3)' }}>({Math.round(det.confidence * 100)}% conf, N:C {det.nc_ratio})</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       )}

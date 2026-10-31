@@ -1,145 +1,113 @@
-# MarrowQ Target Architecture Specification
+# MARROWQ TARGET SYSTEM ARCHITECTURE
 
-**Date:** October 31, 2026  
-**System:** MarrowQ Precision Medicine Platform  
-**Architecture Style:** Modular, Multimodal, Event-Driven, Microservice-Ready Monolith with High-Performance Async Compute Workers  
+**Document ID:** MARROWQ-ARCH-V2  
+**Date:** 2026-10-31  
+**Status:** Approved Master Architecture Specification  
 
 ---
 
-## 1. System Context & Top-Level Architecture
+## 1. High-Level Architectural Vision
 
-MarrowQ is architected into 9 decoupled logical subsystems designed for clean separation of concerns, strict clinical provenance, and seamless extensibility across diseases and biological modalities.
+MarrowQ is a modular, multimodal precision medicine and quantum diagnostic intelligence platform. It is engineered with a strict separation between:
+1. **Validated Clinical Intelligence Layer:** Deterministic clinical consensus guidelines (ELN 2022, IPSS-M, Camitta, CPIC, KDIGO), high-resolution HLA matching, and validated classical scikit-learn models.
+2. **Experimental Quantum ML Research Engine:** Non-diagnostic quantum kernel algorithms (Projected Quantum Kernels, Neural Quantum Kernels, VQC, IBM Quantum QPU execution) strictly isolated from autonomous medical decision-making in compliance with TRIPOD-AI and FDA CDSS regulations.
 
 ```mermaid
-graph TB
-    subgraph ClientTier["Frontend & Presentation Tier"]
-        UI["React 19 + TypeScript + Vite SPA"]
-        Views["Role-Based Clinical Views (Doctor, Researcher, Patient, Hospital)"]
-        ThreeJS["3D Organ Viewer (Educational Reference)"]
+flowchart TD
+    subgraph Client["Frontend Client (React 19 + TypeScript + Vite)"]
+        UI1["Clinical Diagnostic Workstation"]
+        UI2["Quantum Engraftment Research Lab"]
+        UI3["Patient Progress Timeline & Milestones"]
+        UI4["3D Organ & Bone Marrow Visualizer"]
     end
 
-    subgraph SecurityTier["Security & Gateway Tier"]
-        AuthMiddleware["JWT Authentication & RBAC Policy Guard"]
-        AuditInterceptor["HIPAA / DPDPA Audit Event Logger"]
-        RateLimiter["Adaptive API Rate Limiter"]
+    subgraph API["FastAPI Backend Layer (REST + JWT Security)"]
+        R1["/api/biological/* (FCS, VCF, CBC, Smears)"]
+        R2["/api/disease/* (AML, MDS, SAA, Organ Workflows)"]
+        R3["/api/treatment/* (Comparison, HCT-CI, Contraindications)"]
+        R4["/api/pgx/* (CPIC Dosing & Drug-Drug Alerts)"]
+        R5["/api/hla/* (12-Allele + DPB1 TCE + Donor Scoring)"]
+        R6["/api/survival/* (Cox Models, Kaplan-Meier, Trajectory)"]
+        R7["/api/quantum/* (PQK, NQK, VQC, IBM Hardware Console)"]
+        R8["/api/auth/* (NIST PBKDF2 + JWT + RBAC)"]
     end
 
-    subgraph CoreServices["Application & Clinical Intelligence Tier"]
-        BioStore["1. Multimodal Biological Store & Ingestion Adapters"]
-        DiseaseReg["2. Disease Intelligence Registry (AML, ALL, MDS, HSCT)"]
-        DiagEngine["3. Diagnostic Assessment Engine (Differential & Criteria)"]
-        ProgEngine["4. Prognostic Engine (Survival Analysis & Risk Models)"]
-        TxEngine["5. Personalised Treatment & Trial Comparison Engine"]
-        PGxEngine["6. Pharmacogenomics & Medication Safety Engine (CPIC)"]
-        DonorEngine["7. 12-Allele HLA Donor Compatibility Engine (TCE Model)"]
-        LongTrack["8. Longitudinal Recovery & Engraftment Tracker"]
-        QuantumLab["9. Quantum Research Studio & IBM Runtime Client"]
+    subgraph Core["Core Processing & Analytics Engine"]
+        C1["Biological Parsing & Validation Engine"]
+        C2["Clinical Reasoning & Scoring Modules"]
+        C3["Survival & Longitudinal Predictors"]
+        C4["Quantum Model Suite & Kernel Diagnostics"]
+        C5["IBM Quantum Runtime Service Manager"]
     end
 
-    subgraph DataStorageTier["Persistence & Data Tier"]
-        SQLiteDB[("Relational DB: SQLite WAL (Dev) / PostgreSQL (Prod)")]
-        FileStore[("Secure File Store (DICOM, WSI, VCF, Model Artifacts)")]
-        ModelReg[("MLflow-Compatible Model Registry (Pipelines & Schemas)")]
+    subgraph Storage["Persistence & Artifacts (Local Workspace)"]
+        DB1[("SQLite Database: marrowq.db")]
+        ART[("Joblib Artifacts: Models & Preprocessors")]
+        AUD[("Audit Logs & Telemetry")]
     end
 
-    subgraph AsyncWorkerTier["Compute & Background Worker Tier"]
-        WorkerQueue["Async Job Queue (In-Memory / Redis)"]
-        GPUWorker["GPU Statevector & Tensor Contraction Engine"]
-        IBMCloud["IBM Quantum Cloud Platform (Heron QPUs via Qiskit Runtime)"]
-    end
-
-    UI --> SecurityTier
-    SecurityTier --> CoreServices
-    CoreServices --> DataStorageTier
-    CoreServices --> AsyncWorkerTier
-    AsyncWorkerTier --> IBMCloud
+    Client <--> API
+    API <--> Core
+    Core <--> Storage
 ```
 
 ---
 
-## 2. Subsystem Detailed Specifications
+## 2. Subsystem Architecture Specifications
 
-### Subsystem 1: Multimodal Biological Store & Ingestion Adapters
-* **Role:** Ingest, parse, validate, and store heterogeneous biological specimens and observations.
-* **Component Modules:**
-  - `BloodObservationAdapter`: Handles CBC, diff, chemistry, cytokines with LOINC validation.
-  - `BoneMarrowSynopticAdapter`: Handles aspirate counts, core biopsy histology, fibrosis grade, and flow cytometry.
-  - `GenomicVariantAdapter`: Parses VCF 4.2 files, normalizes HGVS notations, queries ClinVar/PharmGKB.
-  - `DICOMImagingAdapter`: De-identifies imaging studies, extracts image metadata, prepares WSI tiles.
-* **Storage Entity:** `multimodal_observations` with polymorphic `payload_json` and strict source provenance.
+### 2.1 Biological Data Ingestion & Storage Architecture
+- **Multi-Modal Data Adapters:**
+  - `BloodPanelAdapter`: Validates CBC, white blood cell differentials, absolute neutrophil counts, platelets, and serum biochemistry against standard reference ranges and LOINC codes.
+  - `BoneMarrowAdapter`: Ingests aspirate and trephine biopsy reports, cellularity percentages, blast fractions, M:E ratios, and dysplasia criteria.
+  - `FlowCytometryAdapter`: Ingests binary FCS 3.0/3.1 files, parses channel headers ($FSC, SSC, CD45, CD34, CD117, CD19, CD3$), performs automated gating, and derives blast fraction and MRD sensitivity.
+  - `GenomicVariantAdapter`: Parses VCF files, normalizes variants to HGVS nomenclature on GRCh38, and links to ClinVar and COSMIC annotation tables.
+  - `PathologyVisionAdapter`: Ingests bone marrow smear microscopy images, applies cell segmentation algorithms, and outputs quantitative morphological summaries.
 
-### Subsystem 2: Disease Intelligence Registry
-* **Role:** Manages disease definitions, diagnostic criteria, biomarkers, and clinical workflows.
-* **Registry Structure:**
-  - Each disease module is an independent Python class inheriting from `BaseDiseaseModule`.
-  - Registered Modules: `AMLModule`, `ALLModule`, `MDSModule`, `AplasticAnaemiaModule`, `MultipleMyelomaModule`, `HSCTComplicationsModule`.
-  - Extension Interfaces: Plug-and-play interfaces for solid oncology (Breast, Lung, Colorectal), Nephrology (CKD, AKI), Hepatology (Cirrhosis, Fibrosis), and Cardiology.
+### 2.2 Clinical Disease & Treatment Intelligence Architecture
+- **Hematology Registry:**
+  - `AMLModule`: Implements ELN 2022 risk stratification (Favorable, Intermediate, Adverse) based on cytogenetics and mutational profile.
+  - `MDSModule`: Computes Molecular IPSS-M score incorporating cytogenetic risk and mutational burdens.
+  - `SAAModule`: Implements Modified Camitta criteria (Moderate, Severe, Very Severe Aplastic Anemia).
+  - Expanded Modules for ALL, CML, CLL, MPN, Multiple Myeloma, and Lymphoma.
+- **Cross-Organ Specialty Modules:**
+  - Nephrology (CKD-EPI 2021, KDIGO AKI), Hepatology (MELD-Na, FIB-4), Cardiology (ACC/AHA ASCVD 10-yr), Neurology, Endocrinology, Solid Tumors.
+- **Treatment Comparison Engine:**
+  - Evaluates eligible regimens against patient age, ECOG performance status, HCT-CI score, organ function, and contraindications.
+  - Generates comparative profiles for expected response rate, relapse risk, and treatment-related mortality.
 
-### Subsystem 3: Diagnostic Assessment Engine
-* **Role:** Synthesizes patient biological observations into differential diagnoses with supporting and contradictory evidence.
-* **Operational Flow:**
-  1. Gathers all recent biological observations for a patient encounter.
-  2. Evaluates WHO/ICC 2022 diagnostic classification rules.
-  3. Formulates differential diagnoses ranked by evidence alignment.
-  4. Identifies missing investigations required for definitive confirmation (e.g. "Bone marrow biopsy shows 18% blasts; flow cytometry and $NPM1/FLT3$ molecular testing required").
-  5. Leaves diagnosis in `SUSPECTED_DRAFT` until an authorized clinician signs off.
+### 2.3 Precision Medicine: HLA & Pharmacogenomics
+- **12-Allele HLA Matching Engine:**
+  - Locus-by-locus comparison: HLA-A, B, C, DRB1, DQB1, DPB1.
+  - Fleischhauer DPB1 T-cell epitope (TCE) permissiveness classification (Group 1, 2, 3).
+  - Donor-Specific Anti-HLA Antibody (DSA) MFI risk scoring.
+  - Non-HLA donor factors: Donor age scoring, CMV serostatus mismatch risk, ABO compatibility grading, and graft source kinetics.
+- **CPIC Pharmacogenomic Engine:**
+  - Level A & B guideline rules for TPMT, NUDT15, CYP2C19, DPYD, UGT1A1, CYP2D6, CYP2C9, VKORC1, and HLA-B*57:01.
+  - Interactive dosage adjustments based on eGFR and total bilirubin.
+  - Drug-drug interaction alerts for transplant immunosuppressive regimens.
 
-### Subsystem 4: Prognostic Intelligence Engine
-* **Role:** Provides calibrated survival forecasts, relapse risk calculations, and complication forecasts.
-* **Model Families:**
-  - Standardized Cox Proportional Hazards (`lifelines`).
-  - Random Survival Forests (`scikit-survival`).
-  - Competing-Risk Fine-Gray Models (competing risk of relapse vs non-relapse mortality).
-* **Guarantees:** Every prognostic endpoint specifies a time horizon (e.g. 2-year OS, 100-day NRM) and confidence intervals.
+### 2.4 Longitudinal Recovery & Survival Engine
+- **Survival Analytics:**
+  - Kaplan-Meier survival curves for overall survival (OS) and event-free survival (EFS).
+  - Cox Proportional Hazards models with hazard ratios and confidence intervals.
+  - Longitudinal engraftment trajectory calibrated by graft source (PBSC $14.5\text{d}$, BM $18.5\text{d}$, CB $24.0\text{d}$), CD34+ cell dose, and age.
+  - Actual vs. predicted milestone tracking with time-dependent error metrics (MAE, RMSE, Brier score).
 
-### Subsystem 5: Personalised Treatment Intelligence Engine
-* **Role:** Compares evidence-supported treatment regimens tailored to patient disease subtype, molecular mutations, and organ performance.
-* **Capabilities:**
-  - Filters regimens against contraindications (e.g. antracyclines contraindicated in reduced LVEF $< 45\%$; high-dose cytarabine adjusted for renal impairment).
-  - Summarizes expected complete remission (CR) rates and median progression-free survival from clinical trial benchmarks.
-  - Highlights open, actively recruiting clinical trials matching the patient's genomic profile.
+### 2.5 Advanced Quantum Machine Learning Research Engine
+- **Architectural Suite:**
+  1. `FidelityQuantumKernel`: Standard statevector overlap with Shaydulin bandwidth scaling $c$ and tunable entanglement.
+  2. `ProjectedQuantumKernel (PQK)`: Local Pauli-Z and Pauli-XX observables mapped to an outer classical RBF kernel. Immune to exponential concentration.
+  3. `TrainableNeuralQuantumKernel (NQK)`: Parameterized data-reuploading circuit optimized via gradient ascent to maximize kernel-target alignment $A(K(\boldsymbol{\theta}), \mathbf{y})$.
+  4. `VariationalQuantumClassifier (VQC)`: Differentiable parameterized circuit with parameter-shift gradients and classical cross-entropy head.
+  5. `HybridQuantumStackingEnsemble`: Meta-model combining out-of-fold probability predictions from classical models and quantum kernels.
+- **Kernel Diagnostics Module:**
+  - Full Gram matrix heatmap, eigenvalue spectrum, condition number, off-diagonal variance (concentration check), and kernel-target alignment.
+- **Hardware Integration & Error Mitigation:**
+  - IBM Quantum Runtime Service connection to physical 156-qubit Heron QPUs (`ibm_fez`, `ibm_kingston`, `ibm_marrakesh`).
+  - Staged execution strategy: Local Statevector $\to$ FakeFez Noisy Simulation $\to$ Guarded QPU Execution.
+  - Error mitigation: Twirled Readout Error Extrapolation (TREX), Gate Twirling, Zero-Noise Extrapolation (ZNE).
 
-### Subsystem 6: Medication Suitability & Pharmacogenomics Engine
-* **Role:** Prevents adverse drug reactions and treatment failures using patient diplotypes.
-* **Integration:**
-  - Direct implementation of CPIC Level A/B guidelines.
-  - Gene evaluation: $TPMT, NUDT15, DPYD, CYP2C19, CYP2D6, CYP2C9, VKORC1$.
-  - Generates clear action badges: `SAFE`, `DOSE_REDUCTION_REQUIRED`, `CONTRAINDICATED`, `ALTERNATIVE_RECOMMENDED`.
-
-### Subsystem 7: 12-Allele HLA Donor Compatibility Engine
-* **Role:** High-resolution donor matching and candidate ranking for allogeneic HSCT.
-* **Evaluation Matrix:**
-  - Allele matching at HLA-A, -B, -C, -DRB1, -DQB1, -DPB1.
-  - Fleischhauer T-Cell Epitope (TCE) permissiveness for DPB1.
-  - Recipient anti-HLA donor-specific antibodies (DSA) screening with MFI threshold alerts ($MFI \ge 2,000$).
-  - ABO blood group compatibility classification (Major, Minor, Bidirectional).
-  - Donor age, CMV serostatus concordance, and sex matching.
-
-### Subsystem 8: Longitudinal Recovery & Engraftment Tracker
-* **Role:** Comprehensive tracking of patient recovery trajectories across pre-treatment, treatment, and post-transplant phases.
-* **Clinical Consensus Compliance:**
-  - Strictly evaluates ASTCT criteria: Neutrophil engraftment requires 3 consecutive daily counts $\ge 500/\mu\text{L}$; Platelet engraftment requires 3 consecutive counts $\ge 20,000/\mu\text{L}$ with 7 days transfusion independence.
-  - Dynamic trajectory plotting with real-time prediction-versus-observation error tracking.
-
-### Subsystem 9: Quantum Research Studio
-* **Role:** Genuine quantum computing research and benchmarking without pseudo-clinical claims.
-* **Capabilities:**
-  - Qiskit 2.x and IBM Quantum Runtime SamplerV2 integration.
-  - GPU-accelerated quantum statevector Gram matrix engine.
-  - Noise modeling using Heron FakeFez calibration properties.
-  - Error mitigation: Pauli twirling, XY4 dynamical decoupling, zero-noise extrapolation.
-  - Barren plateau diagnostics: monitoring exponential concentration of off-diagonal kernel variance.
-  - Isolated from clinical diagnostic consensus: outputs presented in a dedicated research track.
-
----
-
-## 3. Security, Multi-Tenancy & Data Protection
-
-* **Authentication:** Password hashing via `bcrypt` / `argon2id`; JWT access tokens (15-minute expiration) with rotating refresh tokens (7-day expiration in HttpOnly cookie).
-* **Role-Based Access Control (RBAC):**
-  - Roles: `clinician_doctor`, `clinical_researcher`, `patient_family`, `hospital_admin`.
-  - Fine-grained endpoint authorization guards: `@require_roles(["clinician_doctor"])`.
-* **Data Protection Compliance:**
-  - **India DPDP Act (2023):** Purpose limitation, verifiable consent, patient data de-identification, and right of data correction.
-  - **HIPAA / GDPR:** AES-256 encryption at rest for sensitive health identifiers; TLS 1.3 in transit; comprehensive audit logging in `audit_events`.
-
+### 2.6 Security, RBAC & Governance
+- NIST PBKDF2-HMAC-SHA256 password hashing.
+- PyJWT bearer token authorization with role claims (`doctor`, `researcher`, `patient`, `admin`).
+- Database-backed clinical audit trail (`clinical_audit_logs`) tracking patient record access and QPU circuit submissions.
